@@ -1,0 +1,85 @@
+import { FilterCategory, PropertyItem } from '@/types/property';
+
+export const FILTER_CATEGORIES: FilterCategory[] = [
+  { id: 'tous', label: 'Tous' },
+  { id: 'parcelle', label: 'Parcelle' },
+  { id: 'maison', label: 'Maison' },
+  { id: 'chambre', label: 'Chambre à louer' },
+];
+
+export const MOCK_PROPERTIES: PropertyItem[] = [
+  {
+    id: 'prop-1',
+    type: 'maison',
+    transactionType: 'location',
+    title: 'Maison à louer - Cotonou (Akpakpa)',
+    location: {
+      commune: 'Cotonou',
+      quartier: 'Akpakpa',
+      fullAddress: 'Akpakpa Dodomè, Cotonou',
+    },
+    price: 150000,
+    priceFormatted: '150 000 F CFA/mois',
+    periodLabel: '/mois',
+    tags: ['3 ch', 'Salon', 'Eau/Élec (Décompteur)'],
+    features: {
+      chambres: 3,
+      salon: true,
+      eauElectricite: 'Décompteur personnel',
+    },
+    unlockFee: 50,
+    unlockButtonText: 'Voir les détails (50F)',
+    image: require('@/assets/images/properties/villa_akpakpa.jpg'),
+    isFavorite: false,
+    isUnlocked: false,
+  },
+  {
+    id: 'prop-2',
+    type: 'parcelle',
+    transactionType: 'vente',
+    title: 'Parcelle à vendre - Calavi',
+    location: {
+      commune: 'Abomey-Calavi',
+      quartier: 'Calavi',
+      fullAddress: 'Calavi Kpota, à 300m du goudron',
+    },
+    price: 15000000,
+    priceFormatted: '15 000 000 F CFA',
+    periodLabel: '',
+    tags: ['Superficie: 500m²', 'Titre Foncier'],
+    features: {
+      surface: 500,
+      titreFoncier: true,
+    },
+    unlockFee: 200,
+    unlockButtonText: 'Débloquer les détails (200F)',
+    image: require('@/assets/images/properties/parcelle_calavi.jpg'),
+    isFavorite: true,
+    isUnlocked: false,
+  },
+  {
+    id: 'prop-3',
+    type: 'chambre',
+    transactionType: 'location',
+    title: 'Chambre salon sanitaire - Cotonou (Cadjehoun)',
+    location: {
+      commune: 'Cotonou',
+      quartier: 'Cadjehoun',
+      fullAddress: 'Cadjehoun, proche aéroport',
+    },
+    price: 65000,
+    priceFormatted: '65 000 F CFA/mois',
+    periodLabel: '/mois',
+    tags: ['1 ch', 'Salon', 'Balcon', 'Eau/Élec inclus'],
+    features: {
+      chambres: 1,
+      salon: true,
+      eauElectricite: 'Inclus',
+    },
+    unlockFee: 50,
+    unlockButtonText: 'Voir les détails (50F)',
+    image: require('@/assets/images/properties/chambre_cadjehoun.jpg'),
+    isFavorite: false,
+    isUnlocked: false,
+  },
+];
