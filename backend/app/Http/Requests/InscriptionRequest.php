@@ -25,21 +25,32 @@ class InscriptionRequest extends FormRequest
         $phoneInput = $this->input('phone') ?? $this->input('telephone');
 
         if ($phoneInput !== null) {
-            $cleaned = preg_replace('/[^\d+]/', '', trim((string) $phoneInput));
+            $trimmedPhone = trim((string) $phoneInput);
+            $withoutSpaces = preg_replace('/\s+/', '', $trimmedPhone);
 
-            if (str_starts_with($cleaned, '00229')) {
-                $cleaned = '+229' . substr($cleaned, 5);
-            } elseif (str_starts_with($cleaned, '229')) {
-                $cleaned = '+' . $cleaned;
-            } elseif (!str_starts_with($cleaned, '+') && strlen($cleaned) >= 8) {
-                // If it's a Benin number without country code
-                $cleaned = '+229' . $cleaned;
+            // Vérifier que le numéro commence par 01 (avec ou sans indicatif +229 / 00229 / 229) suivi de 8 chiffres
+            if (preg_match('/^(\+229|00229|229)?01[0-9]{8}$/', $withoutSpaces)) {
+                $cleaned = $withoutSpaces;
+
+                if (str_starts_with($cleaned, '00229')) {
+                    $cleaned = '+229' . substr($cleaned, 5);
+                } elseif (str_starts_with($cleaned, '229')) {
+                    $cleaned = '+' . $cleaned;
+                } elseif (!str_starts_with($cleaned, '+')) {
+                    $cleaned = '+229' . $cleaned;
+                }
+
+                $this->merge([
+                    'telephone' => $cleaned,
+                    'phone' => $cleaned,
+                ]);
+            } else {
+                // Conserver la valeur brute pour déclencher l'erreur regex
+                $this->merge([
+                    'telephone' => $trimmedPhone,
+                    'phone' => $trimmedPhone,
+                ]);
             }
-
-            $this->merge([
-                'telephone' => $cleaned,
-                'phone' => $cleaned,
-            ]);
         }
 
         // Support either 'fullName' (used in frontend) or 'name'/'prenom'
@@ -66,11 +77,38 @@ class InscriptionRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'fullName' => ['sometimes', 'nullable', 'string', 'max:255'],
-            'name' => ['required_without:fullName', 'string', 'max:255'],
-            'prenom' => ['nullable', 'string', 'max:255'],
-            'telephone' => ['required', 'string', 'max:30', 'unique:users,telephone'],
-            'phone' => ['sometimes', 'string', 'max:30'],
+            'fullName' => [
+                'sometimes',
+                'nullable',
+                'string',
+                'max:255',
+                'regex:/^[\p{L}\s\'\x{2019}-]+$/u',
+            ],
+            'name' => [
+                'required_without:fullName',
+                'string',
+                'max:255',
+                'regex:/^[\p{L}\s\'\x{2019}-]+$/u',
+            ],
+            'prenom' => [
+                'nullable',
+                'string',
+                'max:255',
+                'regex:/^[\p{L}\s\'\x{2019}-]+$/u',
+            ],
+            'telephone' => [
+                'required',
+                'string',
+                'max:30',
+                'regex:/^(\+229|00229|229)?01[0-9]{8}$/',
+                'unique:users,telephone',
+            ],
+            'phone' => [
+                'sometimes',
+                'string',
+                'max:30',
+                'regex:/^(\+229|00229|229)?01[0-9]{8}$/',
+            ],
             'email' => ['nullable', 'string', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'string', 'min:6'],
             'role' => [
@@ -92,8 +130,13 @@ class InscriptionRequest extends FormRequest
     {
         return [
             'fullName.required_without' => 'Veuillez renseigner votre nom complet.',
+            'fullName.regex' => 'Le nom complet ne doit contenir que des lettres, des espaces, des tirets ou des apostrophes.',
             'name.required_without' => 'Veuillez renseigner votre nom.',
+            'name.regex' => 'Le nom ne doit contenir que des lettres, des espaces, des tirets ou des apostrophes.',
+            'prenom.regex' => 'Le prénom ne doit contenir que des lettres, des espaces, des tirets ou des apostrophes.',
             'telephone.required' => 'Veuillez saisir votre numéro de téléphone (MTN ou Moov).',
+            'telephone.regex' => 'Le numéro de téléphone doit obligatoirement commencer par 01 et comporter 10 chiffres (ex: 0197001122).',
+            'phone.regex' => 'Le numéro de téléphone doit obligatoirement commencer par 01 et comporter 10 chiffres (ex: 0197001122).',
             'telephone.unique' => 'Ce numéro de téléphone est déjà associé à un compte.',
             'email.email' => 'Veuillez renseigner une adresse email valide.',
             'email.unique' => 'Cette adresse email est déjà associée à un compte.',

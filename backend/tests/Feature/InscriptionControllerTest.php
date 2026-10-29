@@ -24,7 +24,7 @@ class InscriptionControllerTest extends TestCase
     {
         $payload = [
             'fullName' => 'Koffi Mensah',
-            'phone' => '97001122',
+            'phone' => '0197001122',
             'email' => 'koffi.mensah@gmail.com',
             'password' => 'secret123',
             'role' => 'client_proprietaire',
@@ -59,7 +59,7 @@ class InscriptionControllerTest extends TestCase
 
         $this->assertDatabaseHas('users', [
             'email' => 'koffi.mensah@gmail.com',
-            'telephone' => '+22997001122',
+            'telephone' => '+2290197001122',
         ]);
     }
 
@@ -82,20 +82,80 @@ class InscriptionControllerTest extends TestCase
             ]);
     }
 
+    public function test_registration_fails_if_name_contains_invalid_characters(): void
+    {
+        $response = $this->postJson('/api/inscription', [
+            'fullName' => 'Koffi123 Mensah!',
+            'phone' => '0197001122',
+            'password' => 'password123',
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJson([
+                'success' => false,
+                'message' => 'Le nom complet ne doit contenir que des lettres, des espaces, des tirets ou des apostrophes.',
+            ]);
+    }
+
+    public function test_registration_fails_if_phone_does_not_start_with_01(): void
+    {
+        // Numéro ne commençant pas par 01
+        $response = $this->postJson('/api/inscription', [
+            'fullName' => 'Jean-Paul d\'Almeida',
+            'phone' => '97001122',
+            'password' => 'password123',
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJson([
+                'success' => false,
+                'message' => 'Le numéro de téléphone doit obligatoirement commencer par 01 et comporter 10 chiffres (ex: 0197001122).',
+            ]);
+    }
+
+    public function test_registration_fails_if_phone_contains_letters(): void
+    {
+        $response = $this->postJson('/api/inscription', [
+            'fullName' => 'Jean-Paul d\'Almeida',
+            'phone' => '0197abc122',
+            'password' => 'password123',
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJson([
+                'success' => false,
+                'message' => 'Le numéro de téléphone doit obligatoirement commencer par 01 et comporter 10 chiffres (ex: 0197001122).',
+            ]);
+    }
+
+    public function test_authentication_fails_if_phone_does_not_start_with_01(): void
+    {
+        $response = $this->postJson('/api/authentification', [
+            'phone' => '97001122',
+            'password' => 'password123',
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJson([
+                'success' => false,
+                'message' => 'Le numéro de téléphone doit obligatoirement commencer par 01 et comporter 10 chiffres (ex: 0197001122).',
+            ]);
+    }
+
     public function test_user_can_authenticate_with_phone_and_password(): void
     {
         // First register a user
         $this->postJson('/api/inscription', [
             'fullName' => 'Amina Bio',
-            'phone' => '+22996112233',
+            'phone' => '+2290196112233',
             'email' => 'amina@gmail.com',
             'password' => 'password123',
             'role' => 'agent_immobilier',
         ])->assertStatus(201);
 
-        // Login using phone format without prefix
+        // Login using phone format without prefix starting with 01
         $loginResponse = $this->postJson('/api/authentification', [
-            'phone' => '96112233',
+            'phone' => '0196112233',
             'password' => 'password123',
         ]);
 
@@ -121,12 +181,12 @@ class InscriptionControllerTest extends TestCase
     {
         $this->postJson('/api/inscription', [
             'fullName' => 'Amina Bio',
-            'phone' => '96112233',
+            'phone' => '0196112233',
             'password' => 'password123',
         ])->assertStatus(201);
 
         $response = $this->postJson('/api/authentification', [
-            'phone' => '96112233',
+            'phone' => '0196112233',
             'password' => 'wrongpassword',
         ]);
 
@@ -141,7 +201,7 @@ class InscriptionControllerTest extends TestCase
     {
         $registerRes = $this->postJson('/api/inscription', [
             'fullName' => 'Test User',
-            'phone' => '95000001',
+            'phone' => '0195000001',
             'password' => 'password123',
         ]);
 

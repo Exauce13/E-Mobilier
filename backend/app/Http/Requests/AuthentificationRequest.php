@@ -24,20 +24,32 @@ class AuthentificationRequest extends FormRequest
         $phoneInput = $this->input('phone') ?? $this->input('telephone');
 
         if ($phoneInput !== null) {
-            $cleaned = preg_replace('/[^\d+]/', '', trim((string) $phoneInput));
+            $trimmedPhone = trim((string) $phoneInput);
+            $withoutSpaces = preg_replace('/\s+/', '', $trimmedPhone);
 
-            if (str_starts_with($cleaned, '00229')) {
-                $cleaned = '+229' . substr($cleaned, 5);
-            } elseif (str_starts_with($cleaned, '229')) {
-                $cleaned = '+' . $cleaned;
-            } elseif (!str_starts_with($cleaned, '+') && strlen($cleaned) >= 8) {
-                $cleaned = '+229' . $cleaned;
+            // Vérifier que le numéro commence par 01 (avec ou sans indicatif +229 / 00229 / 229) suivi de 8 chiffres
+            if (preg_match('/^(\+229|00229|229)?01[0-9]{8}$/', $withoutSpaces)) {
+                $cleaned = $withoutSpaces;
+
+                if (str_starts_with($cleaned, '00229')) {
+                    $cleaned = '+229' . substr($cleaned, 5);
+                } elseif (str_starts_with($cleaned, '229')) {
+                    $cleaned = '+' . $cleaned;
+                } elseif (!str_starts_with($cleaned, '+')) {
+                    $cleaned = '+229' . $cleaned;
+                }
+
+                $this->merge([
+                    'telephone' => $cleaned,
+                    'phone' => $cleaned,
+                ]);
+            } else {
+                // Conserver la valeur brute pour déclencher l'erreur regex
+                $this->merge([
+                    'telephone' => $trimmedPhone,
+                    'phone' => $trimmedPhone,
+                ]);
             }
-
-            $this->merge([
-                'telephone' => $cleaned,
-                'phone' => $cleaned,
-            ]);
         }
     }
 
@@ -49,8 +61,8 @@ class AuthentificationRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'telephone' => ['required_without:phone', 'string'],
-            'phone' => ['required_without:telephone', 'string'],
+            'telephone' => ['required_without:phone', 'string', 'regex:/^(\+229|00229|229)?01[0-9]{8}$/'],
+            'phone' => ['required_without:telephone', 'string', 'regex:/^(\+229|00229|229)?01[0-9]{8}$/'],
             'password' => ['required', 'string'],
         ];
     }
@@ -65,6 +77,8 @@ class AuthentificationRequest extends FormRequest
         return [
             'telephone.required_without' => 'Veuillez saisir votre numéro de téléphone béninois.',
             'phone.required_without' => 'Veuillez saisir votre numéro de téléphone béninois.',
+            'telephone.regex' => 'Le numéro de téléphone doit obligatoirement commencer par 01 et comporter 10 chiffres (ex: 0197001122).',
+            'phone.regex' => 'Le numéro de téléphone doit obligatoirement commencer par 01 et comporter 10 chiffres (ex: 0197001122).',
             'password.required' => 'Veuillez entrer votre mot de passe.',
         ];
     }

@@ -141,37 +141,6 @@ class InscriptionController extends Controller
         ], 200);
     }
 
-    /**
-     * Alias en anglais pour l'inscription.
-     */
-    public function register(InscriptionRequest $request): JsonResponse
-    {
-        return $this->inscription($request);
-    }
-
-    /**
-     * Alias en anglais pour l'authentification.
-     */
-    public function login(AuthentificationRequest $request): JsonResponse
-    {
-        return $this->authentification($request);
-    }
-
-    /**
-     * Alias en anglais pour la déconnexion.
-     */
-    public function logout(Request $request): JsonResponse
-    {
-        return $this->deconnexion($request);
-    }
-
-    /**
-     * Alias en anglais pour le profil.
-     */
-    public function me(Request $request): JsonResponse
-    {
-        return $this->profil($request);
-    }
 
     /**
      * Formate les données de l'utilisateur pour le frontend.
