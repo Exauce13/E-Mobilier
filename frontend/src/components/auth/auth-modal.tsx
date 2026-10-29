@@ -34,16 +34,16 @@ export function AuthModal() {
             <LoginView
               onNavigateToRegister={() => setAuthModalMode('register')}
               onBack={closeAuthModal}
-              onSuccessLogin={(phone) => {
-                login(phone);
+              onSuccessLogin={() => {
+                closeAuthModal();
               }}
             />
           ) : (
             <RegisterView
               onNavigateToLogin={() => setAuthModalMode('login')}
               onBack={closeAuthModal}
-              onSuccessRegister={(userData) => {
-                register(userData);
+              onSuccessRegister={() => {
+                closeAuthModal();
               }}
             />
           )}

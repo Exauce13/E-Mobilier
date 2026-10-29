@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 
 import { Spacing } from '@/constants/theme';
+import { useAuth } from '@/context/auth-context';
 import { useTheme } from '@/hooks/use-theme';
 
 export type UserRole = 'client_proprietaire' | 'agent_immobilier';
@@ -34,6 +35,7 @@ export function RegisterView({
   onBack,
 }: RegisterViewProps) {
   const theme = useTheme();
+  const { register } = useAuth();
 
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
@@ -45,7 +47,7 @@ export function RegisterView({
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
-  const handleRegister = () => {
+  const handleRegister = async () => {
     setMessage(null);
     if (!fullName.trim()) {
       setMessage({ text: 'Veuillez renseigner votre nom complet.', type: 'error' });
@@ -65,12 +67,29 @@ export function RegisterView({
     }
 
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      const response = await register({
+        fullName: fullName.trim(),
+        phone: phone.trim(),
+        email: email.trim() || undefined,
+        password: password,
+        role: selectedRole,
+        acceptedTerms: true,
+      });
+
+      if (!response.success) {
+        setMessage({
+          text: response.message || 'Une erreur est survenue lors de l’inscription.',
+          type: 'error',
+        });
+        return;
+      }
+
       setMessage({
-        text: 'Compte créé avec succès ! Bienvenue dans la communauté E-Mobilier.',
+        text: response.message || 'Compte créé avec succès ! Bienvenue dans la communauté E-Mobilier.',
         type: 'success',
       });
+
       if (onSuccessRegister) {
         onSuccessRegister({
           fullName,
@@ -79,7 +98,14 @@ export function RegisterView({
           role: selectedRole,
         });
       }
-    }, 750);
+    } catch {
+      setMessage({
+        text: 'Erreur de communication avec le serveur backend.',
+        type: 'error',
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

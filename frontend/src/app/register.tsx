@@ -23,8 +23,7 @@ export default function RegisterScreen() {
               router.replace('/' as any);
             }
           }}
-          onSuccessRegister={(userData) => {
-            register(userData);
+          onSuccessRegister={() => {
             router.replace('/profile' as any);
           }}
         />

@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 
 import { Spacing } from '@/constants/theme';
+import { useAuth } from '@/context/auth-context';
 import { useTheme } from '@/hooks/use-theme';
 
 interface LoginViewProps {
@@ -27,6 +28,7 @@ export function LoginView({
   onBack,
 }: LoginViewProps) {
   const theme = useTheme();
+  const { login } = useAuth();
 
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
@@ -37,7 +39,7 @@ export function LoginView({
   const [otpSent, setOtpSent] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     setMessage(null);
     if (!phone.trim()) {
       setMessage({ text: 'Veuillez saisir votre numéro de téléphone béninois.', type: 'error' });
@@ -49,13 +51,29 @@ export function LoginView({
     }
 
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      setMessage({ text: 'Connexion réussie ! Bienvenue sur E-Mobilier.', type: 'success' });
+    try {
+      const response = await login(phone.trim(), password);
+
+      if (!response.success) {
+        setMessage({
+          text: response.message || 'Numéro de téléphone ou mot de passe incorrect.',
+          type: 'error',
+        });
+        return;
+      }
+
+      setMessage({ text: response.message || 'Connexion réussie ! Bienvenue sur E-Mobilier.', type: 'success' });
       if (onSuccessLogin) {
         onSuccessLogin(phone);
       }
-    }, 700);
+    } catch {
+      setMessage({
+        text: 'Erreur de communication avec le serveur backend.',
+        type: 'error',
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSendOtp = () => {
