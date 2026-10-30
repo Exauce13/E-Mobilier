@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { LandingShowcase } from '@/components/home/landing-showcase';
 import { PropertyCard } from '@/components/property-card';
 import { UnlockModal } from '@/components/unlock-modal';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
@@ -40,6 +41,15 @@ export default function HomeScreen() {
       router.push('/register' as any);
     }
   };
+
+  if (!isAuthenticated) {
+    return (
+      <LandingShowcase
+        onOpenLogin={handleOpenLogin}
+        onOpenRegister={handleOpenRegister}
+      />
+    );
+  }
 
   const [properties, setProperties] = useState<PropertyItem[]>(MOCK_PROPERTIES);
   const [selectedCategory, setSelectedCategory] = useState<PropertyType>('tous');

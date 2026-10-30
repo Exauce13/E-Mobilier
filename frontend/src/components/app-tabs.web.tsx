@@ -17,7 +17,7 @@ import { ThemedText } from './themed-text';
 import { ThemedView } from './themed-view';
 
 export default function AppTabs() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
 
   return (
     <Tabs>
@@ -30,9 +30,18 @@ export default function AppTabs() {
           <TabTrigger name="explore" href="/explore" asChild>
             <TabButton>Recherche</TabButton>
           </TabTrigger>
-          <TabTrigger name="messages" href="/messages" asChild>
-            <TabButton>Messages</TabButton>
-          </TabTrigger>
+
+          {isAuthenticated && user?.role === 'agent_immobilier' && (
+            <TabTrigger name="publish" href="/publish" asChild>
+              <TabButton>Publier</TabButton>
+            </TabTrigger>
+          )}
+
+          {isAuthenticated && user?.role === 'agent_immobilier' && (
+            <TabTrigger name="visits" href="/visits" asChild>
+              <TabButton>Visites</TabButton>
+            </TabTrigger>
+          )}
 
           {!isAuthenticated ? (
             <>
