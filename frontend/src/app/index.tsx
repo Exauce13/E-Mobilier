@@ -24,9 +24,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { PropertyItem, PropertyType } from '@/types/property';
 
 export default function HomeScreen() {
-  const theme = useTheme();
-  const insets = useSafeAreaInsets();
-  const { isAuthenticated, user, openLogin, openRegister } = useAuth();
+  const { isAuthenticated, openLogin, openRegister } = useAuth();
 
   const handleOpenLogin = () => {
     openLogin();
@@ -50,6 +48,14 @@ export default function HomeScreen() {
       />
     );
   }
+
+  return <AuthenticatedCatalog onOpenLogin={handleOpenLogin} />;
+}
+
+function AuthenticatedCatalog({ onOpenLogin }: { onOpenLogin: () => void }) {
+  const theme = useTheme();
+  const insets = useSafeAreaInsets();
+  const { user, isAuthenticated } = useAuth();
 
   const [properties, setProperties] = useState<PropertyItem[]>(MOCK_PROPERTIES);
   const [selectedCategory, setSelectedCategory] = useState<PropertyType>('tous');
@@ -177,7 +183,7 @@ export default function HomeScreen() {
                       if (isAuthenticated) {
                         router.push('/profile' as any);
                       } else {
-                        handleOpenLogin();
+                        onOpenLogin();
                       }
                     }}
                     style={({ pressed }) => [
@@ -290,105 +296,39 @@ export default function HomeScreen() {
                 })}
               </ScrollView>
 
-              {!isAuthenticated ? (
-                /* Auth Prompt Banner for visitors */
-                <View
-                  style={[
-                    styles.authBanner,
-                    {
-                      backgroundColor: theme.cardBackground,
-                      borderColor: theme.cardBorder,
-                    },
-                  ]}>
-                  <View style={styles.authBannerHeader}>
-                    <View
-                      style={[
-                        styles.authBannerBadge,
-                        { backgroundColor: theme.primaryLight },
-                      ]}>
-                      <SymbolView
-                        name={{
-                          ios: 'person.badge.key.fill',
-                          android: 'account_circle',
-                          web: 'account_circle',
-                        }}
-                        size={20}
-                        tintColor={theme.primary}
-                      />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.authBannerTitle, { color: theme.text }]}>
-                        Espace Membre E-Mobilier
-                      </Text>
-                      <Text
-                        style={[styles.authBannerSubtitle, { color: theme.textSecondary }]}>
-                        Connectez-vous pour publier des annonces ou débloquer les contacts.
-                      </Text>
-                    </View>
+              {/* Member Welcome Banner */}
+              <Pressable
+                onPress={() => router.push('/profile' as any)}
+                style={[
+                  styles.authBanner,
+                  {
+                    backgroundColor: theme.cardBackground,
+                    borderColor: theme.cardBorder,
+                  },
+                ]}>
+                <View style={styles.authBannerHeader}>
+                  <View
+                    style={[
+                      styles.authBannerBadge,
+                      { backgroundColor: theme.primaryLight },
+                    ]}>
+                    <SymbolView
+                      name={{ ios: 'person.crop.circle.fill', android: 'person', web: 'person' }}
+                      size={20}
+                      tintColor={theme.primary}
+                    />
                   </View>
-
-                  <View style={styles.authBannerActions}>
-                    <Pressable
-                      onPress={handleOpenLogin}
-                      style={({ pressed }) => [
-                        styles.authBannerLoginBtn,
-                        { backgroundColor: theme.primary },
-                        pressed && { opacity: 0.85 },
-                      ]}>
-                      <Text style={styles.authBannerLoginText}>Se connecter</Text>
-                    </Pressable>
-
-                    <Pressable
-                      onPress={handleOpenRegister}
-                      style={({ pressed }) => [
-                        styles.authBannerRegisterBtn,
-                        {
-                          borderColor: theme.primary,
-                          backgroundColor: theme.primaryLight,
-                        },
-                        pressed && { opacity: 0.85 },
-                      ]}>
-                      <Text style={[styles.authBannerRegisterText, { color: theme.primary }]}>
-                        S'inscrire
-                      </Text>
-                    </Pressable>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.authBannerTitle, { color: theme.text }]}>
+                      Ravi de vous revoir, {user?.name} !
+                    </Text>
+                    <Text
+                      style={[styles.authBannerSubtitle, { color: theme.textSecondary }]}>
+                      Solde disponible : {user?.balanceFifa.toLocaleString()} F CFA • Accéder à mon profil →
+                    </Text>
                   </View>
                 </View>
-              ) : (
-                /* Member Welcome Banner */
-                <Pressable
-                  onPress={() => router.push('/profile' as any)}
-                  style={[
-                    styles.authBanner,
-                    {
-                      backgroundColor: theme.cardBackground,
-                      borderColor: theme.cardBorder,
-                    },
-                  ]}>
-                  <View style={styles.authBannerHeader}>
-                    <View
-                      style={[
-                        styles.authBannerBadge,
-                        { backgroundColor: theme.primaryLight },
-                      ]}>
-                      <SymbolView
-                        name={{ ios: 'person.crop.circle.fill', android: 'person', web: 'person' }}
-                        size={20}
-                        tintColor={theme.primary}
-                      />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.authBannerTitle, { color: theme.text }]}>
-                        Ravi de vous revoir, {user?.name} !
-                      </Text>
-                      <Text
-                        style={[styles.authBannerSubtitle, { color: theme.textSecondary }]}>
-                        Solde disponible : {user?.balanceFifa.toLocaleString()} F CFA • Accéder à mon profil →
-                      </Text>
-                    </View>
-                  </View>
-                </Pressable>
-              )}
+              </Pressable>
             </View>
           }
           renderItem={({ item }) => (
