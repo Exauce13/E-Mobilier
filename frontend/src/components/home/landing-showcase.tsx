@@ -29,24 +29,6 @@ export function LandingShowcase({ onOpenLogin, onOpenRegister }: LandingShowcase
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<any>(null);
 
-  // Formulaire de contact public
-  const [contactName, setContactName] = useState('');
-  const [contactPhone, setContactPhone] = useState('');
-  const [contactMessage, setContactMessage] = useState('');
-  const [contactSuccess, setContactSuccess] = useState(false);
-
-  const handleSendContact = () => {
-    if (!contactName.trim() || !contactPhone.trim() || !contactMessage.trim()) {
-      return;
-    }
-    setContactSuccess(true);
-    setTimeout(() => {
-      setContactName('');
-      setContactPhone('');
-      setContactMessage('');
-      setContactSuccess(false);
-    }, 4000);
-  };
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -145,54 +127,6 @@ export function LandingShowcase({ onOpenLogin, onOpenRegister }: LandingShowcase
           </View>
         </View>
 
-        {/* TRUST BANNER - 3 KEY PILLARS */}
-        <View style={[styles.trustBanner, { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder }]}>
-          <View style={styles.trustItem}>
-            <View style={[styles.trustIconCircle, { backgroundColor: '#FEF3C7' }]}>
-              <SymbolView
-                name={{ ios: 'checkmark.shield.fill', android: 'verified_user', web: 'verified_user' }}
-                size={20}
-                tintColor="#B45309"
-              />
-            </View>
-            <View style={styles.trustTextCol}>
-              <Text style={[styles.trustTitle, { color: theme.text }]}>100% Titrés & Vérifiés</Text>
-              <Text style={[styles.trustSubtitle, { color: theme.textSecondary }]}>Documents conformes ANDF</Text>
-            </View>
-          </View>
-
-          <View style={[styles.trustDivider, { backgroundColor: theme.cardBorder }]} />
-
-          <View style={styles.trustItem}>
-            <View style={[styles.trustIconCircle, { backgroundColor: '#ECFDF5' }]}>
-              <SymbolView
-                name={{ ios: 'creditcard.fill', android: 'payments', web: 'payments' }}
-                size={20}
-                tintColor="#047857"
-              />
-            </View>
-            <View style={styles.trustTextCol}>
-              <Text style={[styles.trustTitle, { color: theme.text }]}>Mobile Money</Text>
-              <Text style={[styles.trustSubtitle, { color: theme.textSecondary }]}>MTN & Moov Bénin</Text>
-            </View>
-          </View>
-
-          <View style={[styles.trustDivider, { backgroundColor: theme.cardBorder }]} />
-
-          <View style={styles.trustItem}>
-            <View style={[styles.trustIconCircle, { backgroundColor: '#EFF6FF' }]}>
-              <SymbolView
-                name={{ ios: 'person.badge.shield.checkmark.fill', android: 'badge', web: 'badge' }}
-                size={20}
-                tintColor="#1D4ED8"
-              />
-            </View>
-            <View style={styles.trustTextCol}>
-              <Text style={[styles.trustTitle, { color: theme.text }]}>Agents Agréés</Text>
-              <Text style={[styles.trustSubtitle, { color: theme.textSecondary }]}>Visites réelles garanties</Text>
-            </View>
-          </View>
-        </View>
 
         {/* FEATURED PROPERTIES PREVIEW SECTION */}
         <View style={styles.sectionContainer}>
@@ -383,71 +317,6 @@ export function LandingShowcase({ onOpenLogin, onOpenRegister }: LandingShowcase
               <Text style={styles.contactInfoLabel}>Email Support</Text>
               <Text style={styles.contactInfoValue}>contact@e-mobilier.bj</Text>
             </View>
-          </View>
-
-          {/* Quick Contact Form */}
-          <View style={styles.contactFormCard}>
-            <Text style={styles.formTitle}>Envoyez-nous un message direct</Text>
-
-            {contactSuccess && (
-              <View style={styles.successMessageBanner}>
-                <SymbolView
-                  name={{ ios: 'checkmark.circle.fill', android: 'check_circle', web: 'check_circle' }}
-                  size={18}
-                  tintColor="#047857"
-                />
-                <Text style={styles.successMessageText}>
-                  Merci ! Votre message a été transmis à notre équipe à Cotonou.
-                </Text>
-              </View>
-            )}
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Votre nom complet</Text>
-              <TextInput
-                style={styles.formInput}
-                placeholder="Ex: Koffi Mensah"
-                placeholderTextColor="#64748B"
-                value={contactName}
-                onChangeText={setContactName}
-              />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Numéro de téléphone (Bénin)</Text>
-              <TextInput
-                style={styles.formInput}
-                placeholder="Ex: 0197001122"
-                placeholderTextColor="#64748B"
-                keyboardType="phone-pad"
-                value={contactPhone}
-                onChangeText={setContactPhone}
-              />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Votre message ou demande</Text>
-              <TextInput
-                style={[styles.formInput, styles.formTextArea]}
-                placeholder="Décrivez votre besoin (achat, location, partenariat agent)..."
-                placeholderTextColor="#64748B"
-                multiline
-                numberOfLines={4}
-                value={contactMessage}
-                onChangeText={setContactMessage}
-              />
-            </View>
-
-            <Pressable
-              onPress={handleSendContact}
-              style={({ pressed }) => [styles.submitContactBtn, pressed && { opacity: 0.85 }]}>
-              <Text style={styles.submitContactBtnText}>Envoyer mon message</Text>
-              <SymbolView
-                name={{ ios: 'paperplane.fill', android: 'send', web: 'send' }}
-                size={16}
-                tintColor="#0F172A"
-              />
-            </Pressable>
           </View>
         </View>
 
