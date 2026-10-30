@@ -40,4 +40,52 @@ class User extends Authenticatable
     {
         return trim("{$this->prenom} {$this->name}");
     }
+
+    /**
+     * Propriétés publiées par l'utilisateur.
+     */
+    public function proprietes(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(Proprietes::class, 'user_id');
+    }
+
+    /**
+     * Demandes de recherche soumises par l'utilisateur.
+     */
+    public function demandes(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(Demande_client::class, 'client_id');
+    }
+
+    /**
+     * Visites demandées par l'utilisateur en tant que client.
+     */
+    public function visites(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(Visite_client::class, 'client_id');
+    }
+
+    /**
+     * Visites assignées à l'utilisateur en tant qu'agent.
+     */
+    public function visitesAgent(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(Visite_client::class, 'target_agent_id');
+    }
+
+    /**
+     * Paiements effectués par l'utilisateur.
+     */
+    public function paiements(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(Paiement::class, 'user_id');
+    }
+
+    /**
+     * Vues de coordonnées débloquées par l'utilisateur.
+     */
+    public function paiementVues(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(Paiement_vue::class, 'client_id');
+    }
 }

@@ -25,7 +25,7 @@ return new class extends Migration
             $table->decimal('surface',10,2);
             $table->integer('nombres_chambres');
             $table->integer('avance_mois');
-            $table->decimal('prix');
+            $table->decimal('prix', 15, 2);
             $table->boolean('is_negotiable')->default(false);
             $table->text('description')->nullable();
             $table->enum('status', ['pending_payment', 'pending', 'published', 'sold_rented', 'rejected'])->default('pending_payment');

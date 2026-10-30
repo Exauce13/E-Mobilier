@@ -15,7 +15,6 @@ class InscriptionControllerTest extends TestCase
     {
         parent::setUp();
         Role::firstOrCreate(['name' => 'Client']);
-        Role::firstOrCreate(['name' => 'Propritaires']);
         Role::firstOrCreate(['name' => 'Agent mobilier']);
         Role::firstOrCreate(['name' => 'Admin']);
     }
