@@ -1,0 +1,13 @@
+{
+  "intelephense.environment.includePaths": [
+    "backend",
+    "backend/vendor",
+    "backend/app"
+  ],
+  "intelephense.files.exclude": [
+    "**/.git/**",
+    "**/node_modules/**",
+    "**/frontend/**",
+    "**/storage/**"
+  ]
+}
