@@ -114,7 +114,7 @@ class InscriptionRequest extends FormRequest
             'role' => [
                 'nullable',
                 'string',
-                'in:client_proprietaire,agent_immobilier,Client,Propritaires,Agent mobilier,Admin',
+                'in:client,client_proprietaire,agent_immobilier,Client,Agent mobilier,Admin',
             ],
         ];
     }

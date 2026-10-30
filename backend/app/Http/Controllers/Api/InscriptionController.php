@@ -39,10 +39,9 @@ class InscriptionController extends Controller
                 ]);
 
                 // Attribution du rôle selon le choix du frontend
-                $roleInput = $request->input('role', 'client_proprietaire');
+                $roleInput = $request->input('role', 'Client');
                 $roleName = match ($roleInput) {
                     'agent_immobilier', 'Agent mobilier' => 'Agent mobilier',
-                    'Propritaires', 'proprietaire' => 'Propritaires',
                     'Admin', 'admin' => 'Admin',
                     default => 'Client',
                 };
@@ -184,7 +183,6 @@ class InscriptionController extends Controller
 
         $frontendRole = match ($primaryRole) {
             'Agent mobilier' => 'agent_immobilier',
-            'Propritaires' => 'client_proprietaire',
             default => 'client_proprietaire',
         };
 
