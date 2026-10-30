@@ -117,7 +117,6 @@ class InscriptionRequest extends FormRequest
                 'in:client_proprietaire,agent_immobilier,Client,Propritaires,Agent mobilier,Admin',
             ],
             'acceptedTerms' => ['nullable', 'boolean'],
-            'accepted_terms' => ['nullable', 'boolean'],
         ];
     }
 

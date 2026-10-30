@@ -6,15 +6,12 @@ import {
   TabTriggerSlotProps,
   TabListProps,
 } from 'expo-router/ui';
-import { SymbolView } from 'expo-symbols';
-import { Pressable, useColorScheme, View, StyleSheet } from 'react-native';
+import React from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Colors, MaxContentWidth, Spacing } from '@/constants/theme';
+import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
-
-import { ExternalLink } from './external-link';
-import { ThemedText } from './themed-text';
-import { ThemedView } from './themed-view';
+import { useTheme } from '@/hooks/use-theme';
 
 export default function AppTabs() {
   const { isAuthenticated, user } = useAuth();
@@ -22,79 +19,90 @@ export default function AppTabs() {
   return (
     <Tabs>
       <TabSlot style={{ height: '100%' }} />
-      <TabList asChild>
-        <CustomTabList>
-          <TabTrigger name="home" href="/" asChild>
-            <TabButton>Accueil</TabButton>
-          </TabTrigger>
-          <TabTrigger name="explore" href="/explore" asChild>
-            <TabButton>Recherche</TabButton>
-          </TabTrigger>
 
-          {isAuthenticated && user?.role === 'agent_immobilier' && (
-            <TabTrigger name="publish" href="/publish" asChild>
-              <TabButton>Publier</TabButton>
+      {/* La barre de navigation web n'est affichée QUE lorsque l'utilisateur est connecté */}
+      {isAuthenticated && (
+        <TabList asChild>
+          <CustomTabList>
+            <TabTrigger name="home" href="/" asChild>
+              <TabButton>Catalogue</TabButton>
             </TabTrigger>
-          )}
 
-          {isAuthenticated && user?.role === 'agent_immobilier' && (
-            <TabTrigger name="visits" href="/visits" asChild>
-              <TabButton>Visites</TabButton>
+            <TabTrigger name="explore" href="/explore" asChild>
+              <TabButton>Recherche</TabButton>
             </TabTrigger>
-          )}
 
-          {!isAuthenticated ? (
-            <>
-              <TabTrigger name="login" href="/login" asChild>
-                <TabButton>Se connecter</TabButton>
+            {user?.role === 'agent_immobilier' && (
+              <TabTrigger name="publish" href="/publish" asChild>
+                <TabButton>Publier</TabButton>
               </TabTrigger>
-              <TabTrigger name="register" href="/register" asChild>
-                <TabButton>S'inscrire</TabButton>
+            )}
+
+            {user?.role === 'agent_immobilier' && (
+              <TabTrigger name="visits" href="/visits" asChild>
+                <TabButton>Visites</TabButton>
               </TabTrigger>
-            </>
-          ) : (
+            )}
+
             <TabTrigger name="profile" href="/profile" asChild>
               <TabButton>Mon Profil</TabButton>
             </TabTrigger>
-          )}
-        </CustomTabList>
-      </TabList>
+          </CustomTabList>
+        </TabList>
+      )}
     </Tabs>
   );
 }
 
 export function TabButton({ children, isFocused, ...props }: TabTriggerSlotProps) {
+  const theme = useTheme();
+
   return (
     <Pressable {...(props as any)} style={({ pressed }) => pressed && styles.pressed}>
-      <ThemedView
-        type={isFocused ? 'backgroundSelected' : 'backgroundElement'}
+      <View
         style={[
           styles.tabButtonView,
-          isFocused && { backgroundColor: '#0D9488' },
+          {
+            backgroundColor: isFocused ? theme.primary : 'transparent',
+          },
         ]}>
-        <ThemedText
-          type="smallBold"
-          style={{ color: isFocused ? '#FFFFFF' : '#64748B' }}>
+        <Text
+          style={[
+            styles.tabButtonText,
+            {
+              color: isFocused ? '#FFFFFF' : theme.textSecondary,
+              fontWeight: isFocused ? '700' : '500',
+            },
+          ]}>
           {children}
-        </ThemedText>
-      </ThemedView>
+        </Text>
+      </View>
     </Pressable>
   );
 }
 
 export function CustomTabList(props: TabListProps) {
-  const scheme = useColorScheme();
-  const colors = Colors[scheme === 'dark' ? 'dark' : 'light'];
+  const theme = useTheme();
 
   return (
     <View {...props} style={styles.tabListContainer}>
-      <ThemedView type="backgroundElement" style={styles.innerContainer}>
-        <ThemedText type="smallBold" style={[styles.brandText, { color: '#0D9488' }]}>
-          E-Mobilier
-        </ThemedText>
+      <View
+        style={[
+          styles.innerContainer,
+          {
+            backgroundColor: theme.navyLight,
+            borderColor: theme.cardBorder,
+          },
+        ]}>
+        <View style={styles.brandRow}>
+          <Text style={[styles.brandText, { color: theme.gold }]}>E-Mobilier</Text>
+          <View style={styles.flagBadge}>
+            <Text style={styles.flagText}>🇧🇯</Text>
+          </View>
+        </View>
 
-        {props.children}
-      </ThemedView>
+        <View style={styles.tabsRow}>{props.children}</View>
+      </View>
     </View>
   );
 }
@@ -102,38 +110,63 @@ export function CustomTabList(props: TabListProps) {
 const styles = StyleSheet.create({
   tabListContainer: {
     position: 'absolute',
+    bottom: 16,
+    left: 0,
+    right: 0,
     width: '100%',
-    padding: Spacing.three,
+    paddingHorizontal: Spacing.four,
     justifyContent: 'center',
     alignItems: 'center',
     flexDirection: 'row',
+    pointerEvents: 'box-none',
   },
   innerContainer: {
-    paddingVertical: Spacing.two,
-    paddingHorizontal: Spacing.five,
-    borderRadius: Spacing.five,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 24,
+    borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    flexGrow: 1,
-    gap: Spacing.two,
+    justifyContent: 'space-between',
+    gap: 12,
     maxWidth: MaxContentWidth,
+    width: '100%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   brandText: {
-    marginRight: 'auto',
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: -0.2,
+  },
+  flagBadge: {
+    paddingHorizontal: 4,
+  },
+  flagText: {
+    fontSize: 12,
+  },
+  tabsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   pressed: {
-    opacity: 0.7,
+    opacity: 0.75,
   },
   tabButtonView: {
-    paddingVertical: Spacing.one,
-    paddingHorizontal: Spacing.three,
-    borderRadius: Spacing.three,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 16,
   },
-  externalPressable: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: Spacing.one,
-    marginLeft: Spacing.three,
+  tabButtonText: {
+    fontSize: 13,
   },
 });
