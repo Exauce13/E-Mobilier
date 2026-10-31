@@ -206,3 +206,86 @@ export const authApi = {
     return { success: true, message: 'Déconnexion réussie.' };
   },
 };
+
+/**
+ * Gestion des propriétés et du fil d'actualité.
+ */
+export const proprietesApi = {
+  /**
+   * Endpoint: GET /api/proprietes (Fil d'actualité des biens publiés)
+   */
+  getFeed: async (params: Record<string, any> = {}): Promise<ApiResponse<any>> => {
+    const query = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== '') {
+        query.append(k, String(v));
+      }
+    });
+    const queryString = query.toString() ? `?${query.toString()}` : '';
+    return apiRequest(`/proprietes${queryString}`, {
+      method: 'GET',
+    });
+  },
+
+  /**
+   * Endpoint: GET /api/proprietes/:id (Détails d'un bien)
+   */
+  getById: async (id: number | string): Promise<ApiResponse<any>> => {
+    return apiRequest(`/proprietes/${id}`, {
+      method: 'GET',
+    });
+  },
+
+  /**
+   * Endpoint: POST /api/proprietes/:id/debloquer (Débloquer coordonnées pour 50 FCFA)
+   */
+  unlockDetails: async (
+    id: number | string,
+    transactionId: string
+  ): Promise<ApiResponse<any>> => {
+    return apiRequest(`/proprietes/${id}/debloquer`, {
+      method: 'POST',
+      body: JSON.stringify({
+        kkiapay_transaction_id: transactionId,
+      }),
+    });
+  },
+};
+
+/**
+ * Gestion des visites physiques (500 FCFA).
+ */
+export const visitesApi = {
+  /**
+   * Endpoint: POST /api/visites (Demander une visite avec 500 FCFA Kkiapay)
+   */
+  requestVisit: async (payload: {
+    property_id: number | string;
+    scheduled_date: string;
+    kkiapay_transaction_id: string;
+  }): Promise<ApiResponse<any>> => {
+    return apiRequest('/visites', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /**
+   * Endpoint: GET /api/mes-visites
+   */
+  getMyVisits: async (): Promise<ApiResponse<any>> => {
+    return apiRequest('/mes-visites', {
+      method: 'GET',
+    });
+  },
+
+  /**
+   * Endpoint: POST /api/visites/:id/annuler
+   */
+  cancelVisit: async (id: number | string): Promise<ApiResponse<any>> => {
+    return apiRequest(`/visites/${id}/annuler`, {
+      method: 'POST',
+    });
+  },
+};
+

@@ -13,10 +13,30 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        $middleware->alias([
+            'role' => \Spatie\Permission\Middleware\RoleMiddleware::class,
+            'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,
+            'role_or_permission' => \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
         );
+
+        $exceptions->render(function (\Spatie\Permission\Exceptions\UnauthorizedException $e, Request $request) {
+            $roles = $e->getRequiredRoles();
+            if ($roles === ['Admin']) {
+                $message = 'Accès refusé. Cette section est strictement réservée aux administrateurs.';
+            } elseif (in_array('Client', $roles) && ! in_array('Agent mobilier', $roles)) {
+                $message = 'Accès refusé. Seuls les clients sont autorisés à publier des demandes de recherche de biens.';
+            } else {
+                $message = 'Accès refusé. Vous ne disposez pas du rôle requis pour accéder à cette ressource.';
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => $message,
+            ], 403);
+        });
     })->create();

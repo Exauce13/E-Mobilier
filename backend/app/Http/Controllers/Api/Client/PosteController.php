@@ -1,14 +1,16 @@
 <?php
 
-namespace App\Http\Controllers\Api;
+namespace App\Http\Controllers\Api\Client;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\PosteRequest;
 use App\Http\Requests\UpdatePosteRequest;
 use App\Models\Paiement;
+use App\Models\Paiement_vue;
 use App\Models\Proprietes;
 use App\Models\Proprietes_document;
 use App\Models\Proprietes_media;
+use App\Models\User;
 use App\Services\KkiapayService;
 use Exception;
 use Illuminate\Http\JsonResponse;
@@ -65,7 +67,90 @@ class PosteController extends Controller
     }
 
     /**
+     * Fil d'actualité des biens immobiliers publiés.
+     * Accessible aux clients et visiteurs avec défilement et filtres de recherche.
+     * Pour les utilisateurs n'ayant pas débloqué le bien (50 FCFA), les coordonnées et documents sont masqués.
+     */
+    public function filActualite(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        $query = Proprietes::with(['media', 'documents', 'user:id,name,prenom,telephone,email'])
+            ->where('status', 'published')
+            ->latest();
+
+        // Filtre par type de bien (parcelle, maison, chambre)
+        if ($request->filled('type') || $request->filled('property_type')) {
+            $query->where('type', $request->input('type', $request->input('property_type')));
+        }
+
+        // Filtre par type d'opération (location, vente)
+        if ($request->filled('transaction_type')) {
+            $query->where('transaction_type', $request->input('transaction_type'));
+        }
+
+        // Filtres géographiques
+        if ($request->filled('commune')) {
+            $query->where('commune', 'ILIKE', '%' . $request->input('commune') . '%');
+        }
+        if ($request->filled('arrondissement')) {
+            $query->where('arrondissement', 'ILIKE', '%' . $request->input('arrondissement') . '%');
+        }
+        if ($request->filled('quartier')) {
+            $query->where('quartier', 'ILIKE', '%' . $request->input('quartier') . '%');
+        }
+
+        // Filtres de budget
+        if ($request->filled('prix_min')) {
+            $query->where('prix', '>=', (float) $request->input('prix_min'));
+        }
+        if ($request->filled('prix_max')) {
+            $query->where('prix', '<=', (float) $request->input('prix_max'));
+        }
+
+        // Filtre par nombre de chambres
+        if ($request->filled('nombres_chambres')) {
+            $query->where('nombres_chambres', '>=', (int) $request->input('nombres_chambres'));
+        }
+
+        // Recherche multi-critères globale
+        if ($request->filled('search')) {
+            $search = $request->input('search');
+            $query->where(function ($q) use ($search) {
+                $q->where('commune', 'ILIKE', "%{$search}%")
+                    ->orWhere('arrondissement', 'ILIKE', "%{$search}%")
+                    ->orWhere('quartier', 'ILIKE', "%{$search}%")
+                    ->orWhere('description', 'ILIKE', "%{$search}%");
+            });
+        }
+
+        $perPage = (int) $request->input('per_page', 15);
+        $paginated = $query->paginate($perPage);
+
+        // Transformation avec masquage des détails si non débloqué
+        $paginated->getCollection()->transform(function ($propriete) use ($user) {
+            return $this->formatPropertyForUser($propriete, $user);
+        });
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Fil d\'actualité des biens immobiliers récupéré avec succès.',
+            'data' => $paginated,
+        ], 200);
+    }
+
+    /**
+     * Alias standard REST pour le fil d'actualité.
+     */
+    public function index(Request $request): JsonResponse
+    {
+        return $this->filActualite($request);
+    }
+
+    /**
      * Affiche les détails d'un poste spécifique.
+     * Si l'utilisateur n'a pas encore payé les 50 FCFA (et n'est ni propriétaire ni admin),
+     * les coordonnées exactes et documents sont masqués.
      */
     public function show(Request $request, int|string $id): JsonResponse
     {
@@ -81,7 +166,7 @@ class PosteController extends Controller
             ], 404);
         }
 
-        // Vérifier l'autorisation si la propriété n'est pas publiée
+        // Vérifier l'autorisation si la propriété n'est pas encore publiée
         if ($propriete->status !== 'published' && (! $user || ($propriete->user_id !== $user->id && ! $user->hasRole('Admin')))) {
             return response()->json([
                 'success' => false,
@@ -91,8 +176,162 @@ class PosteController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => $propriete,
+            'data' => $this->formatPropertyForUser($propriete, $user),
         ], 200);
+    }
+
+    /**
+     * Débloque les coordonnées et détails masqués d'un bien immobilier moyennant 50 FCFA.
+     * Si le client a déjà payé pour ce même bien, il ne repaye plus.
+     */
+    public function debloquerDetails(Request $request, int|string $id): JsonResponse
+    {
+        $user = $request->user();
+
+        if (! $user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Utilisateur non authentifié.',
+            ], 401);
+        }
+
+        $propriete = Proprietes::with(['media', 'documents', 'user'])->find($id);
+
+        if (! $propriete) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Propriété introuvable.',
+            ], 404);
+        }
+
+        // Le propriétaire et l'administrateur ont déjà un accès complet gratuit
+        if ($propriete->user_id === $user->id || $user->hasRole('Admin')) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Vous disposez d\'un accès complet à cette annonce.',
+                'already_unlocked' => true,
+                'data' => $this->formatPropertyForUser($propriete, $user),
+            ], 200);
+        }
+
+        // Vérification si déjà débloqué par ce client
+        $alreadyUnlocked = Paiement_vue::where('client_id', $user->id)
+            ->where('property_id', $propriete->id)
+            ->exists();
+
+        if ($alreadyUnlocked) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Vous avez déjà débloqué les coordonnées de ce bien. Aucun paiement supplémentaire n\'est requis.',
+                'already_unlocked' => true,
+                'data' => $this->formatPropertyForUser($propriete, $user),
+            ], 200);
+        }
+
+        // Montant du déblocage de vue : 50 FCFA
+        $fraisDeblocage = 50;
+        $transactionId = $request->input('kkiapay_transaction_id', $request->input('transaction_id'));
+
+        if (empty($transactionId)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'La référence de transaction Kkiapay pour le paiement des frais de 50 FCFA est obligatoire.',
+            ], 422);
+        }
+
+        $verification = $this->kkiapayService->verifyTransaction($transactionId, $fraisDeblocage);
+
+        if (! $verification['success']) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Échec de validation du paiement de 50 FCFA via Kkiapay : ' . $verification['message'],
+            ], 422);
+        }
+
+        try {
+            DB::transaction(function () use ($user, $propriete, $fraisDeblocage, $transactionId, $verification) {
+                // 1. Enregistrement dans la table paiement_vues
+                Paiement_vue::create([
+                    'client_id' => $user->id,
+                    'property_id' => $propriete->id,
+                    'amount_paid' => $fraisDeblocage,
+                ]);
+
+                // 2. Enregistrement de la trace dans la table paiements
+                $transactionRef = $verification['transaction_id'] ?? $transactionId;
+                if (Paiement::where('transaction_reference', $transactionRef)->exists()) {
+                    $transactionRef .= '-VIEW-' . uniqid();
+                }
+
+                Paiement::create([
+                    'user_id' => $user->id,
+                    'property_id' => $propriete->id,
+                    'transaction_reference' => $transactionRef,
+                    'payment_type' => 'view_details',
+                    'amount' => $fraisDeblocage,
+                    'payment_method' => 'kkiapay',
+                    'status' => 'successful',
+                ]);
+            });
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Coordonnées et détails complets du bien débloqués avec succès pour 50 FCFA.',
+                'already_unlocked' => false,
+                'data' => $this->formatPropertyForUser($propriete->fresh(['media', 'documents', 'user']), $user),
+            ], 200);
+        } catch (Exception $e) {
+            Log::error('Erreur lors du déblocage de la vue du bien : ' . $e->getMessage(), [
+                'user_id' => $user->id,
+                'property_id' => $propriete->id,
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Une erreur est survenue lors du déblocage du bien.',
+                'error' => config('app.debug') ? $e->getMessage() : null,
+            ], 500);
+        }
+    }
+
+    /**
+     * Formate une propriété pour l'utilisateur en masquant les détails sensibles
+     * si l'utilisateur n'a pas encore payé les frais de déblocage de 50 FCFA.
+     */
+    protected function formatPropertyForUser(Proprietes $propriete, ?User $user): array
+    {
+        $isOwner = $user && $propriete->user_id === $user->id;
+        $isAdmin = $user && $user->hasRole('Admin');
+        $hasPaidView = $user ? Paiement_vue::where('client_id', $user->id)
+            ->where('property_id', $propriete->id)
+            ->exists() : false;
+
+        $isUnlocked = $isOwner || $isAdmin || $hasPaidView;
+
+        $data = $propriete->toArray();
+        $data['is_unlocked'] = $isUnlocked;
+        $data['unlock_fee'] = 50; // Frais pour débloquer les coordonnées
+        $data['visit_fee'] = 500; // Frais pour planifier une visite physique
+
+        if (! $isUnlocked) {
+            // Masquer les détails précis de localisation
+            $data['location_details'] = 'Coordonnées et repères précis masqués. Débloquez les détails complets pour 50 FCFA.';
+            // Masquer les documents légaux
+            $data['documents'] = [];
+            // Masquer les coordonnées de l'auteur (propriétaire/agent)
+            if (isset($data['user'])) {
+                $tel = $data['user']['telephone'] ?? '';
+                $data['user']['telephone'] = ! empty($tel) ? substr($tel, 0, 6) . '****' . substr($tel, -2) : null;
+                $email = $data['user']['email'] ?? '';
+                if (! empty($email)) {
+                    $parts = explode('@', $email);
+                    $namePart = substr($parts[0], 0, 2) . '***';
+                    $data['user']['email'] = $namePart . '@' . ($parts[1] ?? '***');
+                }
+            }
+        }
+
+        return $data;
     }
 
     /**
