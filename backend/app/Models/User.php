@@ -9,10 +9,12 @@ use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Laravel\Sanctum\HasApiTokens;
 use Spatie\Permission\Traits\HasRoles;
 
-#[Fillable(['name', 'prenom', 'email', 'telephone', 'is_verifed', 'password', 'device_token'])]
+#[Fillable(['name', 'prenom', 'email', 'telephone', 'is_verifed', 'password', 'device_token', 'zone_id', 'statut'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -87,5 +89,90 @@ class User extends Authenticatable
     public function paiementVues(): \Illuminate\Database\Eloquent\Relations\HasMany
     {
         return $this->hasMany(Paiement_vue::class, 'client_id');
+    }
+
+    /**
+     * Zone géographique de rattachement (pour les Responsables de zone).
+     */
+    public function zone(): BelongsTo
+    {
+        return $this->belongsTo(Zone::class, 'zone_id');
+    }
+
+    /**
+     * Signatures de documents légaux de l'utilisateur.
+     */
+    public function signaturesLegales(): HasMany
+    {
+        return $this->hasMany(SignatureLegale::class, 'user_id');
+    }
+
+    /**
+     * Logs d'audit générés par cet utilisateur.
+     */
+    public function auditLogs(): HasMany
+    {
+        return $this->hasMany(AuditLog::class, 'user_id');
+    }
+
+    public function isActif(): bool
+    {
+        return $this->statut === 'actif';
+    }
+
+    public function isSuspendu(): bool
+    {
+        return $this->statut === 'suspendu';
+    }
+
+    public function isSuperAdminPrincipal(): bool
+    {
+        $ownerEmail = config('emobilier.super_admin_principal_email');
+        if ($ownerEmail && strtolower($this->email) === strtolower($ownerEmail)) {
+            return true;
+        }
+
+        $ownerId = config('emobilier.super_admin_principal_id');
+        if ($ownerId && (int) $this->id === (int) $ownerId) {
+            return true;
+        }
+
+        return $this->hasRole('Super Admin Principal');
+    }
+
+    public function isSuperAdminTechnique(): bool
+    {
+        return $this->hasRole('Super Admin Technique');
+    }
+
+    public function isSecretaire(): bool
+    {
+        return $this->hasRole('Secrétaire');
+    }
+
+    public function isResponsableZone(): bool
+    {
+        return $this->hasRole('Responsable de zone');
+    }
+
+    public function isAnyAdmin(): bool
+    {
+        return $this->isSuperAdminPrincipal()
+            || $this->isSuperAdminTechnique()
+            || $this->isSecretaire()
+            || $this->isResponsableZone()
+            || $this->hasRole('Admin');
+    }
+
+    public function hasSignedCurrentCharte(): bool
+    {
+        $charte = DocumentLegal::courante('charte_non_contournement');
+        if (! $charte) {
+            return true; // Aucune charte active requise
+        }
+
+        return $this->signaturesLegales()
+            ->where('document_legal_id', $charte->id)
+            ->exists();
     }
 }

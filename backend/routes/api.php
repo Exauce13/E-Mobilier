@@ -1,6 +1,11 @@
 <?php
 
+use App\Http\Controllers\Api\Admin\AdminUserController;
+use App\Http\Controllers\Api\Admin\AuditLogController;
+use App\Http\Controllers\Api\Admin\LegalDocumentController;
+use App\Http\Controllers\Api\Admin\SystemHealthController;
 use App\Http\Controllers\Api\Admin\VueDemandeClient;
+use App\Http\Controllers\Api\Admin\ZoneController;
 use App\Http\Controllers\Api\Client\PosteController;
 use App\Http\Controllers\Api\Client\PosteRechercheController;
 use App\Http\Controllers\Api\Client\VisitController;
@@ -26,8 +31,11 @@ Route::post('/kkiapay/webhook', [KkiapayController::class, 'webhook']);
 Route::get('/proprietes', [PosteController::class, 'filActualite']);
 Route::get('/fil-actualite', [PosteController::class, 'filActualite']);
 
-// Routes protégées par token Sanctum
-Route::middleware('auth:sanctum')->group(function () {
+// Conformité légale publique : consultation de la version active des CGU
+Route::get('/cgu/courante', [LegalDocumentController::class, 'cguCourante']);
+
+// Routes protégées par token Sanctum et compte actif
+Route::middleware(['auth:sanctum', 'active'])->group(function () {
     // Profil et compte utilisateur commun
     Route::get('/profil', [InscriptionController::class, 'profil']);
     Route::post('/deconnexion', [InscriptionController::class, 'deconnexion']);
@@ -83,6 +91,42 @@ Route::middleware('auth:sanctum')->group(function () {
         // Visibilité intégrale sur toutes les demandes de visite (Monopole E-Mobilier)
         Route::get('/admin/visites', [VisitController::class, 'mesVisites']);
         Route::get('/admin/visites/{id}', [VisitController::class, 'show']);
+    });
+
+    // =========================================================================
+    // PHASE 1 : FONDATIONS RBAC, GOUVERNANCE, ZONES & CONFORMITÉ LÉGALE
+    // =========================================================================
+
+    // Consultation des zones géographiques (Accessible à tous les profils administrateurs)
+    Route::middleware('role:Super Admin Principal|Super Admin Technique|Secrétaire|Responsable de zone|Admin')->group(function () {
+        Route::get('/admin/zones', [ZoneController::class, 'index']);
+    });
+
+    // Signature obligatoire de la Charte de Non-Contournement (Secrétaire, Responsable de zone)
+    Route::middleware('role:Secrétaire|Responsable de zone|Admin')->group(function () {
+        Route::post('/admin/charte/signer', [LegalDocumentController::class, 'signerCharte']);
+    });
+
+    // Administration Globale & Système (Super Administrateurs : Principal et Technique)
+    Route::middleware('super_admin')->group(function () {
+        // Gestion des zones géographiques
+        Route::post('/admin/zones', [ZoneController::class, 'store']);
+        Route::patch('/admin/zones/{id}', [ZoneController::class, 'update']);
+
+        // Gestion des utilisateurs et rôles (Anti-escalade & sanctuarisation)
+        Route::get('/admin/utilisateurs', [AdminUserController::class, 'index']);
+        Route::post('/admin/utilisateurs', [AdminUserController::class, 'store']);
+        Route::patch('/admin/utilisateurs/{id}/role-zone', [AdminUserController::class, 'updateRoleZone']);
+        Route::post('/admin/utilisateurs/{id}/statut', [AdminUserController::class, 'updateStatut']);
+
+        // Publication de nouvelles versions de documents légaux
+        Route::post('/admin/cgu', [LegalDocumentController::class, 'publierDocument']);
+
+        // Journal d'audit de sécurité (Filtrage automatique hors finance pour Tech)
+        Route::get('/admin/audit-logs', [AuditLogController::class, 'index']);
+
+        // Diagnostic de santé et de charge de l'infrastructure
+        Route::get('/tech/system-health', [SystemHealthController::class, 'health']);
     });
 
     // Enregistrement du token pour les notifications push

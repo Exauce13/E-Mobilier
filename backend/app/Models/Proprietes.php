@@ -25,6 +25,7 @@ class Proprietes extends Model
      */
     protected $fillable = [
         'user_id',
+        'zone_id',
         'type',
         'transaction_type',
         'commune',
@@ -72,6 +73,14 @@ class Proprietes extends Model
     public function media(): HasMany
     {
         return $this->hasMany(Proprietes_media::class, 'propriete_id');
+    }
+
+    /**
+     * Zone géographique de rattachement du bien.
+     */
+    public function zone(): BelongsTo
+    {
+        return $this->belongsTo(Zone::class, 'zone_id');
     }
 
     /**
