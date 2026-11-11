@@ -25,11 +25,20 @@ class Visite_client extends Model
     protected $fillable = [
         'client_id',
         'property_id',
+        'zone_id',
         'target_agent_id',
         'scheduled_date',
         'status',
         'is_fee_paid',
     ];
+
+    /**
+     * Zone géographique rattachée à la visite.
+     */
+    public function zone(): BelongsTo
+    {
+        return $this->belongsTo(Zone::class, 'zone_id');
+    }
 
     /**
      * Get the attributes that should be cast.
@@ -58,6 +67,14 @@ class Visite_client extends Model
     public function propriete(): BelongsTo
     {
         return $this->belongsTo(Proprietes::class, 'property_id');
+    }
+
+    /**
+     * Agent ou Responsable de zone assigné à la visite.
+     */
+    public function agentAssigne(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'target_agent_id');
     }
 
     /**

@@ -140,6 +140,21 @@ class User extends Authenticatable
         return $this->hasRole('Super Admin Principal');
     }
 
+    /**
+     * Titulaire financier exclusif du compte marchand (MAGNIDE Justin).
+     * Monopole absolu sur les soldes, le Grand Livre et les retraits (Payouts OTP).
+     */
+    public function isFinancialOwner(): bool
+    {
+        $ownerEmail = config('emobilier.super_admin_principal_email');
+        $isOwnerEmail = $ownerEmail && strtolower($this->email) === strtolower($ownerEmail);
+
+        $ownerId = config('emobilier.super_admin_principal_id');
+        $isOwnerId = $ownerId && (int) $this->id === (int) $ownerId;
+
+        return ($isOwnerEmail || $isOwnerId) && $this->hasRole('Super Admin Principal');
+    }
+
     public function isSuperAdminTechnique(): bool
     {
         return $this->hasRole('Super Admin Technique');

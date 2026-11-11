@@ -2,8 +2,11 @@
 
 use App\Http\Controllers\Api\Admin\AdminUserController;
 use App\Http\Controllers\Api\Admin\AuditLogController;
+use App\Http\Controllers\Api\Admin\DemandeClientAdminController;
+use App\Http\Controllers\Api\Admin\DemasquageController;
 use App\Http\Controllers\Api\Admin\LegalDocumentController;
 use App\Http\Controllers\Api\Admin\SystemHealthController;
+use App\Http\Controllers\Api\Admin\VisiteAdminController;
 use App\Http\Controllers\Api\Admin\VueDemandeClient;
 use App\Http\Controllers\Api\Admin\ZoneController;
 use App\Http\Controllers\Api\Client\PosteController;
@@ -82,15 +85,41 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::delete('/demandes-recherche/{id}', [PosteRechercheController::class, 'supprimerDemande']);
     });
 
-    // Consultation et gestion des demandes clients et visites (Admin uniquement)
-    Route::middleware('role:Admin')->group(function () {
-        Route::get('/admin/demandes-clients', [VueDemandeClient::class, 'toutesLesDemandes']);
-        Route::get('/admin/toutes-les-demandes', [VueDemandeClient::class, 'toutesLesDemandes']);
-        Route::get('/admin/demandes-clients/{id}', [VueDemandeClient::class, 'show']);
+    // =========================================================================
+    // PHASE 2 : ANTI-CONTOURNEMENT, MASQUAGE DYNAMIQUE & DÉMASQUAGE (TTL)
+    // =========================================================================
 
-        // Visibilité intégrale sur toutes les demandes de visite (Monopole E-Mobilier)
-        Route::get('/admin/visites', [VisitController::class, 'mesVisites']);
-        Route::get('/admin/visites/{id}', [VisitController::class, 'show']);
+    // Consultation des demandes clients & visites (Masquage dynamique + Portée par zone)
+    Route::middleware(['role:Super Admin Principal|Super Admin Technique|Secrétaire|Responsable de zone|Admin', 'charte.signed'])->group(function () {
+        Route::get('/admin/demandes-clients', [DemandeClientAdminController::class, 'index']);
+        Route::get('/admin/toutes-les-demandes', [DemandeClientAdminController::class, 'index']);
+        Route::get('/admin/demandes-clients/{id}', [DemandeClientAdminController::class, 'show']);
+
+        Route::get('/admin/visites', [VisiteAdminController::class, 'index']);
+        Route::get('/admin/visites/{id}', [VisiteAdminController::class, 'show']);
+        Route::patch('/admin/visites/{id}/statut', [VisiteAdminController::class, 'updateStatut']);
+
+        // Consultation unitaire tracée des coordonnées (Vérification TTL stricte now < expires_at)
+        Route::get('/admin/dossiers/{type}/{id}/coordonnees', [DemasquageController::class, 'coordonnees']);
+    });
+
+    // Affectation de zone pour les visites (Super Admins et Secrétaire)
+    Route::middleware(['role:Super Admin Principal|Super Admin Technique|Secrétaire|Admin', 'charte.signed'])->group(function () {
+        Route::post('/admin/visites/{id}/assigner-zone', [VisiteAdminController::class, 'assignerZone']);
+    });
+
+    // Workflow de demande de démasquage (Secrétaire et Responsable de zone)
+    Route::middleware(['role:Secrétaire|Responsable de zone|Admin', 'charte.signed'])->group(function () {
+        Route::post('/admin/demasquages/demander', [DemasquageController::class, 'demander']);
+        Route::get('/admin/demasquages/mes-demandes', [DemasquageController::class, 'mesDemandes']);
+    });
+
+    // Arbitrage des démasquages (Super Administrateurs : Principal et Technique)
+    Route::middleware('super_admin')->group(function () {
+        Route::get('/admin/demasquages/en-attente', [DemasquageController::class, 'enAttente']);
+        Route::post('/admin/demasquages/{id}/approuver', [DemasquageController::class, 'approuver']);
+        Route::post('/admin/demasquages/{id}/refuser', [DemasquageController::class, 'refuser']);
+        Route::post('/admin/demasquages/{id}/revoquer', [DemasquageController::class, 'revoquer']);
     });
 
     // =========================================================================

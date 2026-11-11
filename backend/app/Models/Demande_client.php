@@ -24,6 +24,7 @@ class Demande_client extends Model
      */
     protected $fillable = [
         'client_id',
+        'zone_id',
         'property_type',
         'transaction_type',
         'target_commune',
@@ -34,6 +35,14 @@ class Demande_client extends Model
         'is_paid',
         'status',
     ];
+
+    /**
+     * Zone géographique de la demande.
+     */
+    public function zone(): BelongsTo
+    {
+        return $this->belongsTo(Zone::class, 'zone_id');
+    }
 
     /**
      * Get the attributes that should be cast.
