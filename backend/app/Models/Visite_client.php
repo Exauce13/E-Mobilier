@@ -30,6 +30,11 @@ class Visite_client extends Model
         'scheduled_date',
         'status',
         'is_fee_paid',
+        'instructions_itineraire',
+        'compte_rendu',
+        'issue_cloture',
+        'is_escalade_haute',
+        'offre_montant',
     ];
 
     /**

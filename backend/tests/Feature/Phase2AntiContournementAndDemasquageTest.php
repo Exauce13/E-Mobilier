@@ -190,8 +190,11 @@ class Phase2AntiContournementAndDemasquageTest extends TestCase
         $this->assertStringNotContainsString('client.reel@gmail.com', $json);
 
         // Vérifier la présence du masquage
-        $this->assertStringContainsString('•• •• •• •• ••', $json);
-        $this->assertStringContainsString('••••••@••••.••', $json);
+        $items = $response->json('data.data');
+        $this->assertNotEmpty($items);
+        $this->assertEquals('•• •• •• •• ••', $items[0]['client']['telephone']);
+        $this->assertEquals('••••••@••••.••', $items[0]['client']['email']);
+        $this->assertTrue($items[0]['donnees_masquees']);
     }
 
     public function test_demandes_clients_are_clear_for_super_admin(): void

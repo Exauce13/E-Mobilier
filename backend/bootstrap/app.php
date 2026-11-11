@@ -21,6 +21,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'charte.signed' => \App\Http\Middleware\EnsureCharteSigned::class,
             'super_admin' => \App\Http\Middleware\EnsureSuperAdmin::class,
             'super_admin_principal' => \App\Http\Middleware\EnsureSuperAdminPrincipal::class,
+            'financial_owner' => \App\Http\Middleware\EnsureFinancialOwner::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

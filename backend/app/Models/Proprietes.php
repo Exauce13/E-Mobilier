@@ -41,6 +41,7 @@ class Proprietes extends Model
         'is_negotiable',
         'description',
         'status',
+        'motif_rejet',
     ];
 
     /**

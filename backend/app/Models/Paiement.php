@@ -69,4 +69,12 @@ class Paiement extends Model
     {
         return $this->propriete();
     }
+
+    /**
+     * Alias client pour l'utilisateur payeur.
+     */
+    public function client(): BelongsTo
+    {
+        return $this->user();
+    }
 }

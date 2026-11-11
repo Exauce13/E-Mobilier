@@ -35,5 +35,28 @@ return [
     */
     'demasquage_default_ttl_minutes' => (int) env('DEMASQUAGE_DEFAULT_TTL_MINUTES', 120),
     'demasquage_max_ttl_minutes' => (int) env('DEMASQUAGE_MAX_TTL_MINUTES', 1440), // 24h
+
+    /*
+    |--------------------------------------------------------------------------
+    | Passerelle de Paiement Agnostique & Coffre-Fort Financier (Phase 3)
+    |--------------------------------------------------------------------------
+    */
+    'payment_gateway' => env('PAYMENT_GATEWAY', 'kkiapay'),
+
+    'beneficiaire_officiel' => [
+        'titulaire' => 'MAGNIDE JUSTIN - E-MOBILIER SARL',
+        'mobile_money' => env('COMPANY_BENEFICIARY_MOMO', '+229 97 00 00 01'),
+        'rib_bancaire' => env('COMPANY_BENEFICIARY_RIB', 'BJ063 01001 00000000000 45'),
+    ],
+
+    'payout_otp_ttl_minutes' => (int) env('PAYOUT_OTP_TTL_MINUTES', 3),
+    'payout_max_otp_attempts' => (int) env('PAYOUT_MAX_OTP_ATTEMPTS', 3),
+
+    'tarifs_officiels' => [
+        'visite' => 500,
+        'deblocage_coordonnees' => 50,
+        'post_client' => 500,
+        'post_agent' => 100,
+    ],
 ];
 

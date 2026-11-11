@@ -1,17 +1,31 @@
 <?php
 
 use App\Http\Controllers\Api\Admin\AdminUserController;
+use App\Http\Controllers\Api\Admin\AgentKycController;
 use App\Http\Controllers\Api\Admin\AuditLogController;
+use App\Http\Controllers\Api\Admin\CatalogModerationController;
 use App\Http\Controllers\Api\Admin\DemandeClientAdminController;
 use App\Http\Controllers\Api\Admin\DemasquageController;
 use App\Http\Controllers\Api\Admin\LegalDocumentController;
+use App\Http\Controllers\Api\Admin\OperationalMetricsController;
+use App\Http\Controllers\Api\Admin\SearchRequestMatchingController;
+use App\Http\Controllers\Api\Admin\SecurityAlertController;
 use App\Http\Controllers\Api\Admin\SystemHealthController;
+use App\Http\Controllers\Api\Admin\VisitOperationalController;
 use App\Http\Controllers\Api\Admin\VisiteAdminController;
 use App\Http\Controllers\Api\Admin\VueDemandeClient;
 use App\Http\Controllers\Api\Admin\ZoneController;
 use App\Http\Controllers\Api\Client\PosteController;
 use App\Http\Controllers\Api\Client\PosteRechercheController;
 use App\Http\Controllers\Api\Client\VisitController;
+use App\Http\Controllers\Api\Finance\FinancialNotificationAuditController;
+use App\Http\Controllers\Api\Finance\FinancialSecurityController;
+use App\Http\Controllers\Api\Finance\FinancialVaultController;
+use App\Http\Controllers\Api\Finance\PaymentController;
+use App\Http\Controllers\Api\Finance\TechWebhookHealthController;
+use App\Http\Controllers\Api\Notification\DeviceTokenController;
+use App\Http\Controllers\Api\Notification\NotificationInterneController;
+use App\Http\Controllers\Api\Tech\TechNotificationLogController;
 use App\Http\Controllers\Api\InscriptionController;
 use App\Http\Controllers\Api\KkiapayController;
 use Illuminate\Http\Request;
@@ -27,8 +41,9 @@ use Illuminate\Support\Facades\Route;
 Route::post('/inscription', [InscriptionController::class, 'inscription']);
 Route::post('/authentification', [InscriptionController::class, 'authentification']);
 
-// Webhook public Kkiapay (appelé par les serveurs Kkiapay)
-Route::post('/kkiapay/webhook', [KkiapayController::class, 'webhook']);
+// Webhook public Kkiapay / passerelle agnostique (appelé par les serveurs de paiement)
+Route::post('/kkiapay/webhook', [PaymentController::class, 'webhook']);
+Route::post('/paiements/webhook/{gateway?}', [PaymentController::class, 'webhook']);
 
 // Fil d'actualité public des biens immobiliers publiés
 Route::get('/proprietes', [PosteController::class, 'filActualite']);
@@ -46,9 +61,12 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         return $request->user();
     });
 
-    // Configuration et vérification de paiement Kkiapay
+    // Configuration et vérification de paiement Kkiapay / Passerelle agnostique
     Route::get('/kkiapay/config', [KkiapayController::class, 'config']);
-    Route::post('/kkiapay/verify', [KkiapayController::class, 'verify']);
+    Route::post('/kkiapay/verify', [PaymentController::class, 'verify']);
+    Route::post('/paiements/initier', [PaymentController::class, 'initier']);
+    Route::post('/paiements/verifier', [PaymentController::class, 'verify']);
+    Route::get('/paiements/{ref}/recu', [PaymentController::class, 'recu']);
 
     // Gestion des propriétés et annonces (Client, Agent mobilier, Admin)
     Route::middleware('role:Client|Agent mobilier|Admin')->group(function () {
@@ -123,6 +141,53 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
     });
 
     // =========================================================================
+    // SECTION 4 : LES 5 BRIQUES OPÉRATIONNELLES (CŒUR MÉTIER IMMOBILIER)
+    // =========================================================================
+
+    // BRIQUE A : Modération du Catalogue & Audit des Titres Fonciers
+    Route::middleware(['role:Super Admin Principal|Super Admin Technique|Secrétaire|Responsable de zone|Admin', 'charte.signed'])->group(function () {
+        Route::get('/admin/proprietes/en-attente', [CatalogModerationController::class, 'enAttente']);
+        Route::post('/admin/proprietes/{id}/marquer-conclu', [CatalogModerationController::class, 'marquerConclu']);
+    });
+    Route::middleware(['role:Super Admin Principal|Super Admin Technique|Secrétaire|Admin', 'charte.signed'])->group(function () {
+        Route::post('/admin/proprietes/{id}/valider', [CatalogModerationController::class, 'valider']);
+        Route::post('/admin/proprietes/{id}/rejeter', [CatalogModerationController::class, 'rejeter']);
+        Route::get('/admin/proprietes/{id}/documents', [CatalogModerationController::class, 'documents']);
+    });
+
+    // BRIQUE B : Cycle Opérationnel des Visites Terrain & Comptes-Rendus
+    Route::middleware(['role:Super Admin Principal|Super Admin Technique|Secrétaire|Responsable de zone|Admin', 'charte.signed'])->group(function () {
+        Route::post('/admin/visites/{id}/planifier', [VisitOperationalController::class, 'planifier']);
+        Route::post('/admin/visites/{id}/compte-rendu', [VisitOperationalController::class, 'compteRendu']);
+        Route::post('/admin/visites/{id}/cloturer', [VisitOperationalController::class, 'cloturer']);
+        Route::post('/admin/visites/{id}/escalader-offre', [VisitOperationalController::class, 'escaladerOffre']);
+    });
+
+    // BRIQUE C : Gestion des Demandes de Recherche & Moteur de Matching
+    Route::middleware(['role:Super Admin Principal|Super Admin Technique|Secrétaire|Responsable de zone|Admin', 'charte.signed'])->group(function () {
+        Route::post('/admin/demandes-clients/{id}/prendre-en-charge', [SearchRequestMatchingController::class, 'prendreEnCharge']);
+        Route::get('/admin/demandes-clients/{id}/matching-biens', [SearchRequestMatchingController::class, 'matchingBiens']);
+        Route::post('/admin/demandes-clients/{id}/associer-bien', [SearchRequestMatchingController::class, 'associerBien']);
+        Route::post('/admin/demandes-clients/{id}/cloturer', [SearchRequestMatchingController::class, 'cloturer']);
+    });
+
+    // BRIQUE D : Agrément, Contrôle & KYC des Agents Mobiliers
+    Route::middleware(['role:Super Admin Principal|Super Admin Technique|Secrétaire|Admin', 'charte.signed'])->group(function () {
+        Route::get('/admin/agents-mobiliers', [AgentKycController::class, 'index']);
+        Route::get('/admin/agents-mobiliers/{id}/dossier', [AgentKycController::class, 'dossier']);
+        Route::post('/admin/agents-mobiliers/{id}/approuver', [AgentKycController::class, 'approuver']);
+        Route::post('/admin/agents-mobiliers/{id}/suspendre', [AgentKycController::class, 'suspendre']);
+    });
+
+    // BRIQUE E : Tableaux de Bord de Performance Opérationnelle (Non-Financiers)
+    Route::middleware(['role:Super Admin Principal|Secrétaire|Admin', 'charte.signed'])->group(function () {
+        Route::get('/admin/metriques/operations-globales', [OperationalMetricsController::class, 'operationsGlobales']);
+    });
+    Route::middleware(['role:Super Admin Principal|Super Admin Technique|Secrétaire|Responsable de zone|Admin', 'charte.signed'])->group(function () {
+        Route::get('/admin/metriques/zone-performance', [OperationalMetricsController::class, 'zonePerformance']);
+    });
+
+    // =========================================================================
     // PHASE 1 : FONDATIONS RBAC, GOUVERNANCE, ZONES & CONFORMITÉ LÉGALE
     // =========================================================================
 
@@ -156,11 +221,54 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
 
         // Diagnostic de santé et de charge de l'infrastructure
         Route::get('/tech/system-health', [SystemHealthController::class, 'health']);
+
+        // Moniteur technique des webhooks de paiement (Métadonnées seules, zéro finance)
+        Route::get('/tech/webhooks/health', [TechWebhookHealthController::class, 'health']);
+
+        // PHASE 4 : Journal technique des canaux d'envoi & relance DLQ (Zéro finance)
+        Route::get('/tech/notifications/logs', [TechNotificationLogController::class, 'index']);
+        Route::post('/tech/notifications/{id}/relancer', [TechNotificationLogController::class, 'relancer']);
+
+        // PHASE 5 : Révocation d'urgence des démasquages & Journal des alertes de sécurité
+        Route::post('/admin/securite/revoquer-tous-demasquages', [SecurityAlertController::class, 'revoquerTousDemasquages']);
+        Route::get('/admin/securite/alertes', [SecurityAlertController::class, 'alertes']);
     });
 
-    // Enregistrement du token pour les notifications push
-    Route::post('/user/device-token', [VisitController::class, 'registerDeviceToken']);
-    Route::post('/device-token', [VisitController::class, 'registerDeviceToken']);
+    // =========================================================================
+    // PHASE 3 : COFFRE-FORT FINANCIER & RETRAITS (MAGNIDE Justin UNIQUEMENT)
+    // =========================================================================
+    Route::middleware('financial_owner')->group(function () {
+        Route::get('/finance/tableau-de-bord', [FinancialVaultController::class, 'tableauDeBord']);
+        Route::get('/finance/transactions', [FinancialVaultController::class, 'transactions']);
+        Route::get('/finance/transactions/export', [FinancialVaultController::class, 'export']);
+        Route::get('/finance/webhooks', [FinancialVaultController::class, 'webhooks']);
+        Route::get('/finance/retraits', [FinancialVaultController::class, 'retraits']);
+
+        // Décaissement (Payout) sécurisé par OTP vers compte officiel
+        Route::post('/finance/retraits/initier', [FinancialVaultController::class, 'initierRetrait']);
+        Route::post('/finance/retraits/{id}/confirmer-otp', [FinancialVaultController::class, 'confirmerOtp']);
+        Route::post('/finance/retraits/{id}/annuler', [FinancialVaultController::class, 'annulerRetrait']);
+
+        // PHASE 4 : Journal exhaustif des notifications financières expédiées (Justin MAGNIDE UNIQUEMENT)
+        Route::get('/finance/notifications/audit', [FinancialNotificationAuditController::class, 'index']);
+
+        // PHASE 5 : Scellement Cryptographique (HMAC Hash Chaining) & Coupe-Circuit des Retraits
+        Route::post('/finance/securite/verifier-integrite', [FinancialSecurityController::class, 'verifierIntegrite']);
+        Route::post('/finance/securite/geler-retraits', [FinancialSecurityController::class, 'gelerRetraits']);
+        Route::post('/finance/securite/degeler-retraits', [FinancialSecurityController::class, 'degelerRetraits']);
+        Route::get('/finance/securite/statut', [FinancialSecurityController::class, 'statut']);
+    });
+
+    // =========================================================================
+    // PHASE 4 : NOTIFICATIONS IN-APP & GESTION DES JETONS PUSH (Tous profils)
+    // =========================================================================
+    Route::post('/user/device-token', [DeviceTokenController::class, 'store']);
+    Route::delete('/user/device-token', [DeviceTokenController::class, 'destroy']);
+    Route::post('/device-token', [DeviceTokenController::class, 'store']); // Compatibilité
+
+    Route::get('/notifications', [NotificationInterneController::class, 'index']);
+    Route::post('/notifications/{id}/lire', [NotificationInterneController::class, 'lire']);
+    Route::post('/notifications/tout-lire', [NotificationInterneController::class, 'toutLire']);
 });
 
 

@@ -34,7 +34,26 @@ class Demande_client extends Model
         'criteria_details',
         'is_paid',
         'status',
+        'gestionnaire_id',
+        'matched_propriete_id',
+        'motif_cloture',
     ];
+
+    /**
+     * Administrateur opérationnel prenant en charge la demande.
+     */
+    public function gestionnaire(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'gestionnaire_id');
+    }
+
+    /**
+     * Propriété associée retenue pour le rapprochement.
+     */
+    public function matchedPropriete(): BelongsTo
+    {
+        return $this->belongsTo(Proprietes::class, 'matched_propriete_id');
+    }
 
     /**
      * Zone géographique de la demande.

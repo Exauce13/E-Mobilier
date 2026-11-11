@@ -115,6 +115,22 @@ class User extends Authenticatable
         return $this->hasMany(AuditLog::class, 'user_id');
     }
 
+    /**
+     * Jetons de notification push (web, android, ios) de l'utilisateur.
+     */
+    public function deviceTokens(): HasMany
+    {
+        return $this->hasMany(DeviceToken::class, 'user_id');
+    }
+
+    /**
+     * Notifications internes reçues par l'utilisateur.
+     */
+    public function notificationsInternes(): HasMany
+    {
+        return $this->hasMany(NotificationInterne::class, 'user_id');
+    }
+
     public function isActif(): bool
     {
         return $this->statut === 'actif';

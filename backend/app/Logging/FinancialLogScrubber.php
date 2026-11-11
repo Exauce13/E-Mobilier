@@ -27,8 +27,16 @@ class FinancialLogScrubber implements ProcessorInterface
     {
         $context = $this->sanitizeArray($record->context);
         $extra = $this->sanitizeArray($record->extra);
+        $message = $this->sanitizeMessage($record->message);
 
-        return $record->with(context: $context, extra: $extra);
+        return $record->with(message: $message, context: $context, extra: $extra);
+    }
+
+    protected function sanitizeMessage(string $message): string
+    {
+        $pattern = '/\b(montant|solde|amount|balance|secret_key|code_otp|otp)\s*[:=]\s*([^\s,;]+)/i';
+
+        return (string) preg_replace($pattern, '$1=[CONFIDENTIEL_FINANCE]', $message);
     }
 
     protected function sanitizeArray(array $data): array
