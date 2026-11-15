@@ -92,7 +92,7 @@ class RoleSeeder extends Seeder
             [
                 'name' => 'MAGNIDE',
                 'prenom' => 'Justin',
-                'telephone' => '+229 97 00 00 01',
+                'telephone' => '+229 01 97 00 00 01',
                 'password' => Hash::make('JustinOwner@2026!'),
                 'is_verifed' => true,
                 'statut' => 'actif',
