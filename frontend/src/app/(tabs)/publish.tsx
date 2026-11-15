@@ -30,6 +30,7 @@ type PickedAsset = {
   name: string;
   mimeType: string;
   kind: 'image' | 'video';
+  file?: File;
 };
 
 type PickedDocument = {
@@ -37,7 +38,31 @@ type PickedDocument = {
   name: string;
   mimeType: string;
   docType: 'titre_foncier' | 'convention_vente' | 'permis_habiter' | 'attestation_recasement' | 'autre';
+  file?: File;
 };
+
+async function appendPickedFileToFormData(
+  formData: FormData,
+  fieldName: string,
+  item: { uri: string; name: string; mimeType: string; file?: File }
+): Promise<void> {
+  if (Platform.OS === 'web') {
+    if (item.file) {
+      formData.append(fieldName, item.file, item.name);
+      return;
+    }
+    const response = await fetch(item.uri);
+    const blob = await response.blob();
+    formData.append(fieldName, blob, item.name);
+    return;
+  }
+
+  formData.append(fieldName, {
+    uri: item.uri,
+    name: item.name,
+    type: item.mimeType,
+  } as any);
+}
 
 export default function PublishScreen() {
   const theme = useTheme();
@@ -100,6 +125,7 @@ export default function PublishScreen() {
         name: asset.fileName || fallbackName,
         mimeType: asset.mimeType || (isVideo ? 'video/mp4' : 'image/jpeg'),
         kind: isVideo ? 'video' : 'image',
+        file: (asset as any).file,
       };
     });
     setMedias((prev) => [...prev, ...added]);
@@ -119,6 +145,7 @@ export default function PublishScreen() {
         name: file.name || `document_${Date.now()}.pdf`,
         mimeType: file.mimeType || 'application/pdf',
         docType: selectedDocType,
+        file: (file as any).file,
       },
     ]);
   };
@@ -171,23 +198,16 @@ export default function PublishScreen() {
       if (description.trim()) formData.append('description', description.trim());
       if (kkiapayTxId) formData.append('kkiapay_transaction_id', kkiapayTxId);
 
-      medias.forEach((m) => {
+      for (const m of medias) {
         const field = m.kind === 'video' ? 'videos[]' : 'photos[]';
-        formData.append(field, {
-          uri: m.uri,
-          name: m.name,
-          type: m.mimeType,
-        } as any);
-      });
+        await appendPickedFileToFormData(formData, field, m);
+      }
 
-      documents.forEach((doc, idx) => {
-        formData.append(`documents[${idx}]`, {
-          uri: doc.uri,
-          name: doc.name,
-          type: doc.mimeType,
-        } as any);
+      for (let idx = 0; idx < documents.length; idx++) {
+        const doc = documents[idx];
+        await appendPickedFileToFormData(formData, `documents[${idx}]`, doc);
         formData.append(`document_types[${idx}]`, doc.docType);
-      });
+      }
 
       const res = await proprietesApi.create(formData);
       if (!res.success) {

@@ -96,22 +96,38 @@ class VisitController extends Controller
                     'is_fee_paid' => true,
                 ]);
 
-                // 2. Enregistrement de la preuve de paiement dans la table paiements
+                // 2. Enregistrement ou liaison de la preuve de paiement dans la table paiements
                 $transactionRef = $verification['transaction_id'] ?? $transactionId;
-                if (Paiement::where('transaction_reference', $transactionRef)->exists()) {
-                    $transactionRef .= '-VISIT-' . uniqid();
-                }
+                $existingPaiement = Paiement::where('transaction_reference', $transactionRef)
+                    ->where('user_id', $user->id)
+                    ->where('payment_type', 'visit_fee')
+                    ->whereNull('related_entity_id')
+                    ->first();
 
-                $paiement = Paiement::create([
-                    'user_id' => $user->id,
-                    'property_id' => $propriete->id,
-                    'transaction_reference' => $transactionRef,
-                    'payment_type' => 'visit_fee',
-                    'related_entity_id' => $visite->id,
-                    'amount' => $fraisVisite,
-                    'payment_method' => 'kkiapay',
-                    'status' => 'successful',
-                ]);
+                if ($existingPaiement) {
+                    $existingPaiement->update([
+                        'property_id' => $propriete->id,
+                        'related_entity_id' => $visite->id,
+                        'amount' => $fraisVisite,
+                        'status' => 'successful',
+                    ]);
+                    $paiement = $existingPaiement->fresh();
+                } else {
+                    if (Paiement::where('transaction_reference', $transactionRef)->exists()) {
+                        $transactionRef .= '-VISIT-' . uniqid();
+                    }
+
+                    $paiement = Paiement::create([
+                        'user_id' => $user->id,
+                        'property_id' => $propriete->id,
+                        'transaction_reference' => $transactionRef,
+                        'payment_type' => 'visit_fee',
+                        'related_entity_id' => $visite->id,
+                        'amount' => $fraisVisite,
+                        'payment_method' => 'kkiapay',
+                        'status' => 'successful',
+                    ]);
+                }
 
                 return [
                     'visite' => $visite,
