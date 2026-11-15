@@ -1,12 +1,12 @@
 import { NativeTabs } from 'expo-router/native-tabs';
-import { useColorScheme } from 'react-native';
 
 import { Colors } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
+import { useThemeMode } from '@/context/theme-context';
 
 export default function AppTabs() {
-  const scheme = useColorScheme();
-  const colors = Colors[scheme === 'dark' ? 'dark' : 'light'];
+  const { colorScheme } = useThemeMode();
+  const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
   const { isAuthenticated, user } = useAuth();
 
   return (
@@ -34,7 +34,7 @@ export default function AppTabs() {
 
 
 
-      {isAuthenticated && user?.role === 'agent_immobilier' && (
+      {isAuthenticated && (
         <NativeTabs.Trigger name="publish">
           <NativeTabs.Trigger.Label>Publier</NativeTabs.Trigger.Label>
           <NativeTabs.Trigger.Icon
@@ -44,7 +44,7 @@ export default function AppTabs() {
         </NativeTabs.Trigger>
       )}
 
-      {isAuthenticated && user?.role === 'agent_immobilier' && (
+      {isAuthenticated && (
         <NativeTabs.Trigger name="visits">
           <NativeTabs.Trigger.Label>Visites</NativeTabs.Trigger.Label>
           <NativeTabs.Trigger.Icon

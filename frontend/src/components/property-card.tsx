@@ -16,12 +16,14 @@ import { PropertyItem } from '@/types/property';
 interface PropertyCardProps {
   property: PropertyItem;
   onPressDetails: (property: PropertyItem) => void;
+  onPressCard?: (property: PropertyItem) => void;
   onToggleFavorite?: (id: string) => void;
 }
 
 export function PropertyCard({
   property,
   onPressDetails,
+  onPressCard,
   onToggleFavorite,
 }: PropertyCardProps) {
   const theme = useTheme();
@@ -38,7 +40,7 @@ export function PropertyCard({
         },
       ]}>
       {/* Property Image Container */}
-      <View style={styles.imageContainer}>
+      <Pressable onPress={() => (onPressCard ?? onPressDetails)(property)} style={styles.imageContainer}>
         <Image
           source={property.image}
           style={styles.image}
@@ -82,16 +84,18 @@ export function PropertyCard({
             tintColor={property.isFavorite ? '#EF4444' : '#FFFFFF'}
           />
         </Pressable>
-      </View>
+      </Pressable>
 
       {/* Card Content */}
       <View style={styles.contentContainer}>
         {/* Title */}
-        <Text
-          numberOfLines={2}
-          style={[styles.title, { color: theme.text }]}>
-          {property.title}
-        </Text>
+        <Pressable onPress={() => (onPressCard ?? onPressDetails)(property)}>
+          <Text
+            numberOfLines={2}
+            style={[styles.title, { color: theme.text }]}>
+            {property.title}
+          </Text>
+        </Pressable>
 
         {/* Price */}
         <View style={styles.priceRow}>

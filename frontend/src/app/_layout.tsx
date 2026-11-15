@@ -1,23 +1,46 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useColorScheme } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import React from 'react';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
-import AppTabs from '@/components/app-tabs';
 import { AuthModal } from '@/components/auth/auth-modal';
 import { AuthProvider } from '@/context/auth-context';
+import { ThemeModeProvider, useThemeMode } from '@/context/theme-context';
 
 SplashScreen.preventAutoHideAsync();
 
-export default function TabLayout() {
-  const colorScheme = useColorScheme();
+function RootNavigationShell() {
+  const { isDark } = useThemeMode();
+
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <AuthProvider>
-        <AnimatedSplashOverlay />
-        <AppTabs />
-        <AuthModal />
-      </AuthProvider>
+    <ThemeProvider value={isDark ? DarkTheme : DefaultTheme}>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
+      <AnimatedSplashOverlay />
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="login" />
+        <Stack.Screen name="register" />
+        <Stack.Screen name="property/[id]" />
+        <Stack.Screen name="notifications" />
+        <Stack.Screen name="my-properties" />
+        <Stack.Screen name="search-requests" />
+        <Stack.Screen name="transactions" />
+        <Stack.Screen name="cgu" />
+        <Stack.Screen name="admin/index" />
+        <Stack.Screen name="finance/index" />
+      </Stack>
+      <AuthModal />
     </ThemeProvider>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <ThemeModeProvider>
+      <AuthProvider>
+        <RootNavigationShell />
+      </AuthProvider>
+    </ThemeModeProvider>
   );
 }

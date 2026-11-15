@@ -34,9 +34,6 @@ export function LoginView({
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [otpMode, setOtpMode] = useState(false);
-  const [otpCode, setOtpCode] = useState('');
-  const [otpSent, setOtpSent] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
   const handleLogin = async () => {
@@ -74,38 +71,6 @@ export function LoginView({
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleSendOtp = () => {
-    setMessage(null);
-    if (!phone.trim()) {
-      setMessage({ text: 'Veuillez saisir votre numéro pour recevoir le code OTP.', type: 'error' });
-      return;
-    }
-    setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      setOtpSent(true);
-      setMessage({
-        text: `Code OTP envoyé par SMS au +229 ${phone}. (Code démo : 2290)`,
-        type: 'success',
-      });
-    }, 600);
-  };
-
-  const handleVerifyOtp = () => {
-    if (otpCode.trim() !== '2290' && otpCode.trim().length < 4) {
-      setMessage({ text: 'Code OTP invalide. Utilisez le code démo 2290.', type: 'error' });
-      return;
-    }
-    setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      setMessage({ text: 'Vérification réussie ! Connecté par OTP.', type: 'success' });
-      if (onSuccessLogin) {
-        onSuccessLogin(phone);
-      }
-    }, 600);
   };
 
   return (
@@ -207,178 +172,63 @@ export function LoginView({
             />
           </View>
 
-          {!otpMode ? (
-            <>
-              {/* Password Field */}
-              <Text style={[styles.inputLabel, { color: theme.text }]}>Mot de passe</Text>
-              <View
-                style={[
-                  styles.inputRow,
-                  {
-                    backgroundColor: theme.cardBackground,
-                    borderColor: theme.cardBorder,
-                  },
-                ]}>
-                <View style={styles.iconPrefix}>
-                  <SymbolView
-                    name={{ ios: 'lock.fill', android: 'lock', web: 'lock' }}
-                    size={20}
-                    tintColor={theme.textSecondary}
-                  />
-                </View>
-                <TextInput
-                  style={[styles.textInput, { color: theme.text }]}
-                  placeholder="Mot de passe"
-                  placeholderTextColor={theme.textSecondary}
-                  secureTextEntry={!showPassword}
-                  value={password}
-                  onChangeText={setPassword}
-                  autoCapitalize="none"
-                />
-                <Pressable
-                  onPress={() => setShowPassword(!showPassword)}
-                  style={styles.eyeButton}
-                  hitSlop={10}>
-                  <SymbolView
-                    name={{
-                      ios: showPassword ? 'eye.fill' : 'eye.slash.fill',
-                      android: showPassword ? 'visibility' : 'visibility_off',
-                      web: showPassword ? 'visibility' : 'visibility_off',
-                    }}
-                    size={20}
-                    tintColor={theme.textSecondary}
-                  />
-                </Pressable>
-              </View>
-
-              {/* Forgot Password Link */}
-              <View style={styles.forgotPasswordContainer}>
-                <Pressable
-                  onPress={() =>
-                    setMessage({
-                      text: 'Un lien de réinitialisation sera envoyé par SMS.',
-                      type: 'success',
-                    })
-                  }>
-                  <Text style={[styles.forgotPasswordText, { color: theme.primary }]}>
-                    Mot de passe oublié ?
-                  </Text>
-                </Pressable>
-              </View>
-
-              {/* Primary Submit Button */}
-              <Pressable
-                onPress={handleLogin}
-                disabled={loading}
-                style={({ pressed }) => [
-                  styles.primaryButton,
-                  { backgroundColor: theme.primary },
-                  pressed && { opacity: 0.9, transform: [{ scale: 0.99 }] },
-                ]}>
-                {loading ? (
-                  <ActivityIndicator color="#FFFFFF" />
-                ) : (
-                  <Text style={styles.primaryButtonText}>Se connecter</Text>
-                )}
-              </Pressable>
-
-              {/* Divider */}
-              <View style={styles.dividerRow}>
-                <View style={[styles.dividerLine, { backgroundColor: theme.cardBorder }]} />
-                <Text style={[styles.dividerText, { color: theme.textSecondary }]}>ou</Text>
-                <View style={[styles.dividerLine, { backgroundColor: theme.cardBorder }]} />
-              </View>
-
-              {/* Secondary Button: OTP SMS */}
-              <Pressable
-                onPress={() => {
-                  setOtpMode(true);
-                  setMessage(null);
+          {/* Password Field */}
+          <Text style={[styles.inputLabel, { color: theme.text }]}>Mot de passe</Text>
+          <View
+            style={[
+              styles.inputRow,
+              {
+                backgroundColor: theme.cardBackground,
+                borderColor: theme.cardBorder,
+              },
+            ]}>
+            <View style={styles.iconPrefix}>
+              <SymbolView
+                name={{ ios: 'lock.fill', android: 'lock', web: 'lock' }}
+                size={20}
+                tintColor={theme.textSecondary}
+              />
+            </View>
+            <TextInput
+              style={[styles.textInput, { color: theme.text }]}
+              placeholder="Mot de passe"
+              placeholderTextColor={theme.textSecondary}
+              secureTextEntry={!showPassword}
+              value={password}
+              onChangeText={setPassword}
+              autoCapitalize="none"
+            />
+            <Pressable
+              onPress={() => setShowPassword(!showPassword)}
+              style={styles.eyeButton}
+              hitSlop={10}>
+              <SymbolView
+                name={{
+                  ios: showPassword ? 'eye.fill' : 'eye.slash.fill',
+                  android: showPassword ? 'visibility' : 'visibility_off',
+                  web: showPassword ? 'visibility' : 'visibility_off',
                 }}
-                style={({ pressed }) => [
-                  styles.secondaryButton,
-                  {
-                    borderColor: theme.primary,
-                    backgroundColor: theme.primaryLight,
-                  },
-                  pressed && { opacity: 0.8 },
-                ]}>
-                <SymbolView
-                  name={{ ios: 'message.fill', android: 'sms', web: 'sms' }}
-                  size={18}
-                  tintColor={theme.primary}
-                />
-                <Text style={[styles.secondaryButtonText, { color: theme.primary }]}>
-                  Se connecter par OTP SMS
-                </Text>
-              </Pressable>
-            </>
-          ) : (
-            <>
-              {/* OTP Code Input */}
-              {otpSent && (
-                <>
-                  <Text style={[styles.inputLabel, { color: theme.text }]}>Code de sécurité OTP</Text>
-                  <View
-                    style={[
-                      styles.inputRow,
-                      {
-                        backgroundColor: theme.cardBackground,
-                        borderColor: theme.cardBorder,
-                      },
-                    ]}>
-                    <View style={styles.iconPrefix}>
-                      <SymbolView
-                        name={{ ios: 'key.fill', android: 'vpn_key', web: 'vpn_key' }}
-                        size={20}
-                        tintColor={theme.primary}
-                      />
-                    </View>
-                    <TextInput
-                      style={[styles.textInput, { color: theme.text, letterSpacing: 4 }]}
-                      placeholder="Code à 4 chiffres (ex: 2290)"
-                      placeholderTextColor={theme.textSecondary}
-                      keyboardType="number-pad"
-                      maxLength={6}
-                      value={otpCode}
-                      onChangeText={setOtpCode}
-                    />
-                  </View>
-                </>
-              )}
+                size={20}
+                tintColor={theme.textSecondary}
+              />
+            </Pressable>
+          </View>
 
-              {/* OTP Submit Button */}
-              <Pressable
-                onPress={otpSent ? handleVerifyOtp : handleSendOtp}
-                disabled={loading}
-                style={({ pressed }) => [
-                  styles.primaryButton,
-                  { backgroundColor: theme.primary },
-                  pressed && { opacity: 0.9 },
-                ]}>
-                {loading ? (
-                  <ActivityIndicator color="#FFFFFF" />
-                ) : (
-                  <Text style={styles.primaryButtonText}>
-                    {otpSent ? 'Valider le code OTP' : 'Envoyer le code SMS'}
-                  </Text>
-                )}
-              </Pressable>
-
-              {/* Back to password mode */}
-              <Pressable
-                onPress={() => {
-                  setOtpMode(false);
-                  setOtpSent(false);
-                  setMessage(null);
-                }}
-                style={styles.switchModeButton}>
-                <Text style={[styles.switchModeText, { color: theme.textSecondary }]}>
-                  ← Revenir à la connexion par mot de passe
-                </Text>
-              </Pressable>
-            </>
-          )}
+          {/* Primary Submit Button */}
+          <Pressable
+            onPress={handleLogin}
+            disabled={loading}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              { backgroundColor: theme.primary, marginTop: Spacing.two },
+              pressed && { opacity: 0.9, transform: [{ scale: 0.99 }] },
+            ]}>
+            {loading ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={styles.primaryButtonText}>Se connecter</Text>
+            )}
+          </Pressable>
         </View>
 
         {/* Bottom Switch Link */}
