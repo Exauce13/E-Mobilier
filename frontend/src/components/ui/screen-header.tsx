@@ -78,9 +78,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  titleWrap: { flex: 1 },
-  title: { color: '#FFFFFF', fontSize: 17, fontWeight: '800' },
+  titleWrap: { flex: 1, minWidth: 0 },
+  title: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
   subtitle: { color: '#CBD5E1', fontSize: 12, marginTop: 1 },
-  right: { alignItems: 'flex-end' },
-  spacer: { width: 36 },
+  right: { alignItems: 'flex-end', flexShrink: 0 },
+  spacer: { width: 36, flexShrink: 0 },
 });

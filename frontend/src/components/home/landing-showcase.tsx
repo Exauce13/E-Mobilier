@@ -14,6 +14,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Spacing } from '@/constants/theme';
+import { useThemeMode } from '@/context/theme-context';
 import { MOCK_PROPERTIES } from '@/data/mock-properties';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -26,6 +27,7 @@ interface LandingShowcaseProps {
 
 export function LandingShowcase({ onOpenLogin, onOpenRegister }: LandingShowcaseProps) {
   const theme = useTheme();
+  const { isDark, toggleTheme } = useThemeMode();
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<any>(null);
 
@@ -37,7 +39,7 @@ export function LandingShowcase({ onOpenLogin, onOpenRegister }: LandingShowcase
         style={[
           styles.topHeader,
           {
-            paddingTop: Math.max(insets.top, 16),
+            paddingTop: Math.max(insets.top, 14),
             backgroundColor: theme.navy,
             borderBottomColor: 'rgba(255, 255, 255, 0.08)',
           },
@@ -46,34 +48,51 @@ export function LandingShowcase({ onOpenLogin, onOpenRegister }: LandingShowcase
           <View style={styles.logoIcon}>
             <SymbolView
               name={{ ios: 'building.2.crop.circle.fill', android: 'apartment', web: 'apartment' }}
-              size={26}
+              size={22}
               tintColor="#D4AF37"
             />
           </View>
-          <View>
+          <View style={styles.brandTextWrap}>
             <View style={styles.brandTitleRow}>
-              <Text style={styles.brandTitle}>E-Mobilier</Text>
+              <Text numberOfLines={1} style={styles.brandTitle}>
+                E-Mobilier
+              </Text>
               <View style={styles.flagBadge}>
-                <Text style={styles.flagText}>🇧🇯 BÉNIN</Text>
+                <Text style={styles.flagText}>🇧🇯</Text>
               </View>
             </View>
-            <Text style={styles.brandSubtitle}>L'Immobilier de Confiance</Text>
+            <Text numberOfLines={1} style={styles.brandSubtitle}>
+              Immobilier de Confiance
+            </Text>
           </View>
         </View>
 
         <View style={styles.headerActions}>
           <Pressable
+            onPress={() => {
+              void toggleTheme();
+            }}
+            style={({ pressed }) => [styles.themeHeaderBtn, pressed && { opacity: 0.75 }]}
+            hitSlop={6}>
+            <Text style={styles.themeHeaderIcon}>{isDark ? '🌙' : '☀️'}</Text>
+          </Pressable>
+
+          <Pressable
             onPress={onOpenLogin}
             style={({ pressed }) => [styles.loginHeaderBtn, pressed && { opacity: 0.75 }]}
-            hitSlop={8}>
-            <Text style={styles.loginHeaderText}>Connexion</Text>
+            hitSlop={6}>
+            <Text numberOfLines={1} style={styles.loginHeaderText}>
+              Connexion
+            </Text>
           </Pressable>
 
           <Pressable
             onPress={onOpenRegister}
             style={({ pressed }) => [styles.registerHeaderBtn, pressed && { opacity: 0.85 }]}
-            hitSlop={8}>
-            <Text style={styles.registerHeaderText}>S'inscrire</Text>
+            hitSlop={6}>
+            <Text numberOfLines={1} style={styles.registerHeaderText}>
+              S'inscrire
+            </Text>
           </Pressable>
         </View>
       </View>
@@ -131,10 +150,12 @@ export function LandingShowcase({ onOpenLogin, onOpenRegister }: LandingShowcase
         {/* FEATURED PROPERTIES PREVIEW SECTION */}
         <View style={styles.sectionContainer}>
           <View style={styles.sectionHeader}>
-            <View>
+            <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={styles.sectionBadge}>✦ EXCLUSIVITÉS</Text>
-              <Text style={[styles.sectionTitle, { color: theme.text }]}>Propriétés en Vedette</Text>
-              <Text style={[styles.sectionSubtitle, { color: theme.textSecondary }]}>
+              <Text numberOfLines={1} style={[styles.sectionTitle, { color: theme.text }]}>
+                Propriétés en Vedette
+              </Text>
+              <Text numberOfLines={2} style={[styles.sectionSubtitle, { color: theme.textSecondary }]}>
                 Aperçu sélectionné de notre catalogue immobilier au Bénin
               </Text>
             </View>
@@ -150,9 +171,16 @@ export function LandingShowcase({ onOpenLogin, onOpenRegister }: LandingShowcase
             </Pressable>
           </View>
 
-          {/* Property Cards Preview Grid */}
-          <View style={styles.propertiesGrid}>
-            {MOCK_PROPERTIES.slice(0, 4).map((property) => (
+          {/* Property Cards Horizontal Scroll */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            nestedScrollEnabled={true}
+            directionalLockEnabled={true}
+            decelerationRate="fast"
+            style={styles.featuredHorizontalScroll}
+            contentContainerStyle={styles.featuredHorizontalContent}>
+            {MOCK_PROPERTIES.map((property) => (
               <Pressable
                 key={property.id}
                 onPress={onOpenLogin}
@@ -197,7 +225,7 @@ export function LandingShowcase({ onOpenLogin, onOpenRegister }: LandingShowcase
                       size={14}
                       tintColor={theme.textSecondary}
                     />
-                    <Text style={[styles.locationText, { color: theme.textSecondary }]}>
+                    <Text numberOfLines={1} style={[styles.locationText, { color: theme.textSecondary }]}>
                       {property.location.commune} ({property.location.quartier})
                     </Text>
                   </View>
@@ -216,7 +244,7 @@ export function LandingShowcase({ onOpenLogin, onOpenRegister }: LandingShowcase
                 </View>
               </Pressable>
             ))}
-          </View>
+          </ScrollView>
         </View>
 
         {/* SECTION À PROPOS */}
@@ -357,43 +385,54 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   topHeader: {
-    paddingHorizontal: Spacing.four,
-    paddingBottom: Spacing.three,
+    paddingHorizontal: Spacing.three,
+    paddingBottom: Spacing.two + 4,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 8,
     borderBottomWidth: 1,
     zIndex: 10,
   },
   brandRow: {
+    flex: 1,
+    minWidth: 0,
+    flexShrink: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.two,
+    gap: 8,
+  },
+  brandTextWrap: {
+    flex: 1,
+    minWidth: 0,
   },
   logoIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 34,
+    height: 34,
+    borderRadius: 10,
     backgroundColor: 'rgba(212, 175, 55, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   brandTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
   },
   brandTitle: {
     color: '#FFFFFF',
-    fontSize: 18,
+    fontSize: 15,
     fontWeight: '800',
-    letterSpacing: 0.5,
+    letterSpacing: 0.2,
+    flexShrink: 1,
   },
   flagBadge: {
     backgroundColor: 'rgba(255, 255, 255, 0.12)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 5,
+    flexShrink: 0,
   },
   flagText: {
     color: '#D4AF37',
@@ -402,33 +441,47 @@ const styles = StyleSheet.create({
   },
   brandSubtitle: {
     color: '#94A3B8',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '500',
   },
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.two,
+    gap: 5,
+    flexShrink: 0,
+  },
+  themeHeaderBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  themeHeaderIcon: {
+    fontSize: 14,
   },
   loginHeaderBtn: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(226, 232, 240, 0.25)',
   },
   loginHeaderText: {
     color: '#E2E8F0',
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
   },
   registerHeaderBtn: {
     backgroundColor: '#D4AF37',
-    paddingVertical: 8,
-    paddingHorizontal: 14,
+    paddingVertical: 6,
+    paddingHorizontal: 9,
     borderRadius: 8,
   },
   registerHeaderText: {
     color: '#0F172A',
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
   },
   scrollContent: {
@@ -578,16 +631,17 @@ const styles = StyleSheet.create({
     marginHorizontal: 4,
   },
 
-  /* PROPERTIES GRID */
+  /* PROPERTIES HORIZONTAL CAROUSEL */
   sectionContainer: {
-    marginTop: Spacing.six,
-    paddingHorizontal: Spacing.four,
+    marginTop: Spacing.five,
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-end',
-    marginBottom: Spacing.four,
+    paddingHorizontal: Spacing.three,
+    marginBottom: Spacing.three,
+    gap: 8,
   },
   sectionBadge: {
     color: '#0F766E',
@@ -597,11 +651,11 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   sectionTitle: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '800',
   },
   sectionSubtitle: {
-    fontSize: 13,
+    fontSize: 12,
     marginTop: 2,
   },
   seeAllBtn: {
@@ -609,20 +663,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     paddingVertical: 6,
-    paddingHorizontal: 8,
+    paddingHorizontal: 6,
+    flexShrink: 0,
   },
   seeAllText: {
     color: '#0F766E',
     fontSize: 13,
     fontWeight: '700',
   },
-  propertiesGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  featuredHorizontalScroll: {
+    flexGrow: 0,
+  },
+  featuredHorizontalContent: {
+    paddingHorizontal: Spacing.three,
+    paddingBottom: Spacing.two,
     gap: Spacing.three,
+    flexDirection: 'row',
+    alignItems: 'stretch',
   },
   propertyCard: {
-    width: Platform.OS === 'web' && SCREEN_WIDTH > 768 ? '48.5%' : '100%',
+    width: Math.min(Math.round(SCREEN_WIDTH * 0.78), 296),
+    flexShrink: 0,
     borderRadius: 16,
     borderWidth: 1,
     overflow: 'hidden',

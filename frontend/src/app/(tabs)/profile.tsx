@@ -5,6 +5,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   View,
 } from 'react-native';
@@ -12,10 +13,12 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { BottomTabInset, Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
+import { useThemeMode } from '@/context/theme-context';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function ProfileScreen() {
   const theme = useTheme();
+  const { isDark, toggleTheme } = useThemeMode();
   const insets = useSafeAreaInsets();
   const {
     user,
@@ -65,6 +68,30 @@ export default function ProfileScreen() {
                 Consulter les CGU
               </Text>
             </Pressable>
+
+            <View
+              style={[
+                styles.themeCard,
+                { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder },
+              ]}>
+              <Text style={styles.menuIcon}>{isDark ? '🌙' : '☀️'}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.menuTitle, { color: theme.text }]}>
+                  {isDark ? 'Mode Sombre' : 'Mode Clair'}
+                </Text>
+                <Text style={[styles.menuSub, { color: theme.textSecondary }]}>
+                  Apparence de l'application
+                </Text>
+              </View>
+              <Switch
+                value={isDark}
+                onValueChange={() => {
+                  void toggleTheme();
+                }}
+                trackColor={{ false: '#CBD5E1', true: theme.primary }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -145,6 +172,29 @@ export default function ProfileScreen() {
             <SymbolView name={{ ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' }} size={20} tintColor="#FFFFFF" />
           </Pressable>
         )}
+
+        {/* Apparence (Mode Clair / Sombre) */}
+        <View style={[styles.menuCard, { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder }]}>
+          <View style={styles.menuRow}>
+            <Text style={styles.menuIcon}>{isDark ? '🌙' : '☀️'}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.menuTitle, { color: theme.text }]}>
+                {isDark ? 'Mode Sombre activé' : 'Mode Clair activé'}
+              </Text>
+              <Text style={[styles.menuSub, { color: theme.textSecondary }]}>
+                Basculer entre l'affichage clair et sombre
+              </Text>
+            </View>
+            <Switch
+              value={isDark}
+              onValueChange={() => {
+                void toggleTheme();
+              }}
+              trackColor={{ false: '#CBD5E1', true: theme.primary }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
+        </View>
 
         {/* Menu Shortcuts */}
         <View style={[styles.menuCard, { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder }]}>
@@ -265,6 +315,16 @@ const styles = StyleSheet.create({
   specialTitle: { fontSize: 15, fontWeight: '900' },
   specialSub: { color: '#E2E8F0', fontSize: 12, marginTop: 3, lineHeight: 17 },
   menuCard: { borderRadius: 18, borderWidth: 1, overflow: 'hidden' },
+  themeCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 4,
+  },
   menuRow: { flexDirection: 'row', alignItems: 'center', padding: Spacing.three, gap: 12 },
   menuIcon: { fontSize: 20 },
   menuTitle: { fontSize: 15, fontWeight: '700' },

@@ -1,12 +1,12 @@
 import { NativeTabs } from 'expo-router/native-tabs';
-import { useColorScheme } from 'react-native';
 
 import { Colors } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
+import { useThemeMode } from '@/context/theme-context';
 
 export default function AppTabs() {
-  const scheme = useColorScheme();
-  const colors = Colors[scheme === 'dark' ? 'dark' : 'light'];
+  const { colorScheme } = useThemeMode();
+  const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
   const { isAuthenticated, user } = useAuth();
 
   return (

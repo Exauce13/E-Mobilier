@@ -1,3 +1,4 @@
+import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -21,6 +22,7 @@ import { UnlockModal } from '@/components/unlock-modal';
 import { FILTER_CATEGORIES } from '@/constants/locations';
 import { BottomTabInset, Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
+import { useThemeMode } from '@/context/theme-context';
 import { useTheme } from '@/hooks/use-theme';
 import { getStorageBaseUrl, proprietesApi } from '@/services/api';
 import type { BackendProperty } from '@/types/api';
@@ -47,6 +49,7 @@ export default function HomeScreen() {
 
 function AuthenticatedCatalog() {
   const theme = useTheme();
+  const { isDark, toggleTheme } = useThemeMode();
   const insets = useSafeAreaInsets();
   const { user, unreadNotificationsCount, refreshUnreadCount } = useAuth();
   const storageBaseUrl = useMemo(() => getStorageBaseUrl(), []);
@@ -177,17 +180,31 @@ function AuthenticatedCatalog() {
             <View style={styles.brandRow}>
               <View style={styles.brandTitleGroup}>
                 <View style={styles.titleWithFlag}>
-                  <Text style={[styles.brandName, { color: theme.primary }]}>E-Mobilier</Text>
+                  <Text numberOfLines={1} style={[styles.brandName, { color: theme.primary }]}>
+                    E-Mobilier
+                  </Text>
                   <View style={[styles.flagChip, { backgroundColor: theme.backgroundElement }]}>
-                    <Text style={styles.flagText}>🇧🇯 BÉNIN</Text>
+                    <Text style={[styles.flagText, { color: theme.text }]}>🇧🇯 BÉNIN</Text>
                   </View>
                 </View>
-                <Text style={[styles.brandSubtitle, { color: theme.textSecondary }]}>
+                <Text numberOfLines={1} style={[styles.brandSubtitle, { color: theme.textSecondary }]}>
                   Catalogue certifié en temps réel
                 </Text>
               </View>
 
               <View style={styles.headerActions}>
+                <Pressable
+                  onPress={() => {
+                    void toggleTheme();
+                  }}
+                  style={[
+                    styles.themeButton,
+                    { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder },
+                  ]}
+                  hitSlop={6}>
+                  <Text style={styles.themeButtonText}>{isDark ? '🌙' : '☀️'}</Text>
+                </Pressable>
+
                 <Pressable
                   onPress={() => router.push('/notifications' as any)}
                   style={[
@@ -197,7 +214,7 @@ function AuthenticatedCatalog() {
                   hitSlop={8}>
                   <SymbolView
                     name={{ ios: 'bell.fill', android: 'notifications', web: 'notifications' }}
-                    size={20}
+                    size={18}
                     tintColor={theme.text}
                   />
                   {unreadNotificationsCount > 0 && (
@@ -217,10 +234,10 @@ function AuthenticatedCatalog() {
                   ]}>
                   <SymbolView
                     name={{ ios: 'person.crop.circle.fill', android: 'person', web: 'person' }}
-                    size={15}
+                    size={14}
                     tintColor={theme.primary}
                   />
-                  <Text style={[styles.topAuthButtonText, { color: theme.primaryDark }]}>
+                  <Text numberOfLines={1} style={[styles.topAuthButtonText, { color: theme.primaryDark }]}>
                     {user?.name ? user.name.split(' ')[0] : 'Profil'}
                   </Text>
                 </Pressable>
@@ -260,7 +277,10 @@ function AuthenticatedCatalog() {
             {/* Category Chips */}
             <ScrollView
               horizontal
+              nestedScrollEnabled={true}
+              directionalLockEnabled={true}
               showsHorizontalScrollIndicator={false}
+              style={{ flexGrow: 0 }}
               contentContainerStyle={styles.filterScroll}>
               {FILTER_CATEGORIES.map((category) => {
                 const isActive = selectedCategory === category.id;
@@ -301,6 +321,55 @@ function AuthenticatedCatalog() {
                 <Text style={styles.promoBtnText}>Demander</Text>
               </View>
             </Pressable>
+
+            {/* Featured Properties Horizontal Carousel */}
+            {properties.length > 0 && (
+              <View style={styles.featuredBlock}>
+                <View style={styles.resultsRow}>
+                  <Text style={[styles.sectionTitle, { color: theme.text }]}>
+                    Propriétés en vedette
+                  </Text>
+                  <Text style={[styles.resultsCount, { color: theme.primary }]}>
+                    Faire défiler →
+                  </Text>
+                </View>
+                <FlatList
+                  data={properties.slice(0, 6)}
+                  horizontal
+                  nestedScrollEnabled={true}
+                  directionalLockEnabled={true}
+                  showsHorizontalScrollIndicator={false}
+                  keyExtractor={(item) => `featured-${item.id}`}
+                  style={styles.featuredList}
+                  contentContainerStyle={styles.featuredContent}
+                  renderItem={({ item }) => (
+                    <Pressable
+                      onPress={() => handleOpenProperty(item)}
+                      style={[
+                        styles.featuredCard,
+                        { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder },
+                      ]}>
+                      <Image
+                        source={typeof item.image === 'string' ? { uri: item.image } : item.image}
+                        style={styles.featuredImage}
+                        contentFit="cover"
+                      />
+                      <View style={styles.featuredCardBody}>
+                        <Text numberOfLines={1} style={[styles.featuredTitle, { color: theme.text }]}>
+                          {item.title}
+                        </Text>
+                        <Text numberOfLines={1} style={[styles.featuredLocation, { color: theme.textSecondary }]}>
+                          {item.location.commune} • {item.location.quartier}
+                        </Text>
+                        <Text numberOfLines={1} style={[styles.featuredPrice, { color: theme.primary }]}>
+                          {item.priceFormatted}
+                        </Text>
+                      </View>
+                    </Pressable>
+                  )}
+                />
+              </View>
+            )}
 
             <View style={styles.resultsRow}>
               <Text style={[styles.sectionTitle, { color: theme.text }]}>
@@ -370,19 +439,29 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 8,
     marginBottom: Spacing.three,
   },
-  brandTitleGroup: { flex: 1 },
-  titleWithFlag: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  brandName: { fontSize: 24, fontWeight: '900', letterSpacing: -0.5 },
-  flagChip: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
-  flagText: { fontSize: 11, fontWeight: '800' },
-  brandSubtitle: { fontSize: 13, marginTop: 2 },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  brandTitleGroup: { flex: 1, minWidth: 0, flexShrink: 1 },
+  titleWithFlag: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  brandName: { fontSize: 20, fontWeight: '900', letterSpacing: -0.5, flexShrink: 1 },
+  flagChip: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, flexShrink: 0 },
+  flagText: { fontSize: 10, fontWeight: '800' },
+  brandSubtitle: { fontSize: 12, marginTop: 2 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 0 },
+  themeButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  themeButtonText: { fontSize: 15 },
   notificationButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
@@ -404,13 +483,28 @@ const styles = StyleSheet.create({
   topAuthButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 20,
+    gap: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 7,
+    borderRadius: 18,
     borderWidth: 1,
+    maxWidth: 98,
   },
-  topAuthButtonText: { fontSize: 12, fontWeight: '700' },
+  topAuthButtonText: { fontSize: 12, fontWeight: '700', flexShrink: 1 },
+  featuredBlock: { marginBottom: Spacing.two },
+  featuredList: { flexGrow: 0 },
+  featuredContent: { gap: 12, paddingRight: 4, paddingBottom: Spacing.two },
+  featuredCard: {
+    width: 244,
+    borderRadius: 16,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  featuredImage: { width: '100%', height: 128 },
+  featuredCardBody: { padding: 10, gap: 3 },
+  featuredTitle: { fontSize: 14, fontWeight: '800' },
+  featuredLocation: { fontSize: 11 },
+  featuredPrice: { fontSize: 13, fontWeight: '900', marginTop: 2 },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',

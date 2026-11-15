@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
 import type {
@@ -53,15 +54,19 @@ export const getStorageBaseUrl = (): string => {
 };
 
 /**
- * Gestionnaire du token d'authentification Sanctum (localStorage ou mémoire).
+ * Gestionnaire du token d'authentification Sanctum (AsyncStorage / mémoire).
  */
+const AUTH_TOKEN_KEY = 'e_mobilier_auth_token';
 let inMemoryToken: string | null = null;
 
 export const tokenStorage = {
   get: async (): Promise<string | null> => {
+    if (inMemoryToken) return inMemoryToken;
     try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        return window.localStorage.getItem('e_mobilier_auth_token');
+      const stored = await AsyncStorage.getItem(AUTH_TOKEN_KEY);
+      if (stored) {
+        inMemoryToken = stored;
+        return stored;
       }
     } catch {
       // Ignore
@@ -71,9 +76,7 @@ export const tokenStorage = {
   set: async (token: string): Promise<void> => {
     inMemoryToken = token;
     try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        window.localStorage.setItem('e_mobilier_auth_token', token);
-      }
+      await AsyncStorage.setItem(AUTH_TOKEN_KEY, token);
     } catch {
       // Ignore
     }
@@ -81,9 +84,7 @@ export const tokenStorage = {
   remove: async (): Promise<void> => {
     inMemoryToken = null;
     try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        window.localStorage.removeItem('e_mobilier_auth_token');
-      }
+      await AsyncStorage.removeItem(AUTH_TOKEN_KEY);
     } catch {
       // Ignore
     }
