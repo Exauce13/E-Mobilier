@@ -32,17 +32,17 @@ export default function AppTabs() {
               <TabButton>Recherche</TabButton>
             </TabTrigger>
 
-            {user?.role === 'agent_immobilier' && (
+            {user?.role === 'agent_immobilier' || user ? (
               <TabTrigger name="publish" href="/publish" asChild>
                 <TabButton>Publier</TabButton>
               </TabTrigger>
-            )}
+            ) : null}
 
-            {user?.role === 'agent_immobilier' && (
+            {user?.role === 'agent_immobilier' || user ? (
               <TabTrigger name="visits" href="/visits" asChild>
                 <TabButton>Visites</TabButton>
               </TabTrigger>
-            )}
+            ) : null}
 
             <TabTrigger name="profile" href="/profile" asChild>
               <TabButton>Mon Profil</TabButton>

@@ -34,7 +34,7 @@ export default function AppTabs() {
 
 
 
-      {isAuthenticated && user?.role === 'agent_immobilier' && (
+      {isAuthenticated && (
         <NativeTabs.Trigger name="publish">
           <NativeTabs.Trigger.Label>Publier</NativeTabs.Trigger.Label>
           <NativeTabs.Trigger.Icon
@@ -44,7 +44,7 @@ export default function AppTabs() {
         </NativeTabs.Trigger>
       )}
 
-      {isAuthenticated && user?.role === 'agent_immobilier' && (
+      {isAuthenticated && (
         <NativeTabs.Trigger name="visits">
           <NativeTabs.Trigger.Label>Visites</NativeTabs.Trigger.Label>
           <NativeTabs.Trigger.Icon

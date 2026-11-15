@@ -1,9 +1,9 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+
 import {
   authApi,
-  ApiResponse,
-  AuthResponseData,
   InscriptionPayload,
+  notificationsApi,
   tokenStorage,
 } from '@/services/api';
 
@@ -12,99 +12,137 @@ export type UserRole = 'client_proprietaire' | 'agent_immobilier';
 export interface AuthUser {
   id: string;
   name: string;
+  nom?: string;
+  prenom?: string;
+  fullName?: string;
   phone: string;
   email?: string;
   role: UserRole;
+  roles: string[];
+  is_verifed: boolean;
+  statut?: string;
+  zone_id?: number | null;
   balanceFifa: number;
+}
+
+interface AuthResult {
+  success: boolean;
+  message?: string;
 }
 
 interface AuthContextType {
   user: AuthUser | null;
-  token: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  unreadNotificationsCount: number;
   authModalVisible: boolean;
   authModalMode: 'login' | 'register';
-  openLogin: () => void;
-  openRegister: () => void;
+  openAuthModal: (mode?: 'login' | 'register') => void;
   closeAuthModal: () => void;
   setAuthModalMode: (mode: 'login' | 'register') => void;
-  login: (phone: string, password?: string) => Promise<ApiResponse<AuthResponseData>>;
-  register: (data: InscriptionPayload) => Promise<ApiResponse<AuthResponseData>>;
+  login: (phone: string, password: string) => Promise<AuthResult>;
+  register: (payload: InscriptionPayload) => Promise<AuthResult>;
   logout: () => Promise<void>;
-  setUser: (user: AuthUser | null) => void;
+  refreshProfile: () => Promise<void>;
+  refreshUnreadCount: () => Promise<void>;
+  hasRole: (roleName: string) => boolean;
+  hasAnyRole: (roleNames: string[]) => boolean;
+  isAdminStaff: boolean;
+  isSuperAdmin: boolean;
+  isSuperAdminPrincipal: boolean;
+  isAgentMobilier: boolean;
+  isClient: boolean;
 }
 
-const defaultAuthValue: AuthContextType = {
-  user: null,
-  token: null,
-  isAuthenticated: false,
-  isLoading: true,
-  authModalVisible: false,
-  authModalMode: 'login',
-  openLogin: () => {},
-  openRegister: () => {},
-  closeAuthModal: () => {},
-  setAuthModalMode: () => {},
-  login: async () => ({ success: false }),
-  register: async () => ({ success: false }),
-  logout: async () => {},
-  setUser: () => {},
-};
+const ADMIN_ROLES = [
+  'Super Admin Principal',
+  'Super Admin Technique',
+  'Secrétaire',
+  'Responsable de zone',
+  'Admin',
+];
 
-const AuthContext = createContext<AuthContextType>(defaultAuthValue);
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: ReactNode }) {
+function mapBackendUserToAuthUser(u: any): AuthUser {
+  const roles: string[] = Array.isArray(u?.roles) ? u.roles : [];
+  const role: UserRole =
+    u?.role === 'agent_immobilier' || roles.includes('Agent mobilier')
+      ? 'agent_immobilier'
+      : 'client_proprietaire';
+
+  return {
+    id: String(u.id),
+    name: u.fullName || u.name || `${u.prenom ?? ''} ${u.name ?? ''}`.trim() || 'Utilisateur',
+    nom: u.nom,
+    prenom: u.prenom,
+    fullName: u.fullName,
+    phone: u.phone || u.telephone || '',
+    email: u.email,
+    role,
+    roles,
+    is_verifed: Boolean(u.is_verifed),
+    statut: u.statut,
+    zone_id: u.zone_id ?? null,
+    balanceFifa: Number(u.balanceFifa ?? 0),
+  };
+}
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
   const [authModalVisible, setAuthModalVisible] = useState(false);
   const [authModalMode, setAuthModalMode] = useState<'login' | 'register'>('login');
 
-  // Récupérer le token et le profil au démarrage
-  useEffect(() => {
-    let isMounted = true;
-
-    const restoreSession = async () => {
-      try {
-        const savedToken = await tokenStorage.get();
-        if (savedToken) {
-          setToken(savedToken);
-          const response = await authApi.profil();
-          if (isMounted && response.success && response.data?.user) {
-            setUser({
-              id: String(response.data.user.id),
-              name: response.data.user.fullName || response.data.user.name,
-              phone: response.data.user.telephone || response.data.user.phone,
-              email: response.data.user.email || undefined,
-              role: response.data.user.role,
-              balanceFifa: response.data.user.balanceFifa ?? 5000,
-            });
-          }
-        }
-      } catch {
-        // Ignorer les erreurs réseau au chargement
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    restoreSession();
-
-    return () => {
-      isMounted = false;
-    };
+  const refreshUnreadCount = useCallback(async () => {
+    const token = await tokenStorage.get();
+    if (!token) {
+      setUnreadNotificationsCount(0);
+      return;
+    }
+    const res = await notificationsApi.list(1, 1);
+    if (res.success && res.statistiques) {
+      setUnreadNotificationsCount(Number(res.statistiques.non_lues ?? 0));
+    }
   }, []);
 
-  const openLogin = () => {
-    setAuthModalMode('login');
-    setAuthModalVisible(true);
-  };
+  const refreshProfile = useCallback(async () => {
+    const token = await tokenStorage.get();
+    if (!token) {
+      setUser(null);
+      setUnreadNotificationsCount(0);
+      return;
+    }
+    const res = await authApi.profil();
+    if (res.success && res.data?.user) {
+      setUser(mapBackendUserToAuthUser(res.data.user));
+      void refreshUnreadCount();
+    } else if (res.statusCode === 401 || res.statusCode === 403) {
+      await tokenStorage.remove();
+      setUser(null);
+      setUnreadNotificationsCount(0);
+    }
+  }, [refreshUnreadCount]);
 
-  const openRegister = () => {
-    setAuthModalMode('register');
+  useEffect(() => {
+    const restoreSession = async () => {
+      try {
+        const token = await tokenStorage.get();
+        if (token) {
+          await refreshProfile();
+        }
+      } catch {
+        // Ignore network errors on cold start
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    void restoreSession();
+  }, [refreshProfile]);
+
+  const openAuthModal = (mode: 'login' | 'register' = 'login') => {
+    setAuthModalMode(mode);
     setAuthModalVisible(true);
   };
 
@@ -112,74 +150,103 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAuthModalVisible(false);
   };
 
-  const login = async (
-    phone: string,
-    password = 'password'
-  ): Promise<ApiResponse<AuthResponseData>> => {
-    const res = await authApi.authentification({ phone, password });
+  const login = async (phone: string, password: string): Promise<AuthResult> => {
+    const response = await authApi.authentification({ phone, password });
 
-    if (res.success && res.data?.user) {
-      const u = res.data.user;
-      setUser({
-        id: String(u.id),
-        name: u.fullName || u.name,
-        phone: u.telephone || u.phone,
-        email: u.email || undefined,
-        role: u.role,
-        balanceFifa: u.balanceFifa ?? 5000,
-      });
-      setToken(res.data.token);
-      setAuthModalVisible(false);
+    if (!response.success || !response.data?.user) {
+      return {
+        success: false,
+        message: response.message || 'Identifiants incorrects ou erreur serveur.',
+      };
     }
 
-    return res;
+    setUser(mapBackendUserToAuthUser(response.data.user));
+    setAuthModalVisible(false);
+    void refreshUnreadCount();
+    return {
+      success: true,
+      message: response.message,
+    };
   };
 
-  const register = async (
-    data: InscriptionPayload
-  ): Promise<ApiResponse<AuthResponseData>> => {
-    const res = await authApi.inscription(data);
+  const register = async (payload: InscriptionPayload): Promise<AuthResult> => {
+    const response = await authApi.inscription(payload);
 
-    if (res.success && res.data?.user) {
-      const u = res.data.user;
-      setUser({
-        id: String(u.id),
-        name: u.fullName || u.name,
-        phone: u.telephone || u.phone,
-        email: u.email || undefined,
-        role: u.role,
-        balanceFifa: u.balanceFifa ?? 5000,
-      });
-      setToken(res.data.token);
-      setAuthModalVisible(false);
+    if (!response.success || !response.data?.user) {
+      let errorMsg = response.message || 'Erreur lors de la création du compte.';
+      if (response.errors) {
+        const firstFieldErrors = Object.values(response.errors)[0];
+        if (firstFieldErrors && firstFieldErrors.length > 0) {
+          errorMsg = firstFieldErrors[0];
+        }
+      }
+      return {
+        success: false,
+        message: errorMsg,
+      };
     }
 
-    return res;
+    setUser(mapBackendUserToAuthUser(response.data.user));
+    setAuthModalVisible(false);
+    void refreshUnreadCount();
+    return {
+      success: true,
+      message: response.message,
+    };
   };
 
   const logout = async () => {
     await authApi.deconnexion();
     setUser(null);
-    setToken(null);
+    setUnreadNotificationsCount(0);
   };
+
+  const hasRole = useCallback(
+    (roleName: string) => {
+      return Boolean(user?.roles?.includes(roleName));
+    },
+    [user]
+  );
+
+  const hasAnyRole = useCallback(
+    (roleNames: string[]) => {
+      if (!user?.roles) return false;
+      return roleNames.some((r) => user.roles.includes(r));
+    },
+    [user]
+  );
+
+  const isSuperAdminPrincipal = hasRole('Super Admin Principal');
+  const isSuperAdmin =
+    isSuperAdminPrincipal || hasRole('Super Admin Technique');
+  const isAdminStaff = hasAnyRole(ADMIN_ROLES);
+  const isAgentMobilier = hasRole('Agent mobilier') || user?.role === 'agent_immobilier';
+  const isClient = hasRole('Client') || user?.role === 'client_proprietaire';
 
   return (
     <AuthContext.Provider
       value={{
         user,
-        token,
-        isAuthenticated: !!user,
+        isAuthenticated: Boolean(user),
         isLoading,
+        unreadNotificationsCount,
         authModalVisible,
         authModalMode,
-        openLogin,
-        openRegister,
+        openAuthModal,
         closeAuthModal,
         setAuthModalMode,
         login,
         register,
         logout,
-        setUser,
+        refreshProfile,
+        refreshUnreadCount,
+        hasRole,
+        hasAnyRole,
+        isAdminStaff,
+        isSuperAdmin,
+        isSuperAdminPrincipal,
+        isAgentMobilier,
+        isClient,
       }}>
       {children}
     </AuthContext.Provider>
@@ -188,5 +255,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth() {
   const context = useContext(AuthContext);
-  return context ?? defaultAuthValue;
+  if (context === undefined) {
+    throw new Error('useAuth doit être utilisé dans un AuthProvider');
+  }
+  return context;
 }
