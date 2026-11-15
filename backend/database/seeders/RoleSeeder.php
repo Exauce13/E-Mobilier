@@ -92,12 +92,15 @@ class RoleSeeder extends Seeder
             [
                 'name' => 'MAGNIDE',
                 'prenom' => 'Justin',
-                'telephone' => '+229 01 97 00 00 01',
+                'telephone' => '+2290197000001',
                 'password' => Hash::make('JustinOwner@2026!'),
                 'is_verifed' => true,
                 'statut' => 'actif',
             ]
         );
+        if (in_array($justin->telephone, ['+229 97 00 00 01', '+229 01 97 00 00 01'], true)) {
+            $justin->update(['telephone' => '+2290197000001']);
+        }
         $justin->syncRoles(['Super Admin Principal', 'Admin']);
 
         // 4. Initialisation / Attribution du Super Administrateur Technique (Jean-Paul GNIKPO)
