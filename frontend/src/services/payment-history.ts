@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { PaymentOperationType } from '@/types/api';
 
 export interface StoredPaymentRef {
@@ -16,22 +17,18 @@ export const paymentHistoryStorage = {
   add: async (entry: StoredPaymentRef): Promise<void> => {
     memoryRefs = [entry, ...memoryRefs.filter((r) => r.reference !== entry.reference)].slice(0, 30);
     try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(memoryRefs));
-      }
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(memoryRefs));
     } catch {
       // Ignore storage error
     }
   },
   list: async (): Promise<StoredPaymentRef[]> => {
     try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        const raw = window.localStorage.getItem(STORAGE_KEY);
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed)) {
-            memoryRefs = parsed;
-          }
+      const raw = await AsyncStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          memoryRefs = parsed;
         }
       }
     } catch {

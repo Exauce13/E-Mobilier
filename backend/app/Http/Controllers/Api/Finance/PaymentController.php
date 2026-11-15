@@ -12,6 +12,7 @@ use App\Services\FinancialLedgerService;
 use App\Services\Gateways\PaymentGatewayManager;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
@@ -70,7 +71,7 @@ class PaymentController extends Controller
                 'publication_agent' => 'agent_post',
                 'publication_client' => 'owner_post_submission',
             },
-            'related_entity_id' => $validated['entity_id'] ?? null,
+            'related_entity_id' => $validated['type_operation'] === 'visite' ? null : ($validated['entity_id'] ?? null),
             'amount' => $montant,
             'status' => 'pending',
         ]);
@@ -190,10 +191,12 @@ class PaymentController extends Controller
         $paymentMethod = $verif['payment_method'] ?? 'MOBILE_MONEY';
 
         // 2. Verrouillage atomique et idempotence
-        $result = DB::transaction(function () use ($gateway, $transactionId, $montantBrut, $frais, $paymentMethod, $rawPayload, $ip) {
-            // Recherche de paiement existant ou associé
+        $internalRef = $rawPayload['reference'] ?? $rawPayload['internal_reference'] ?? null;
+        $result = DB::transaction(function () use ($gateway, $transactionId, $internalRef, $montantBrut, $frais, $paymentMethod, $rawPayload, $ip) {
+            // Recherche de paiement existant par transaction Kkiapay, référence interne PAY-..., ou ID strictement numérique
             $paiement = Paiement::where('transaction_reference', $transactionId)
-                ->orWhere('id', (int) filter_var($transactionId, FILTER_SANITIZE_NUMBER_INT))
+                ->when($internalRef, fn ($q) => $q->orWhere('transaction_reference', $internalRef))
+                ->when(ctype_digit($transactionId), fn ($q) => $q->orWhere('id', (int) $transactionId))
                 ->lockForUpdate()
                 ->first();
 
@@ -214,6 +217,12 @@ class PaymentController extends Controller
                     'success' => true,
                     'message' => 'Paiement déjà validé et réconcilié (Doublon ignoré).',
                     'paiement' => $paiement,
+                    'data' => [
+                        'transaction_id' => $transactionId,
+                        'amount' => (int) $montantBrut,
+                        'is_already_used' => true,
+                        'reference' => $paiement->transaction_reference,
+                    ],
                     'status_code' => 200,
                 ];
             }
@@ -221,7 +230,7 @@ class PaymentController extends Controller
             // Si le paiement n'existait pas encore (créé en direct lors de la visite)
             if (! $paiement) {
                 $paiement = Paiement::create([
-                    'user_id' => auth()->id() ?? 1,
+                    'user_id' => Auth::id() ?? 1,
                     'transaction_reference' => $transactionId,
                     'payment_type' => 'visit_fee',
                     'amount' => $montantBrut,
@@ -230,6 +239,7 @@ class PaymentController extends Controller
                 ]);
             } else {
                 $paiement->update([
+                    'transaction_reference' => $transactionId,
                     'status' => 'successful',
                     'payment_method' => $paymentMethod,
                 ]);
@@ -241,6 +251,9 @@ class PaymentController extends Controller
             }
 
             // 4. Inscription de l'écriture au Grand Livre (Partie Double)
+            $refDescription = $internalRef && $internalRef !== $transactionId
+                ? "{$paiement->transaction_reference} / {$internalRef}"
+                : $paiement->transaction_reference;
             $ecritureGL = $this->ledgerService->credit(
                 $montantBrut,
                 $frais,
@@ -249,12 +262,12 @@ class PaymentController extends Controller
                     'view_details' => 'encaissement_deblocage',
                     default => 'encaissement_hebergement',
                 },
-                "Paiement réconcilié - Ref: {$paiement->transaction_reference} ({$paymentMethod})",
+                "Paiement réconcilié - Ref: {$refDescription} ({$paymentMethod})",
                 $paiement->id,
                 $transactionId,
                 $paiement->user_id,
                 $gateway->getName(),
-                ['raw_payload' => $rawPayload]
+                ['internal_reference' => $internalRef, 'raw_payload' => $rawPayload]
             );
 
             // 5. Journalisation webhook
@@ -280,6 +293,12 @@ class PaymentController extends Controller
                 'success' => true,
                 'message' => 'Paiement réconcilié avec succès et inscrit au Grand Livre.',
                 'paiement' => $paiement,
+                'data' => [
+                    'transaction_id' => $transactionId,
+                    'amount' => (int) $montantBrut,
+                    'is_already_used' => false,
+                    'reference' => $paiement->transaction_reference,
+                ],
                 'ecriture_grand_livre' => $ecritureGL->reference_unique,
                 'status_code' => 200,
             ];
@@ -304,7 +323,17 @@ class PaymentController extends Controller
     {
         $user = $request->user();
 
-        $paiement = Paiement::where('transaction_reference', $ref)->firstOrFail();
+        $paiement = Paiement::where('transaction_reference', $ref)->first();
+        if (! $paiement) {
+            $ecriture = \App\Models\GrandLivre::where('reference_paiement_passerelle', $ref)
+                ->orWhere('description', 'LIKE', "%{$ref}%")
+                ->first();
+            $paiement = $ecriture?->paiement;
+        }
+
+        if (! $paiement) {
+            abort(404);
+        }
 
         // Seul le payeur ou M. Justin MAGNIDE peut consulter le reçu
         if ($user->id !== $paiement->user_id && ! $user->isFinancialOwner()) {

@@ -197,6 +197,8 @@ class InscriptionController extends Controller
             'email' => $user->email,
             'role' => $frontendRole,
             'roles' => $roles,
+            'statut' => $user->statut ?? 'actif',
+            'zone_id' => $user->zone_id,
             'is_verifed' => (bool) $user->is_verifed,
             'balanceFifa' => 5000,
             'created_at' => $user->created_at,

@@ -1,7 +1,8 @@
 import { Image } from 'expo-image';
 import { SymbolView } from 'expo-symbols';
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Dimensions,
   Platform,
   Pressable,
@@ -15,8 +16,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Spacing } from '@/constants/theme';
 import { useThemeMode } from '@/context/theme-context';
-import { MOCK_PROPERTIES } from '@/data/mock-properties';
 import { useTheme } from '@/hooks/use-theme';
+import { getStorageBaseUrl, proprietesApi } from '@/services/api';
+import { mapBackendPropertyToItem, PropertyItem } from '@/types/property';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -30,6 +32,27 @@ export function LandingShowcase({ onOpenLogin, onOpenRegister }: LandingShowcase
   const { isDark, toggleTheme } = useThemeMode();
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<any>(null);
+  const [featuredProperties, setFeaturedProperties] = useState<PropertyItem[]>([]);
+  const [loadingFeatured, setLoadingFeatured] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    const loadFeatured = async () => {
+      try {
+        const res = await proprietesApi.getFeed({ per_page: 6 });
+        if (!active) return;
+        const rows = res.data?.data ?? [];
+        const storageBaseUrl = getStorageBaseUrl();
+        setFeaturedProperties(rows.map((p) => mapBackendPropertyToItem(p, storageBaseUrl)));
+      } finally {
+        if (active) setLoadingFeatured(false);
+      }
+    };
+    void loadFeatured();
+    return () => {
+      active = false;
+    };
+  }, []);
 
 
   return (
@@ -180,7 +203,49 @@ export function LandingShowcase({ onOpenLogin, onOpenRegister }: LandingShowcase
             decelerationRate="fast"
             style={styles.featuredHorizontalScroll}
             contentContainerStyle={styles.featuredHorizontalContent}>
-            {MOCK_PROPERTIES.map((property) => (
+            {loadingFeatured ? (
+              <View
+                style={[
+                  styles.propertyCard,
+                  {
+                    backgroundColor: theme.cardBackground,
+                    borderColor: theme.cardBorder,
+                    paddingVertical: 48,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  },
+                ]}>
+                <ActivityIndicator size="small" color="#0F766E" />
+                <Text style={[styles.locationText, { color: theme.textSecondary, marginTop: 10 }]}>
+                  Chargement des biens...
+                </Text>
+              </View>
+            ) : featuredProperties.length === 0 ? (
+              <Pressable
+                onPress={onOpenLogin}
+                style={[
+                  styles.propertyCard,
+                  {
+                    backgroundColor: theme.cardBackground,
+                    borderColor: theme.cardBorder,
+                    padding: 24,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  },
+                ]}>
+                <Text style={[styles.cardTitle, { color: theme.text, textAlign: 'center' }]}>
+                  Catalogue en ligne
+                </Text>
+                <Text
+                  style={[
+                    styles.locationText,
+                    { color: theme.textSecondary, textAlign: 'center', marginTop: 6 },
+                  ]}>
+                  Connectez-vous pour consulter les dernières annonces vérifiées.
+                </Text>
+              </Pressable>
+            ) : (
+              featuredProperties.map((property) => (
               <Pressable
                 key={property.id}
                 onPress={onOpenLogin}
@@ -243,7 +308,8 @@ export function LandingShowcase({ onOpenLogin, onOpenRegister }: LandingShowcase
                   </View>
                 </View>
               </Pressable>
-            ))}
+              ))
+            )}
           </ScrollView>
         </View>
 

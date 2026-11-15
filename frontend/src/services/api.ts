@@ -306,12 +306,14 @@ export const paiementsApi = {
 
   verifier: async (payload: {
     transactionId: string;
+    reference?: string;
     amount?: number;
   }): Promise<ApiResponse<any>> => {
     return apiRequest('/paiements/verifier', {
       method: 'POST',
       body: JSON.stringify({
         transactionId: payload.transactionId,
+        reference: payload.reference,
         amount: payload.amount,
       }),
     });

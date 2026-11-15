@@ -60,6 +60,16 @@ class AuthentificationRequest extends FormRequest
      */
     public function rules(): array
     {
+        $identifier = trim((string) ($this->input('phone') ?? $this->input('telephone') ?? ''));
+
+        if ($identifier !== '' && str_contains($identifier, '@')) {
+            return [
+                'telephone' => ['required_without:phone', 'email'],
+                'phone' => ['required_without:telephone', 'email'],
+                'password' => ['required', 'string'],
+            ];
+        }
+
         return [
             'telephone' => ['required_without:phone', 'string', 'regex:/^(\+229|00229|229)?01[0-9]{8}$/'],
             'phone' => ['required_without:telephone', 'string', 'regex:/^(\+229|00229|229)?01[0-9]{8}$/'],
@@ -75,8 +85,10 @@ class AuthentificationRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'telephone.required_without' => 'Veuillez saisir votre numéro de téléphone béninois.',
-            'phone.required_without' => 'Veuillez saisir votre numéro de téléphone béninois.',
+            'telephone.required_without' => 'Veuillez saisir votre numéro de téléphone béninois ou votre email.',
+            'phone.required_without' => 'Veuillez saisir votre numéro de téléphone béninois ou votre email.',
+            'telephone.email' => 'Veuillez saisir une adresse email valide.',
+            'phone.email' => 'Veuillez saisir une adresse email valide.',
             'telephone.regex' => 'Le numéro de téléphone doit obligatoirement commencer par 01 et comporter 10 chiffres (ex: 0197001122).',
             'phone.regex' => 'Le numéro de téléphone doit obligatoirement commencer par 01 et comporter 10 chiffres (ex: 0197001122).',
             'password.required' => 'Veuillez entrer votre mot de passe.',

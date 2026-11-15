@@ -50,7 +50,7 @@ class KkiapayController extends Controller
                 'pricing' => [
                     'post_client' => 500,
                     'post_agent' => 100,
-                    'unlock_details' => 500,
+                    'unlock_details' => 50,
                     'current_user_post_fee' => $montantPoste,
                 ],
                 'user' => $user ? [
