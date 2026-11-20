@@ -1,4 +1,5 @@
 import { Image } from 'expo-image';
+import { router } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import React, { useEffect, useRef, useState } from 'react';
 import {
@@ -15,6 +16,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Spacing } from '@/constants/theme';
+import { useAuth } from '@/context/auth-context';
 import { useThemeMode } from '@/context/theme-context';
 import { useTheme } from '@/hooks/use-theme';
 import { getStorageBaseUrl, proprietesApi } from '@/services/api';
@@ -32,6 +34,15 @@ export function LandingShowcase({ onOpenLogin, onOpenRegister }: LandingShowcase
   const { isDark, toggleTheme } = useThemeMode();
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<any>(null);
+
+  const [operationTab, setOperationTab] = useState<'vente' | 'location'>('vente');
+  const [selectedPropertyType, setSelectedPropertyType] = useState('Parcelle / Terrain');
+  const [selectedZone, setSelectedZone] = useState('Toutes les zones');
+  const [budgetMax, setBudgetMax] = useState('');
+  const [filterTfOnly, setFilterTfOnly] = useState(true);
+  const [filterNoLitige, setFilterNoLitige] = useState(true);
+  const [filterPavedAccess, setFilterPavedAccess] = useState(false);
+
   const [featuredProperties, setFeaturedProperties] = useState<PropertyItem[]>([]);
   const [loadingFeatured, setLoadingFeatured] = useState(true);
 
@@ -44,6 +55,11 @@ export function LandingShowcase({ onOpenLogin, onOpenRegister }: LandingShowcase
         const rows = res.data?.data ?? [];
         const storageBaseUrl = getStorageBaseUrl();
         setFeaturedProperties(rows.map((p) => mapBackendPropertyToItem(p, storageBaseUrl)));
+      } catch {
+        // Fallback local mock if backend offline
+        if (active) {
+          setFeaturedProperties([]);
+        }
       } finally {
         if (active) setLoadingFeatured(false);
       }
@@ -54,392 +70,609 @@ export function LandingShowcase({ onOpenLogin, onOpenRegister }: LandingShowcase
     };
   }, []);
 
+  const handleSearchClick = () => {
+    // If not authenticated, prompt login or directly navigate to explore
+    router.push({
+      pathname: '/explore' as any,
+      params: {
+        operation: operationTab,
+        category: selectedPropertyType,
+        city: selectedZone !== 'Toutes les zones' ? selectedZone : '',
+      },
+    });
+  };
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
-      {/* Top Header Navigation */}
+    <View style={[styles.container, { backgroundColor: theme.surface }]}>
+      {/* 1. STITCH INSTITUTION HEADER */}
       <View
         style={[
-          styles.topHeader,
+          styles.headerContainer,
           {
-            paddingTop: Math.max(insets.top, 14),
-            backgroundColor: theme.navy,
-            borderBottomColor: 'rgba(255, 255, 255, 0.08)',
+            paddingTop: Math.max(insets.top, 12),
+            backgroundColor: theme.surfaceContainerLowest,
+            borderBottomColor: theme.cardBorder,
           },
         ]}>
-        <View style={styles.brandRow}>
-          <View style={styles.logoIcon}>
-            <SymbolView
-              name={{ ios: 'building.2.crop.circle.fill', android: 'apartment', web: 'apartment' }}
-              size={22}
-              tintColor="#D4AF37"
-            />
-          </View>
-          <View style={styles.brandTextWrap}>
-            <View style={styles.brandTitleRow}>
-              <Text numberOfLines={1} style={styles.brandTitle}>
-                E-Mobilier
-              </Text>
-              <View style={styles.flagBadge}>
-                <Text style={styles.flagText}>🇧🇯</Text>
-              </View>
+        <View style={styles.headerContent}>
+          {/* Brand */}
+          <View style={styles.brandRow}>
+            <View style={[styles.brandLogoBox, { backgroundColor: theme.primaryContainer }]}>
+              <SymbolView
+                name={{ ios: 'building.2.fill', android: 'apartment', web: 'apartment' }}
+                size={18}
+                tintColor="#FFFFFF"
+              />
             </View>
-            <Text numberOfLines={1} style={styles.brandSubtitle}>
-              Immobilier de Confiance
-            </Text>
+            <View>
+              <View style={styles.brandTitleRow}>
+                <Text style={[styles.brandTitleText, { color: theme.text }]}>E-Mobilier</Text>
+                <View style={[styles.bjPill, { backgroundColor: theme.tertiaryFixed }]}>
+                  <Text style={styles.bjPillText}>BJ</Text>
+                </View>
+              </View>
+              <Text style={[styles.arcepTag, { color: theme.primaryContainer }]}>
+                SÉCURISÉ ARCEP
+              </Text>
+            </View>
           </View>
-        </View>
 
-        <View style={styles.headerActions}>
-          <Pressable
-            onPress={() => {
-              void toggleTheme();
-            }}
-            style={({ pressed }) => [styles.themeHeaderBtn, pressed && { opacity: 0.75 }]}
-            hitSlop={6}>
-            <Text style={styles.themeHeaderIcon}>{isDark ? '🌙' : '☀️'}</Text>
-          </Pressable>
+          {/* Right actions */}
+          <View style={styles.headerRightRow}>
+            <Pressable
+              onPress={() => {
+                void toggleTheme();
+              }}
+              style={[styles.headerIconBtn, { backgroundColor: theme.surfaceContainerLow }]}>
+              <SymbolView
+                name={{ ios: 'circle.lefthalf.filled', android: 'routine', web: 'routine' }}
+                size={16}
+                tintColor={theme.text}
+              />
+            </Pressable>
 
-          <Pressable
-            onPress={onOpenLogin}
-            style={({ pressed }) => [styles.loginHeaderBtn, pressed && { opacity: 0.75 }]}
-            hitSlop={6}>
-            <Text numberOfLines={1} style={styles.loginHeaderText}>
-              Connexion
-            </Text>
-          </Pressable>
+            <Pressable
+              onPress={onOpenLogin}
+              style={[
+                styles.headerAuthBtn,
+                { backgroundColor: theme.surfaceContainerLow, borderColor: theme.cardBorder },
+              ]}>
+              <Text style={[styles.headerAuthBtnText, { color: theme.text }]}>Connexion</Text>
+            </Pressable>
 
-          <Pressable
-            onPress={onOpenRegister}
-            style={({ pressed }) => [styles.registerHeaderBtn, pressed && { opacity: 0.85 }]}
-            hitSlop={6}>
-            <Text numberOfLines={1} style={styles.registerHeaderText}>
-              S'inscrire
-            </Text>
-          </Pressable>
+            <Pressable
+              onPress={onOpenRegister}
+              style={[styles.headerRegisterBtn, { backgroundColor: theme.primaryContainer }]}>
+              <Text style={styles.headerRegisterBtnText}>S'inscrire</Text>
+            </Pressable>
+          </View>
         </View>
       </View>
 
       <ScrollView
         ref={scrollRef}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 40 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 48 }]}
         showsVerticalScrollIndicator={false}>
-        {/* HERO SECTION IMMERSIVE */}
-        <View style={styles.heroContainer}>
-          <Image
-            source={require('@/assets/images/hero_luxury_villa.jpg')}
-            style={styles.heroImage}
-            contentFit="cover"
-            priority="high"
-          />
-          {/* Subtle gradient dark overlay for maximum contrast and prestige */}
-          <View style={styles.heroOverlay}>
-            <View style={styles.heroTag}>
-              <Text style={styles.heroTagText}>✦ PORTAIL IMMOBILIER HAUT DE GAMME AU BÉNIN</Text>
+        {/* 2. HERO BANNER & VALUE PROPOSITION (STITCH) */}
+        <View
+          style={[
+            styles.heroBanner,
+            {
+              backgroundColor: theme.primary,
+              borderColor: theme.primaryBorder,
+            },
+          ]}>
+          {/* Cadastral seal tag */}
+          <View style={styles.heroTopTagRow}>
+            <View style={styles.heroSovereigntyTag}>
+              <View style={[styles.pulsingDot, { backgroundColor: theme.tertiaryFixed }]} />
+              <Text style={[styles.sovereigntyText, { color: theme.tertiaryFixed }]}>
+                PLATEFORME NOTARIALE & FONCIER BJ
+              </Text>
+            </View>
+          </View>
+
+          {/* Main Headline */}
+          <View style={styles.heroTextWrap}>
+            <Text style={styles.heroHeadline}>L'Immobilier Sécurisé au Bénin</Text>
+            <Text style={[styles.heroSubtitle, { color: theme.primaryLight }]}>
+              Cotonou • Abomey-Calavi • Ouidah • Porto-Novo
+            </Text>
+          </View>
+
+          {/* 3 Trust Badges */}
+          <View style={styles.trustBadgesGrid}>
+            <View style={styles.trustBadgeCard}>
+              <SymbolView
+                name={{ ios: 'checkmark.seal.fill', android: 'verified', web: 'verified' }}
+                size={20}
+                tintColor={theme.tertiaryFixed}
+              />
+              <Text style={styles.trustBadgeText}>100% Titres Vérifiés</Text>
             </View>
 
-            <Text style={styles.heroMainTitle}>
-              L'immobilier d'exception et sécurisé à portée de main
-            </Text>
+            <View style={styles.trustBadgeCard}>
+              <SymbolView
+                name={{ ios: 'lock.shield.fill', android: 'security', web: 'security' }}
+                size={20}
+                tintColor={theme.primaryLight}
+              />
+              <Text style={styles.trustBadgeText}>Anti-Contournement</Text>
+            </View>
 
-            <Text style={styles.heroDescription}>
-              Villas contemporaines, appartements meublés et parcelles titrées à Cotonou, Calavi et
-              dans tout le pays, vérifiés par nos experts agréés.
-            </Text>
-
-            {/* Quick Hero Call To Actions */}
-            <View style={styles.heroCtaRow}>
-              <Pressable
-                onPress={onOpenRegister}
-                style={({ pressed }) => [styles.heroPrimaryBtn, pressed && { opacity: 0.9 }]}>
-                <Text style={styles.heroPrimaryBtnText}>Créer un compte</Text>
-                <SymbolView
-                  name={{ ios: 'arrow.right', android: 'arrow_forward', web: 'arrow_forward' }}
-                  size={16}
-                  tintColor="#0F172A"
-                />
-              </Pressable>
-
-              <Pressable
-                onPress={onOpenLogin}
-                style={({ pressed }) => [styles.heroSecondaryBtn, pressed && { opacity: 0.85 }]}>
-                <Text style={styles.heroSecondaryBtnText}>Se connecter</Text>
-              </Pressable>
+            <View style={styles.trustBadgeCard}>
+              <SymbolView
+                name={{ ios: 'coloncurrencysign.circle.fill', android: 'price_check', web: 'price_check' }}
+                size={20}
+                tintColor={theme.tertiaryFixed}
+              />
+              <Text style={styles.trustBadgeText}>0 Commission Cachée</Text>
             </View>
           </View>
         </View>
 
-
-        {/* FEATURED PROPERTIES PREVIEW SECTION */}
-        <View style={styles.sectionContainer}>
-          <View style={styles.sectionHeader}>
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={styles.sectionBadge}>✦ EXCLUSIVITÉS</Text>
-              <Text numberOfLines={1} style={[styles.sectionTitle, { color: theme.text }]}>
-                Propriétés en Vedette
+        {/* 3. INTERACTIVE RAPID SEARCH BOX (STITCH) */}
+        <View
+          style={[
+            styles.searchBoxCard,
+            {
+              backgroundColor: theme.surfaceContainerLowest,
+              borderColor: theme.cardBorder,
+            },
+          ]}>
+          {/* Operation Tabs: À Vendre / À Louer */}
+          <View style={[styles.operationTabsBar, { backgroundColor: theme.surfaceContainerLow }]}>
+            <Pressable
+              onPress={() => setOperationTab('vente')}
+              style={[
+                styles.operationTabBtn,
+                operationTab === 'vente' && {
+                  backgroundColor: theme.primaryContainer,
+                  shadowColor: '#000',
+                  shadowOpacity: 0.1,
+                  shadowRadius: 4,
+                  elevation: 2,
+                },
+              ]}>
+              <Text
+                style={[
+                  styles.operationTabText,
+                  { color: operationTab === 'vente' ? '#FFFFFF' : theme.textSecondary },
+                ]}>
+                À Vendre
               </Text>
-              <Text numberOfLines={2} style={[styles.sectionSubtitle, { color: theme.textSecondary }]}>
-                Aperçu sélectionné de notre catalogue immobilier au Bénin
+            </Pressable>
+
+            <Pressable
+              onPress={() => setOperationTab('location')}
+              style={[
+                styles.operationTabBtn,
+                operationTab === 'location' && {
+                  backgroundColor: theme.navy,
+                  shadowColor: '#000',
+                  shadowOpacity: 0.1,
+                  shadowRadius: 4,
+                  elevation: 2,
+                },
+              ]}>
+              <Text
+                style={[
+                  styles.operationTabText,
+                  { color: operationTab === 'location' ? '#FFFFFF' : theme.textSecondary },
+                ]}>
+                À Louer
+              </Text>
+            </Pressable>
+          </View>
+
+          {/* Quick Selectors */}
+          <View style={styles.searchFieldsCol}>
+            {/* Type de bien */}
+            <View style={styles.fieldItem}>
+              <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>Type de bien foncier</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalPills}>
+                {['Parcelle / Terrain', 'Villa Familiale', 'Appartement', 'Immeuble'].map((t) => (
+                  <Pressable
+                    key={t}
+                    onPress={() => setSelectedPropertyType(t)}
+                    style={[
+                      styles.filterPill,
+                      {
+                        backgroundColor:
+                          selectedPropertyType === t ? theme.primaryContainer : theme.surfaceContainerLow,
+                        borderColor:
+                          selectedPropertyType === t ? theme.primaryContainer : theme.cardBorder,
+                      },
+                    ]}>
+                    <Text
+                      style={[
+                        styles.filterPillText,
+                        { color: selectedPropertyType === t ? '#FFFFFF' : theme.text },
+                      ]}>
+                      {t}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
+
+            {/* Zone / Commune */}
+            <View style={styles.fieldItem}>
+              <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>Commune / Zone</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalPills}>
+                {['Toutes les zones', 'Cotonou', 'Abomey-Calavi', 'Ouidah', 'Porto-Novo', 'Sèmè-Podji'].map(
+                  (z) => (
+                    <Pressable
+                      key={z}
+                      onPress={() => setSelectedZone(z)}
+                      style={[
+                        styles.filterPill,
+                        {
+                          backgroundColor:
+                            selectedZone === z ? theme.secondary : theme.surfaceContainerLow,
+                          borderColor: selectedZone === z ? theme.secondary : theme.cardBorder,
+                        },
+                      ]}>
+                      <Text
+                        style={[
+                          styles.filterPillText,
+                          { color: selectedZone === z ? '#FFFFFF' : theme.text },
+                        ]}>
+                        {z}
+                      </Text>
+                    </Pressable>
+                  )
+                )}
+              </ScrollView>
+            </View>
+
+            {/* Budget Max */}
+            <View style={styles.fieldItem}>
+              <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>Budget maximum (FCFA)</Text>
+              <TextInput
+                value={budgetMax}
+                onChangeText={setBudgetMax}
+                placeholder="Ex: 25 000 000 FCFA"
+                placeholderTextColor={theme.outline}
+                keyboardType="numeric"
+                style={[
+                  styles.inputBox,
+                  {
+                    backgroundColor: theme.surfaceContainerLow,
+                    borderColor: theme.cardBorder,
+                    color: theme.text,
+                  },
+                ]}
+              />
+            </View>
+
+            {/* Quick Guarantees Chips */}
+            <View style={styles.guaranteesRow}>
+              <Pressable
+                onPress={() => setFilterTfOnly(!filterTfOnly)}
+                style={[
+                  styles.guaranteeChip,
+                  {
+                    backgroundColor: filterTfOnly ? theme.badgeGreenBg : theme.surfaceContainerLow,
+                    borderColor: filterTfOnly ? theme.primaryContainer : theme.cardBorder,
+                  },
+                ]}>
+                <SymbolView
+                  name={{ ios: 'checkmark.seal.fill', android: 'verified', web: 'verified' }}
+                  size={12}
+                  tintColor={filterTfOnly ? theme.badgeGreenText : theme.textSecondary}
+                />
+                <Text
+                  style={[
+                    styles.guaranteeChipText,
+                    { color: filterTfOnly ? theme.badgeGreenText : theme.textSecondary },
+                  ]}>
+                  TF ANDF Vérifié
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => setFilterNoLitige(!filterNoLitige)}
+                style={[
+                  styles.guaranteeChip,
+                  {
+                    backgroundColor: filterNoLitige ? theme.badgeGoldBg : theme.surfaceContainerLow,
+                    borderColor: filterNoLitige ? theme.tertiaryFixedDim : theme.cardBorder,
+                  },
+                ]}>
+                <SymbolView
+                  name={{ ios: 'shield.fill', android: 'security', web: 'security' }}
+                  size={12}
+                  tintColor={filterNoLitige ? theme.badgeGoldText : theme.textSecondary}
+                />
+                <Text
+                  style={[
+                    styles.guaranteeChipText,
+                    { color: filterNoLitige ? theme.badgeGoldText : theme.textSecondary },
+                  ]}>
+                  Sans Litige
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => setFilterPavedAccess(!filterPavedAccess)}
+                style={[
+                  styles.guaranteeChip,
+                  {
+                    backgroundColor: filterPavedAccess ? theme.badgeBlueBg : theme.surfaceContainerLow,
+                    borderColor: filterPavedAccess ? theme.secondary : theme.cardBorder,
+                  },
+                ]}>
+                <SymbolView
+                  name={{ ios: 'road.lanes', android: 'navigation', web: 'navigation' }}
+                  size={12}
+                  tintColor={filterPavedAccess ? theme.badgeBlueText : theme.textSecondary}
+                />
+                <Text
+                  style={[
+                    styles.guaranteeChipText,
+                    { color: filterPavedAccess ? theme.badgeBlueText : theme.textSecondary },
+                  ]}>
+                  Accès Goudron
+                </Text>
+              </Pressable>
+            </View>
+
+            {/* Search CTA */}
+            <Pressable
+              onPress={handleSearchClick}
+              style={({ pressed }) => [
+                styles.searchCtaBtn,
+                { backgroundColor: theme.primaryContainer },
+                pressed && { opacity: 0.9, transform: [{ scale: 0.99 }] },
+              ]}>
+              <SymbolView
+                name={{ ios: 'magnifyingglass', android: 'search', web: 'search' }}
+                size={18}
+                tintColor="#FFFFFF"
+              />
+              <Text style={styles.searchCtaBtnText}>Rechercher les Biens Sécurisés</Text>
+            </Pressable>
+          </View>
+        </View>
+
+        {/* 4. TARIFS RÉGLEMENTÉS & TRANSPARENTS (STITCH) */}
+        <View style={styles.tariffsSection}>
+          <View style={styles.sectionHeaderRow}>
+            <View style={styles.sectionTitleCol}>
+              <View style={styles.iconHeadingRow}>
+                <SymbolView
+                  name={{ ios: 'scalemass.fill', android: 'balance', web: 'balance' }}
+                  size={18}
+                  tintColor={theme.primaryContainer}
+                />
+                <Text style={[styles.sectionHeading, { color: theme.text }]}>
+                  Tarifs Réglementés & Transparents
+                </Text>
+              </View>
+              <Text style={[styles.sectionSubtitle, { color: theme.textSecondary }]}>
+                Zéro frais occulte • Conforme Décret Notarial Bénin
+              </Text>
+            </View>
+            <View style={[styles.pillTag, { backgroundColor: theme.badgeGreenBg }]}>
+              <Text style={[styles.pillTagText, { color: theme.badgeGreenText }]}>SANS DÉMARCHEUR</Text>
+            </View>
+          </View>
+
+          <View style={styles.tariffsGrid}>
+            {/* Card 1: 500 FCFA Visite Terrain */}
+            <View
+              style={[
+                styles.tariffCard,
+                { backgroundColor: theme.surfaceContainerLowest, borderColor: theme.cardBorder },
+              ]}>
+              <View style={styles.tariffCardTop}>
+                <View style={[styles.tariffBadge, { backgroundColor: theme.badgeGoldBg }]}>
+                  <Text style={[styles.tariffBadgeText, { color: theme.badgeGoldText }]}>FIXE</Text>
+                </View>
+                <Text style={[styles.tariffPrice, { color: theme.primaryContainer }]}>500 FCFA</Text>
+              </View>
+              <Text style={[styles.tariffTitle, { color: theme.text }]}>
+                Visite Terrain Accompagnée
+              </Text>
+              <Text style={[styles.tariffDesc, { color: theme.textSecondary }]}>
+                Agent foncier assermenté avec repérage GPS RTK et procès-verbal contradictoire scellé.
+              </Text>
+              <View style={styles.tariffFooter}>
+                <SymbolView
+                  name={{ ios: 'checkmark.circle.fill', android: 'check_circle', web: 'check_circle' }}
+                  size={12}
+                  tintColor={theme.primaryContainer}
+                />
+                <Text style={[styles.tariffSubtext, { color: theme.primaryContainer }]}>
+                  Paiement Kkiapay Mobile Money
+                </Text>
+              </View>
+            </View>
+
+            {/* Card 2: 2 000 FCFA Démasquage Notarié TTL */}
+            <View
+              style={[
+                styles.tariffCard,
+                { backgroundColor: theme.surfaceContainerLowest, borderColor: theme.cardBorder },
+              ]}>
+              <View style={styles.tariffCardTop}>
+                <View style={[styles.tariffBadge, { backgroundColor: theme.badgeBlueBg }]}>
+                  <Text style={[styles.tariffBadgeText, { color: theme.badgeBlueText }]}>SÉCURISÉ</Text>
+                </View>
+                <Text style={[styles.tariffPrice, { color: theme.primaryContainer }]}>2 000 FCFA</Text>
+              </View>
+              <Text style={[styles.tariffTitle, { color: theme.text }]}>
+                Démasquage Notarié TTL
+              </Text>
+              <Text style={[styles.tariffDesc, { color: theme.textSecondary }]}>
+                Accès direct 15 min aux coordonnées du propriétaire vérifié sans démarchage pirate.
+              </Text>
+              <View style={styles.tariffFooter}>
+                <SymbolView
+                  name={{ ios: 'lock.fill', android: 'lock', web: 'lock' }}
+                  size={12}
+                  tintColor={theme.secondary}
+                />
+                <Text style={[styles.tariffSubtext, { color: theme.secondary }]}>
+                  Session cryptée anti-spéculation
+                </Text>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* 5. BIENS CERTIFIÉS EN VEDETTE (STITCH) */}
+        <View style={styles.featuredSection}>
+          <View style={styles.sectionHeaderRow}>
+            <View style={styles.sectionTitleCol}>
+              <Text style={[styles.sectionHeading, { color: theme.text }]}>
+                Biens Certifiés en Vedette
+              </Text>
+              <Text style={[styles.sectionSubtitle, { color: theme.textSecondary }]}>
+                Titres fonciers vérifiés à l'ANDF / Notariat
               </Text>
             </View>
             <Pressable
-              onPress={onOpenLogin}
-              style={({ pressed }) => [styles.seeAllBtn, pressed && { opacity: 0.7 }]}>
-              <Text style={styles.seeAllText}>Tout voir</Text>
+              onPress={() => router.push('/explore' as any)}
+              style={styles.seeAllBtn}>
+              <Text style={[styles.seeAllBtnText, { color: theme.primaryContainer }]}>Tout voir</Text>
               <SymbolView
                 name={{ ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' }}
                 size={14}
-                tintColor="#0F766E"
+                tintColor={theme.primaryContainer}
               />
             </Pressable>
           </View>
 
-          {/* Property Cards Horizontal Scroll */}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            nestedScrollEnabled={true}
-            directionalLockEnabled={true}
-            decelerationRate="fast"
-            style={styles.featuredHorizontalScroll}
-            contentContainerStyle={styles.featuredHorizontalContent}>
-            {loadingFeatured ? (
+          {loadingFeatured ? (
+            <View style={styles.loaderWrap}>
+              <ActivityIndicator size="small" color={theme.primaryContainer} />
+            </View>
+          ) : featuredProperties.length > 0 ? (
+            featuredProperties.map((prop) => (
               <View
+                key={prop.id}
                 style={[
-                  styles.propertyCard,
+                  styles.previewCard,
                   {
-                    backgroundColor: theme.cardBackground,
+                    backgroundColor: theme.surfaceContainerLowest,
                     borderColor: theme.cardBorder,
-                    paddingVertical: 48,
-                    alignItems: 'center',
-                    justifyContent: 'center',
                   },
                 ]}>
-                <ActivityIndicator size="small" color="#0F766E" />
-                <Text style={[styles.locationText, { color: theme.textSecondary, marginTop: 10 }]}>
-                  Chargement des biens...
-                </Text>
-              </View>
-            ) : featuredProperties.length === 0 ? (
-              <Pressable
-                onPress={onOpenLogin}
-                style={[
-                  styles.propertyCard,
-                  {
-                    backgroundColor: theme.cardBackground,
-                    borderColor: theme.cardBorder,
-                    padding: 24,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  },
-                ]}>
-                <Text style={[styles.cardTitle, { color: theme.text, textAlign: 'center' }]}>
-                  Catalogue en ligne
-                </Text>
-                <Text
-                  style={[
-                    styles.locationText,
-                    { color: theme.textSecondary, textAlign: 'center', marginTop: 6 },
-                  ]}>
-                  Connectez-vous pour consulter les dernières annonces vérifiées.
-                </Text>
-              </Pressable>
-            ) : (
-              featuredProperties.map((property) => (
-              <Pressable
-                key={property.id}
-                onPress={onOpenLogin}
-                style={({ pressed }) => [
-                  styles.propertyCard,
-                  { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder },
-                  pressed && { opacity: 0.95, transform: [{ scale: 0.99 }] },
-                ]}>
-                <View style={styles.cardImageWrapper}>
-                  <Image source={property.image} style={styles.cardImage} contentFit="cover" />
-                  <View
-                    style={[
-                      styles.cardBadge,
-                      {
-                        backgroundColor:
-                          property.transactionType === 'vente' ? '#B45309' : '#0F766E',
-                      },
-                    ]}>
-                    <Text style={styles.cardBadgeText}>
-                      {property.transactionType === 'vente' ? 'À VENDRE' : 'À LOUER'}
+                <Pressable
+                  onPress={() => router.push(`/property/${prop.id}` as any)}
+                  style={styles.previewImageWrap}>
+                  <Image source={prop.image} style={styles.previewImage} contentFit="cover" />
+                  <View style={styles.previewOverlayBadge}>
+                    <Text style={styles.previewBadgeText}>
+                      {prop.transactionType === 'location' ? 'À LOUER' : 'À VENDRE'}
                     </Text>
                   </View>
-
-                  <View style={styles.lockBadge}>
-                    <SymbolView
-                      name={{ ios: 'lock.fill', android: 'lock', web: 'lock' }}
-                      size={12}
-                      tintColor="#FFFFFF"
-                    />
-                    <Text style={styles.lockBadgeText}>Connexion requise</Text>
+                  <View style={styles.previewPricePill}>
+                    <Text style={styles.previewPriceText}>{prop.priceFormatted}</Text>
                   </View>
-                </View>
+                </Pressable>
 
-                <View style={styles.cardContent}>
-                  <Text numberOfLines={1} style={[styles.cardTitle, { color: theme.text }]}>
-                    {property.title}
+                <View style={styles.previewContent}>
+                  <Text numberOfLines={1} style={[styles.previewTitle, { color: theme.text }]}>
+                    {prop.title}
                   </Text>
-
-                  <View style={styles.locationRow}>
+                  <View style={styles.previewLocationRow}>
                     <SymbolView
                       name={{ ios: 'mappin.and.ellipse', android: 'location_on', web: 'location_on' }}
-                      size={14}
-                      tintColor={theme.textSecondary}
+                      size={13}
+                      tintColor={theme.primaryContainer}
                     />
-                    <Text numberOfLines={1} style={[styles.locationText, { color: theme.textSecondary }]}>
-                      {property.location.commune} ({property.location.quartier})
+                    <Text style={[styles.previewLocationText, { color: theme.textSecondary }]}>
+                      {prop.city || 'Abomey-Calavi, Bénin'}
                     </Text>
                   </View>
 
-                  <View style={styles.cardFooter}>
-                    <Text style={styles.priceValue}>{property.priceFormatted}</Text>
-                    <View style={styles.unlockPrompt}>
-                      <Text style={styles.unlockPromptText}>Débloquer</Text>
+                  <View style={styles.previewActions}>
+                    <Pressable
+                      onPress={() => router.push(`/property/${prop.id}` as any)}
+                      style={[
+                        styles.previewCta,
+                        { backgroundColor: theme.primaryContainer },
+                      ]}>
+                      <Text style={styles.previewCtaText}>Inspecter le Bien</Text>
                       <SymbolView
-                        name={{ ios: 'arrow.right.circle.fill', android: 'arrow_forward', web: 'arrow_forward' }}
-                        size={16}
-                        tintColor="#0F766E"
+                        name={{ ios: 'arrow.right', android: 'arrow_forward', web: 'arrow_forward' }}
+                        size={12}
+                        tintColor="#FFFFFF"
                       />
-                    </View>
+                    </Pressable>
                   </View>
                 </View>
-              </Pressable>
-              ))
-            )}
-          </ScrollView>
-        </View>
-
-        {/* SECTION À PROPOS */}
-        <View style={[styles.aboutSection, { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder }]}>
-          <Text style={styles.aboutBadge}>✦ NOTRE MISSION</Text>
-          <Text style={[styles.aboutTitle, { color: theme.text }]}>À Propos d'E-Mobilier</Text>
-          <Text style={[styles.aboutSubtitle, { color: theme.textSecondary }]}>
-            E-Mobilier est la plateforme digitale de référence dédiée à l'immobilier moderne et sécurisé en République du Bénin.
-          </Text>
-
-          <View style={styles.aboutGrid}>
-            <View style={[styles.aboutCard, { backgroundColor: theme.backgroundElement, borderColor: theme.cardBorder }]}>
-              <View style={[styles.aboutIconBox, { backgroundColor: '#FEF3C7' }]}>
-                <SymbolView
-                  name={{ ios: 'checkmark.seal.fill', android: 'verified', web: 'verified' }}
-                  size={24}
-                  tintColor="#B45309"
-                />
               </View>
-              <Text style={[styles.aboutCardTitle, { color: theme.text }]}>Sécurité Foncière Garantie</Text>
-              <Text style={[styles.aboutCardDesc, { color: theme.textSecondary }]}>
-                Fini les litiges fonciers. Chaque parcelle et bien listé est soumis à un contrôle strict des titres et pièces d'identité cadastrales.
+            ))
+          ) : (
+            <View
+              style={[
+                styles.emptyCard,
+                { backgroundColor: theme.surfaceContainerLowest, borderColor: theme.cardBorder },
+              ]}>
+              <SymbolView
+                name={{ ios: 'building.2', android: 'apartment', web: 'apartment' }}
+                size={32}
+                tintColor={theme.outline}
+              />
+              <Text style={[styles.emptyTitle, { color: theme.text }]}>Catalogue Foncier Bénin</Text>
+              <Text style={[styles.emptySubtitle, { color: theme.textSecondary }]}>
+                Connectez-vous pour accéder à plus de 140 parcelles et résidences titrées.
               </Text>
-            </View>
-
-            <View style={[styles.aboutCard, { backgroundColor: theme.backgroundElement, borderColor: theme.cardBorder }]}>
-              <View style={[styles.aboutIconBox, { backgroundColor: '#ECFDF5' }]}>
-                <SymbolView
-                  name={{ ios: 'briefcase.fill', android: 'work', web: 'work' }}
-                  size={24}
-                  tintColor="#047857"
-                />
-              </View>
-              <Text style={[styles.aboutCardTitle, { color: theme.text }]}>Professionnalisation des Agents</Text>
-              <Text style={[styles.aboutCardDesc, { color: theme.textSecondary }]}>
-                Les agents immobiliers enregistrés disposent d'un espace de publication dédié et reçoivent directement les demandes de visites vérifiées.
-              </Text>
-            </View>
-
-            <View style={[styles.aboutCard, { backgroundColor: theme.backgroundElement, borderColor: theme.cardBorder }]}>
-              <View style={[styles.aboutIconBox, { backgroundColor: '#EFF6FF' }]}>
-                <SymbolView
-                  name={{ ios: 'qrcode.viewfinder', android: 'qr_code', web: 'qr_code' }}
-                  size={24}
-                  tintColor="#1D4ED8"
-                />
-              </View>
-              <Text style={[styles.aboutCardTitle, { color: theme.text }]}>Écosystème Mobile Money</Text>
-              <Text style={[styles.aboutCardDesc, { color: theme.textSecondary }]}>
-                Une tarification transparente pour débloquer les coordonnées et planifier des visites sans mauvaises surprises avec MTN et Moov Bénin.
-              </Text>
-            </View>
-          </View>
-        </View>
-
-        {/* SECTION CONTACT & SUPPORT */}
-        <View style={[styles.contactSection, { backgroundColor: theme.navy }]}>
-          <Text style={styles.contactBadge}>✦ CONTACTEZ-NOUS</Text>
-          <Text style={styles.contactTitle}>Besoin d'un accompagnement ?</Text>
-          <Text style={styles.contactSubtitle}>
-            Notre équipe et nos conseillers immobiliers à Cotonou sont à votre écoute pour vous guider.
-          </Text>
-
-          {/* Contact Details Cards */}
-          <View style={styles.contactCardsRow}>
-            <View style={styles.contactInfoCard}>
-              <View style={styles.contactInfoIcon}>
-                <SymbolView
-                  name={{ ios: 'mappin.circle.fill', android: 'location_on', web: 'location_on' }}
-                  size={22}
-                  tintColor="#D4AF37"
-                />
-              </View>
-              <Text style={styles.contactInfoLabel}>Notre Siège</Text>
-              <Text style={styles.contactInfoValue}>Cadjehoun, Cotonou, Bénin</Text>
-            </View>
-
-            <View style={styles.contactInfoCard}>
-              <View style={styles.contactInfoIcon}>
-                <SymbolView
-                  name={{ ios: 'phone.circle.fill', android: 'phone', web: 'phone' }}
-                  size={22}
-                  tintColor="#2DD4BF"
-                />
-              </View>
-              <Text style={styles.contactInfoLabel}>Téléphone & WhatsApp</Text>
-              <Text style={styles.contactInfoValue}>+229 01 97 00 11 22</Text>
-            </View>
-
-            <View style={styles.contactInfoCard}>
-              <View style={styles.contactInfoIcon}>
-                <SymbolView
-                  name={{ ios: 'envelope.circle.fill', android: 'email', web: 'email' }}
-                  size={22}
-                  tintColor="#60A5FA"
-                />
-              </View>
-              <Text style={styles.contactInfoLabel}>Email Support</Text>
-              <Text style={styles.contactInfoValue}>contact@e-mobilier.bj</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* FINAL CONVERSION BANNER */}
-        <View style={styles.finalCtaContainer}>
-          <View style={styles.finalCtaCard}>
-            <Text style={styles.finalCtaBadge}>COMMENCER DÈS AUJOURD'HUI</Text>
-            <Text style={styles.finalCtaTitle}>
-              Prêt à concrétiser votre projet immobilier ?
-            </Text>
-            <Text style={styles.finalCtaDesc}>
-              Créez votre compte en moins d'une minute avec votre numéro béninois (01...) et accédez à l'ensemble
-              des biens disponibles.
-            </Text>
-
-            <View style={styles.finalBtnRow}>
-              <Pressable
-                onPress={onOpenRegister}
-                style={({ pressed }) => [styles.finalPrimaryBtn, pressed && { opacity: 0.9 }]}>
-                <Text style={styles.finalPrimaryBtnText}>Créer un compte gratuit</Text>
-              </Pressable>
-
               <Pressable
                 onPress={onOpenLogin}
-                style={({ pressed }) => [styles.finalSecondaryBtn, pressed && { opacity: 0.8 }]}>
-                <Text style={styles.finalSecondaryBtnText}>J'ai déjà un compte</Text>
+                style={[styles.emptyBtn, { backgroundColor: theme.primaryContainer }]}>
+                <Text style={styles.emptyBtnText}>Découvrir les Biens</Text>
               </Pressable>
             </View>
+          )}
+        </View>
+
+        {/* 6. EDUCATIONAL ANTI-CONTOURNEMENT CARD (STITCH) */}
+        <View
+          style={[
+            styles.educationalCard,
+            {
+              backgroundColor: theme.surfaceContainer,
+              borderColor: theme.cardBorder,
+            },
+          ]}>
+          <View style={styles.educationalHeader}>
+            <View style={[styles.eduIconBox, { backgroundColor: theme.primaryContainer }]}>
+              <SymbolView
+                name={{ ios: 'shield.lefthalf.filled', android: 'policy', web: 'policy' }}
+                size={18}
+                tintColor="#FFFFFF"
+              />
+            </View>
+            <Text style={[styles.eduTitle, { color: theme.text }]}>
+              Pourquoi l'Anti-Contournement ?
+            </Text>
           </View>
+          <Text style={[styles.eduDesc, { color: theme.textSecondary }]}>
+            Pour éliminer les litiges de double-vente et les démarcheurs clandestins à Cotonou et Calavi,
+            E-Mobilier crypte les repères parcellaires. Démasquez uniquement lorsque votre intérêt est certain.
+          </Text>
+        </View>
+
+        {/* 7. OFFICIAL INSTITUTIONAL FOOTER (STITCH) */}
+        <View style={styles.footerSection}>
+          <View style={styles.footerRow}>
+            <SymbolView
+              name={{ ios: 'checkmark.shield', android: 'verified_user', web: 'verified_user' }}
+              size={14}
+              tintColor={theme.primaryContainer}
+            />
+            <Text style={[styles.footerText, { color: theme.textSecondary }]}>
+              Conforme Cadastre National & Réglementation ARCEP Bénin
+            </Text>
+          </View>
+          <Text style={[styles.footerLegal, { color: theme.outline }]}>
+            E-Mobilier Bénin S.A.S • Immatriculation RCCM RB/COT/23-B • Conditions Notariales
+          </Text>
         </View>
       </ScrollView>
     </View>
@@ -450,645 +683,509 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  topHeader: {
-    paddingHorizontal: Spacing.three,
-    paddingBottom: Spacing.two + 4,
+  headerContainer: {
+    width: '100%',
+    borderBottomWidth: 1,
+    zIndex: 40,
+  },
+  headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 8,
-    borderBottomWidth: 1,
-    zIndex: 10,
+    paddingHorizontal: Spacing.three,
+    paddingBottom: Spacing.two + 2,
+    minHeight: 52,
   },
   brandRow: {
-    flex: 1,
-    minWidth: 0,
-    flexShrink: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
-  brandTextWrap: {
-    flex: 1,
-    minWidth: 0,
-  },
-  logoIcon: {
+  brandLogoBox: {
     width: 34,
     height: 34,
     borderRadius: 10,
-    backgroundColor: 'rgba(212, 175, 55, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
-    flexShrink: 0,
   },
   brandTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 4,
   },
-  brandTitle: {
-    color: '#FFFFFF',
+  brandTitleText: {
     fontSize: 15,
     fontWeight: '800',
-    letterSpacing: 0.2,
-    flexShrink: 1,
+    letterSpacing: -0.3,
   },
-  flagBadge: {
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
-    paddingHorizontal: 5,
+  bjPill: {
+    paddingHorizontal: 4,
     paddingVertical: 1,
-    borderRadius: 5,
-    flexShrink: 0,
+    borderRadius: 4,
   },
-  flagText: {
-    color: '#D4AF37',
-    fontSize: 10,
+  bjPillText: {
+    color: '#241A00',
+    fontSize: 9,
+    fontWeight: '800',
+  },
+  arcepTag: {
+    fontSize: 9,
     fontWeight: '700',
+    letterSpacing: 0.6,
   },
-  brandSubtitle: {
-    color: '#94A3B8',
-    fontSize: 10,
-    fontWeight: '500',
-  },
-  headerActions: {
+  headerRightRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    flexShrink: 0,
+    gap: 8,
   },
-  themeHeaderBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  headerIconBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  themeHeaderIcon: {
-    fontSize: 14,
-  },
-  loginHeaderBtn: {
+  headerAuthBtn: {
+    paddingHorizontal: 10,
     paddingVertical: 6,
-    paddingHorizontal: 8,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: 'rgba(226, 232, 240, 0.25)',
   },
-  loginHeaderText: {
-    color: '#E2E8F0',
+  headerAuthBtnText: {
     fontSize: 12,
     fontWeight: '600',
   },
-  registerHeaderBtn: {
-    backgroundColor: '#D4AF37',
+  headerRegisterBtn: {
+    paddingHorizontal: 12,
     paddingVertical: 6,
-    paddingHorizontal: 9,
     borderRadius: 8,
   },
-  registerHeaderText: {
-    color: '#0F172A',
+  headerRegisterBtnText: {
+    color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '700',
   },
   scrollContent: {
-    flexGrow: 1,
+    paddingHorizontal: Spacing.three,
+    paddingTop: Spacing.three,
+    gap: Spacing.four,
   },
-
-  /* HERO */
-  heroContainer: {
-    height: 460,
-    width: '100%',
-    position: 'relative',
-    justifyContent: 'flex-end',
-  },
-  heroImage: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
-  heroOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(11, 15, 25, 0.65)',
-    paddingHorizontal: Spacing.four,
-    paddingBottom: Spacing.five,
-    justifyContent: 'flex-end',
-  },
-  heroTag: {
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(212, 175, 55, 0.2)',
-    borderColor: 'rgba(212, 175, 55, 0.5)',
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+  heroBanner: {
     borderRadius: 20,
-    marginBottom: Spacing.two,
-  },
-  heroTagText: {
-    color: '#FDE68A',
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.8,
-  },
-  heroMainTitle: {
-    color: '#FFFFFF',
-    fontSize: Platform.OS === 'web' && SCREEN_WIDTH > 768 ? 38 : 28,
-    fontWeight: '800',
-    lineHeight: Platform.OS === 'web' && SCREEN_WIDTH > 768 ? 46 : 34,
-    marginBottom: Spacing.two,
-    maxWidth: 620,
-  },
-  heroDescription: {
-    color: '#CBD5E1',
-    fontSize: 14,
-    lineHeight: 22,
-    marginBottom: Spacing.four,
-    maxWidth: 540,
-  },
-  heroCtaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.three,
-    flexWrap: 'wrap',
-  },
-  heroPrimaryBtn: {
-    backgroundColor: '#D4AF37',
-    paddingVertical: 14,
-    paddingHorizontal: 22,
-    borderRadius: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    shadowColor: '#D4AF37',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  heroPrimaryBtnText: {
-    color: '#0F172A',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  heroSecondaryBtn: {
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
-    borderColor: 'rgba(255, 255, 255, 0.3)',
     borderWidth: 1,
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 12,
+    padding: Spacing.four,
+    gap: Spacing.three,
+    overflow: 'hidden',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#005C55',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.2,
+        shadowRadius: 16,
+      },
+      android: { elevation: 4 },
+      web: { boxShadow: '0 8px 24px rgba(0, 92, 85, 0.18)' },
+    }),
   },
-  heroSecondaryBtnText: {
+  heroTopTagRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  heroSovereigntyTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  pulsingDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  sovereigntyText: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  heroTextWrap: {
+    gap: 4,
+  },
+  heroHeadline: {
     color: '#FFFFFF',
-    fontSize: 15,
+    fontSize: 24,
+    fontWeight: '800',
+    letterSpacing: -0.4,
+    lineHeight: 30,
+  },
+  heroSubtitle: {
+    fontSize: 13,
     fontWeight: '600',
   },
-
-  /* TRUST BANNER */
-  trustBanner: {
-    marginHorizontal: Spacing.four,
-    marginTop: -30,
-    borderRadius: 16,
-    borderWidth: 1,
-    paddingVertical: Spacing.three,
-    paddingHorizontal: Spacing.three,
+  trustBadgesGrid: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 3,
-  },
-  trustItem: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
     gap: 8,
-    paddingHorizontal: 4,
+    paddingTop: 4,
   },
-  trustIconCircle: {
-    width: 38,
-    height: 38,
+  trustBadgeCard: {
+    flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  trustBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  searchBoxCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: Spacing.three,
+    gap: Spacing.three,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#0B1C30',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.06,
+        shadowRadius: 12,
+      },
+      android: { elevation: 2 },
+      web: { boxShadow: '0 4px 16px rgba(11, 28, 48, 0.06)' },
+    }),
+  },
+  operationTabsBar: {
+    flexDirection: 'row',
+    padding: 3,
     borderRadius: 10,
+  },
+  operationTabBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  trustTextCol: {
-    flex: 1,
-  },
-  trustTitle: {
-    fontSize: 12,
+  operationTabText: {
+    fontSize: 13,
     fontWeight: '700',
   },
-  trustSubtitle: {
-    fontSize: 10,
-    fontWeight: '500',
+  searchFieldsCol: {
+    gap: 12,
   },
-  trustDivider: {
-    width: 1,
-    height: 32,
-    marginHorizontal: 4,
+  fieldItem: {
+    gap: 6,
   },
-
-  /* PROPERTIES HORIZONTAL CAROUSEL */
-  sectionContainer: {
-    marginTop: Spacing.five,
+  fieldLabel: {
+    fontSize: 12,
+    fontWeight: '600',
   },
-  sectionHeader: {
+  horizontalPills: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    paddingHorizontal: Spacing.three,
-    marginBottom: Spacing.three,
-    gap: 8,
   },
-  sectionBadge: {
-    color: '#0F766E',
+  filterPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    marginRight: 6,
+  },
+  filterPillText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  inputBox: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    fontSize: 14,
+  },
+  guaranteesRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  guaranteeChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  guaranteeChipText: {
     fontSize: 11,
     fontWeight: '700',
-    letterSpacing: 0.8,
-    marginBottom: 4,
   },
-  sectionTitle: {
-    fontSize: 20,
+  searchCtaBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginTop: 4,
+  },
+  searchCtaBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  tariffsSection: {
+    gap: Spacing.three,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  sectionTitleCol: {
+    gap: 2,
+    flex: 1,
+  },
+  iconHeadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  sectionHeading: {
+    fontSize: 16,
     fontWeight: '800',
+    letterSpacing: -0.2,
   },
   sectionSubtitle: {
     fontSize: 12,
-    marginTop: 2,
+    fontWeight: '500',
+  },
+  pillTag: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
+  pillTagText: {
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  tariffsGrid: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  tariffCard: {
+    flex: 1,
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: Spacing.three,
+    gap: 6,
+  },
+  tariffCardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  tariffBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  tariffBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+  },
+  tariffPrice: {
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+  },
+  tariffTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  tariffDesc: {
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  tariffFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 4,
+  },
+  tariffSubtext: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  featuredSection: {
+    gap: Spacing.three,
   },
   seeAllBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingVertical: 6,
-    paddingHorizontal: 6,
-    flexShrink: 0,
+    gap: 2,
   },
-  seeAllText: {
-    color: '#0F766E',
+  seeAllBtnText: {
     fontSize: 13,
     fontWeight: '700',
   },
-  featuredHorizontalScroll: {
-    flexGrow: 0,
+  loaderWrap: {
+    paddingVertical: 20,
+    alignItems: 'center',
   },
-  featuredHorizontalContent: {
-    paddingHorizontal: Spacing.three,
-    paddingBottom: Spacing.two,
-    gap: Spacing.three,
-    flexDirection: 'row',
-    alignItems: 'stretch',
-  },
-  propertyCard: {
-    width: Math.min(Math.round(SCREEN_WIDTH * 0.78), 296),
-    flexShrink: 0,
+  previewCard: {
     borderRadius: 16,
     borderWidth: 1,
     overflow: 'hidden',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    marginBottom: 10,
   },
-  cardImageWrapper: {
-    height: 200,
-    width: '100%',
+  previewImageWrap: {
     position: 'relative',
+    width: '100%',
+    aspectRatio: 16 / 9,
+    backgroundColor: '#E2E8F0',
   },
-  cardImage: {
+  previewImage: {
     width: '100%',
     height: '100%',
   },
-  cardBadge: {
+  previewOverlayBadge: {
     position: 'absolute',
-    top: 12,
-    left: 12,
-    paddingHorizontal: 10,
+    top: 10,
+    left: 10,
+    backgroundColor: 'rgba(15, 23, 42, 0.85)',
+    paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 8,
+    borderRadius: 6,
   },
-  cardBadgeText: {
+  previewBadgeText: {
     color: '#FFFFFF',
     fontSize: 10,
     fontWeight: '800',
-    letterSpacing: 0.6,
   },
-  lockBadge: {
+  previewPricePill: {
     position: 'absolute',
-    bottom: 12,
-    right: 12,
-    backgroundColor: 'rgba(15, 23, 42, 0.8)',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
+    bottom: 10,
+    left: 10,
+    backgroundColor: 'rgba(0, 92, 85, 0.92)',
     paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 20,
+    paddingVertical: 4,
+    borderRadius: 6,
   },
-  lockBadgeText: {
+  previewPriceText: {
     color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '600',
+    fontSize: 14,
+    fontWeight: '800',
   },
-  cardContent: {
-    padding: Spacing.three,
+  previewContent: {
+    padding: 12,
+    gap: 6,
   },
-  cardTitle: {
-    fontSize: 16,
+  previewTitle: {
+    fontSize: 15,
     fontWeight: '700',
-    marginBottom: 6,
   },
-  locationRow: {
+  previewLocationRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginBottom: Spacing.three,
   },
-  locationText: {
+  previewLocationText: {
     fontSize: 12,
     fontWeight: '500',
   },
-  cardFooter: {
+  previewActions: {
+    marginTop: 6,
+  },
+  previewCta: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingTop: Spacing.two,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(0, 0, 0, 0.05)',
-  },
-  priceValue: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#0F766E',
-  },
-  unlockPrompt: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  unlockPromptText: {
-    color: '#0F766E',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-
-  /* SECTION A PROPOS */
-  aboutSection: {
-    marginTop: 48,
-    marginHorizontal: Spacing.four,
-    borderRadius: 20,
-    borderWidth: 1,
-    padding: Spacing.five,
-  },
-  aboutBadge: {
-    color: '#B45309',
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.8,
-    marginBottom: 4,
-  },
-  aboutTitle: {
-    fontSize: 22,
-    fontWeight: '800',
-    marginBottom: 8,
-  },
-  aboutSubtitle: {
-    fontSize: 14,
-    lineHeight: 22,
-    marginBottom: Spacing.four,
-  },
-  aboutGrid: {
-    gap: Spacing.three,
-  },
-  aboutCard: {
-    borderRadius: 14,
-    borderWidth: 1,
-    padding: Spacing.four,
-  },
-  aboutIconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: Spacing.two,
+    gap: 6,
+    paddingVertical: 8,
+    borderRadius: 8,
   },
-  aboutCardTitle: {
+  previewCtaText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  emptyCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: Spacing.four,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  emptyTitle: {
     fontSize: 15,
     fontWeight: '700',
-    marginBottom: 4,
   },
-  aboutCardDesc: {
-    fontSize: 13,
-    lineHeight: 19,
-  },
-
-  /* SECTION CONTACT */
-  contactSection: {
-    marginTop: 48,
-    paddingHorizontal: Spacing.four,
-    paddingVertical: Spacing.six,
-  },
-  contactBadge: {
-    color: '#D4AF37',
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.8,
-    marginBottom: 6,
-    textAlign: 'center',
-  },
-  contactTitle: {
-    color: '#FFFFFF',
-    fontSize: 24,
-    fontWeight: '800',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  contactSubtitle: {
-    color: '#94A3B8',
-    fontSize: 13,
-    textAlign: 'center',
-    maxWidth: 520,
-    alignSelf: 'center',
-    lineHeight: 20,
-    marginBottom: Spacing.five,
-  },
-  contactCardsRow: {
-    flexDirection: 'row',
-    gap: Spacing.two,
-    flexWrap: 'wrap',
-    marginBottom: Spacing.five,
-  },
-  contactInfoCard: {
-    flex: 1,
-    minWidth: 140,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-    borderWidth: 1,
-    borderRadius: 14,
-    padding: Spacing.three,
-    alignItems: 'center',
-  },
-  contactInfoIcon: {
-    marginBottom: 6,
-  },
-  contactInfoLabel: {
-    color: '#94A3B8',
-    fontSize: 11,
-    fontWeight: '600',
-    marginBottom: 2,
-    textAlign: 'center',
-  },
-  contactInfoValue: {
-    color: '#FFFFFF',
+  emptySubtitle: {
     fontSize: 12,
-    fontWeight: '700',
     textAlign: 'center',
   },
-  contactFormCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    borderWidth: 1,
-    borderRadius: 18,
-    padding: Spacing.four,
+  emptyBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginTop: 6,
   },
-  formTitle: {
+  emptyBtnText: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: '700',
-    marginBottom: Spacing.three,
   },
-  successMessageBanner: {
-    backgroundColor: '#ECFDF5',
-    borderColor: '#A7F3D0',
+  educationalCard: {
+    borderRadius: 16,
     borderWidth: 1,
-    borderRadius: 10,
     padding: Spacing.three,
+    gap: 8,
+  },
+  educationalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: Spacing.three,
   },
-  successMessageText: {
-    color: '#047857',
-    fontSize: 13,
-    fontWeight: '600',
-    flex: 1,
+  eduIconBox: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  inputGroup: {
-    marginBottom: Spacing.three,
+  eduTitle: {
+    fontSize: 14,
+    fontWeight: '700',
   },
-  inputLabel: {
-    color: '#CBD5E1',
+  eduDesc: {
     fontSize: 12,
-    fontWeight: '600',
-    marginBottom: 6,
+    lineHeight: 18,
   },
-  formInput: {
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderColor: 'rgba(255, 255, 255, 0.15)',
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    color: '#FFFFFF',
-    fontSize: 14,
+  footerSection: {
+    alignItems: 'center',
+    gap: 4,
+    paddingTop: Spacing.two,
   },
-  formTextArea: {
-    minHeight: 80,
-    textAlignVertical: 'top',
-  },
-  submitContactBtn: {
-    backgroundColor: '#D4AF37',
-    borderRadius: 12,
-    paddingVertical: 14,
+  footerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    marginTop: Spacing.two,
+    gap: 6,
   },
-  submitContactBtnText: {
-    color: '#0F172A',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-
-  /* FINAL CONVERSION */
-  finalCtaContainer: {
-    paddingHorizontal: Spacing.four,
-    marginTop: Spacing.six,
-  },
-  finalCtaCard: {
-    backgroundColor: '#0F766E',
-    borderRadius: 20,
-    padding: Spacing.five,
-    alignItems: 'center',
-    shadowColor: '#0F766E',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    elevation: 4,
-  },
-  finalCtaBadge: {
-    color: '#A7F3D0',
+  footerText: {
     fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 1,
-    marginBottom: 8,
+    fontWeight: '600',
   },
-  finalCtaTitle: {
-    color: '#FFFFFF',
-    fontSize: 22,
-    fontWeight: '800',
+  footerLegal: {
+    fontSize: 10,
     textAlign: 'center',
-    marginBottom: 10,
-  },
-  finalCtaDesc: {
-    color: '#E6FFFA',
-    fontSize: 13,
-    textAlign: 'center',
-    lineHeight: 20,
-    maxWidth: 480,
-    marginBottom: Spacing.four,
-  },
-  finalBtnRow: {
-    flexDirection: 'row',
-    gap: Spacing.three,
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-  },
-  finalPrimaryBtn: {
-    backgroundColor: '#FFFFFF',
-    paddingVertical: 14,
-    paddingHorizontal: 22,
-    borderRadius: 12,
-  },
-  finalPrimaryBtnText: {
-    color: '#0F766E',
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  finalSecondaryBtn: {
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-    borderWidth: 1,
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-  },
-  finalSecondaryBtnText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
   },
 });

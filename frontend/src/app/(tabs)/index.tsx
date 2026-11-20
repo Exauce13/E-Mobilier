@@ -14,10 +14,11 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { LandingShowcase } from '@/components/home/landing-showcase';
 import { PropertyCard } from '@/components/property-card';
+import { InstitutionHeader } from '@/components/ui/institution-header';
 import { UnlockModal } from '@/components/unlock-modal';
 import { FILTER_CATEGORIES } from '@/constants/locations';
 import { BottomTabInset, Spacing } from '@/constants/theme';
@@ -61,6 +62,7 @@ function AuthenticatedCatalog() {
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
   const [page, setPage] = useState(1);
   const [lastPage, setLastPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(148);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -77,25 +79,30 @@ function AuthenticatedCatalog() {
   const fetchFeed = useCallback(
     async (targetPage: number, replace: boolean) => {
       setErrorMsg(null);
-      const res = await proprietesApi.getFeed({
-        type: selectedCategory === 'tous' ? undefined : selectedCategory,
-        search: debouncedSearch || undefined,
-        page: targetPage,
-        per_page: 15,
-      });
+      try {
+        const res = await proprietesApi.getFeed({
+          type: selectedCategory === 'tous' ? undefined : selectedCategory,
+          search: debouncedSearch || undefined,
+          page: targetPage,
+          per_page: 15,
+        });
 
-      if (!res.success || !res.data) {
-        setErrorMsg(res.message || 'Impossible de charger les annonces.');
-        return;
+        if (!res.success || !res.data) {
+          setErrorMsg(res.message || 'Impossible de charger les annonces.');
+          return;
+        }
+
+        const mapped = (res.data.data || []).map((p: BackendProperty) =>
+          mapBackendPropertyToItem(p, storageBaseUrl, favoriteIds)
+        );
+
+        setPage(res.data.current_page || targetPage);
+        setLastPage(res.data.last_page || 1);
+        if (res.data.total) setTotalCount(res.data.total);
+        setProperties((prev) => (replace ? mapped : [...prev, ...mapped]));
+      } catch (err: any) {
+        setErrorMsg(err.message || 'Erreur réseau');
       }
-
-      const mapped = (res.data.data || []).map((p: BackendProperty) =>
-        mapBackendPropertyToItem(p, storageBaseUrl, favoriteIds)
-      );
-
-      setPage(res.data.current_page || targetPage);
-      setLastPage(res.data.last_page || 1);
-      setProperties((prev) => (replace ? mapped : [...prev, ...mapped]));
     },
     [selectedCategory, debouncedSearch, storageBaseUrl, favoriteIds]
   );
@@ -162,12 +169,17 @@ function AuthenticatedCatalog() {
   };
 
   return (
-    <SafeAreaView edges={['top']} style={[styles.container, { backgroundColor: theme.background }]}>
+    <View style={[styles.container, { backgroundColor: theme.surface }]}>
+      {/* Stitch Institution Header */}
+      <InstitutionHeader />
+
       <FlatList
         data={properties}
         keyExtractor={(item) => item.id}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={theme.primary} />}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={theme.primaryContainer} />
+        }
         onEndReached={handleLoadMore}
         onEndReachedThreshold={0.4}
         contentContainerStyle={[
@@ -176,377 +188,291 @@ function AuthenticatedCatalog() {
         ]}
         ListHeaderComponent={
           <View style={styles.headerContainer}>
-            {/* Top Bar */}
-            <View style={styles.brandRow}>
-              <View style={styles.brandTitleGroup}>
-                <View style={styles.titleWithFlag}>
-                  <Text numberOfLines={1} style={[styles.brandName, { color: theme.primary }]}>
-                    E-Mobilier
-                  </Text>
-                  <View style={[styles.flagChip, { backgroundColor: theme.backgroundElement }]}>
-                    <Text style={[styles.flagText, { color: theme.text }]}>🇧🇯 BÉNIN</Text>
-                  </View>
-                </View>
-                <Text numberOfLines={1} style={[styles.brandSubtitle, { color: theme.textSecondary }]}>
-                  Catalogue certifié en temps réel
-                </Text>
+            {/* Cadastre Anti-Fraud Alert Banner (Stitch) */}
+            <View
+              style={[
+                styles.antiFraudBanner,
+                { backgroundColor: theme.surfaceContainerLow, borderColor: theme.cardBorder },
+              ]}>
+              <View style={[styles.antiFraudIconBox, { backgroundColor: theme.primaryContainer }]}>
+                <SymbolView
+                  name={{ ios: 'checkmark.shield.fill', android: 'verified_user', web: 'verified_user' }}
+                  size={16}
+                  tintColor="#FFFFFF"
+                />
               </View>
-
-              <View style={styles.headerActions}>
-                <Pressable
-                  onPress={() => {
-                    void toggleTheme();
-                  }}
-                  style={[
-                    styles.themeButton,
-                    { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder },
-                  ]}
-                  hitSlop={6}>
-                  <Text style={styles.themeButtonText}>{isDark ? '🌙' : '☀️'}</Text>
-                </Pressable>
-
-                <Pressable
-                  onPress={() => router.push('/notifications' as any)}
-                  style={[
-                    styles.notificationButton,
-                    { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder },
-                  ]}
-                  hitSlop={8}>
-                  <SymbolView
-                    name={{ ios: 'bell.fill', android: 'notifications', web: 'notifications' }}
-                    size={18}
-                    tintColor={theme.text}
-                  />
-                  {unreadNotificationsCount > 0 && (
-                    <View style={styles.notificationBadge}>
-                      <Text style={styles.notificationBadgeText}>
-                        {unreadNotificationsCount > 9 ? '9+' : unreadNotificationsCount}
-                      </Text>
-                    </View>
-                  )}
-                </Pressable>
-
-                <Pressable
-                  onPress={() => router.push('/profile' as any)}
-                  style={[
-                    styles.topAuthButton,
-                    { backgroundColor: theme.primaryLight, borderColor: theme.primary },
-                  ]}>
-                  <SymbolView
-                    name={{ ios: 'person.crop.circle.fill', android: 'person', web: 'person' }}
-                    size={14}
-                    tintColor={theme.primary}
-                  />
-                  <Text numberOfLines={1} style={[styles.topAuthButtonText, { color: theme.primaryDark }]}>
-                    {user?.name ? user.name.split(' ')[0] : 'Profil'}
-                  </Text>
-                </Pressable>
+              <View style={styles.antiFraudTextWrap}>
+                <Text style={[styles.antiFraudTitle, { color: theme.text }]}>
+                  Garantie Anti-Fraude Cadastre Bénin
+                </Text>
+                <Text style={[styles.antiFraudDesc, { color: theme.textSecondary }]}>
+                  Coordonnées GPS et repères notariés protégés contre la spéculation illégale.
+                </Text>
               </View>
             </View>
 
-            {/* Search Input */}
+            {/* Search Input Bar with Filter Action */}
             <View
               style={[
-                styles.searchContainer,
-                { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder },
+                styles.searchBar,
+                { backgroundColor: theme.surfaceContainerLowest, borderColor: theme.cardBorder },
               ]}>
               <SymbolView
                 name={{ ios: 'magnifyingglass', android: 'search', web: 'search' }}
-                size={19}
-                tintColor={theme.textSecondary}
+                size={18}
+                tintColor={theme.primaryContainer}
               />
               <TextInput
                 style={[styles.searchInput, { color: theme.text }]}
-                placeholder="Rechercher commune, quartier, villa, parcelle..."
-                placeholderTextColor={theme.textSecondary}
+                placeholder="Rechercher Cotonou, Calavi, TF, parcelle..."
+                placeholderTextColor={theme.outline}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
                 returnKeyType="search"
               />
               {searchQuery.length > 0 && (
-                <Pressable onPress={() => setSearchQuery('')}>
+                <Pressable onPress={() => setSearchQuery('')} hitSlop={8}>
                   <SymbolView
                     name={{ ios: 'xmark.circle.fill', android: 'cancel', web: 'cancel' }}
-                    size={18}
-                    tintColor={theme.textSecondary}
+                    size={16}
+                    tintColor={theme.outline}
                   />
                 </Pressable>
               )}
+              <Pressable
+                onPress={() => router.push('/explore' as any)}
+                style={[styles.filterTuneBtn, { backgroundColor: theme.surfaceContainerLow }]}>
+                <SymbolView
+                  name={{ ios: 'slider.horizontal.3', android: 'tune', web: 'tune' }}
+                  size={16}
+                  tintColor={theme.text}
+                />
+              </Pressable>
             </View>
 
-            {/* Category Chips */}
+            {/* Category Chips Scroll (Stitch design) */}
             <ScrollView
               horizontal
-              nestedScrollEnabled={true}
-              directionalLockEnabled={true}
               showsHorizontalScrollIndicator={false}
-              style={{ flexGrow: 0 }}
-              contentContainerStyle={styles.filterScroll}>
-              {FILTER_CATEGORIES.map((category) => {
-                const isActive = selectedCategory === category.id;
+              contentContainerStyle={styles.categoryChipsScroll}>
+              {FILTER_CATEGORIES.map((cat) => {
+                const isSelected = selectedCategory === cat.id;
                 return (
                   <Pressable
-                    key={category.id}
-                    onPress={() => setSelectedCategory(category.id)}
+                    key={cat.id}
+                    onPress={() => setSelectedCategory(cat.id)}
                     style={[
-                      styles.filterChip,
+                      styles.categoryChip,
                       {
-                        backgroundColor: isActive ? theme.primary : theme.cardBackground,
-                        borderColor: isActive ? theme.primary : theme.cardBorder,
+                        backgroundColor: isSelected ? theme.primaryContainer : theme.surfaceContainerLowest,
+                        borderColor: isSelected ? theme.primaryContainer : theme.cardBorder,
                       },
                     ]}>
                     <Text
                       style={[
-                        styles.filterChipText,
-                        { color: isActive ? '#FFFFFF' : theme.tagText, fontWeight: isActive ? '700' : '500' },
+                        styles.categoryChipText,
+                        { color: isSelected ? '#FFFFFF' : theme.text },
                       ]}>
-                      {category.label}
+                      {cat.label}
                     </Text>
                   </Pressable>
                 );
               })}
             </ScrollView>
 
-            {/* Quick Action Banner */}
-            <Pressable
-              onPress={() => router.push('/search-requests' as any)}
-              style={[styles.promoBanner, { backgroundColor: theme.navyLight }]}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.promoTitle}>Vous cherchez un bien précis ?</Text>
-                <Text style={styles.promoSub}>
-                  Publiez une demande de recherche et laissez nos agents trouver pour vous.
+            {/* Live Count & Certification Tag */}
+            <View style={styles.resultsMetaRow}>
+              <Text style={[styles.resultsCountText, { color: theme.textSecondary }]}>
+                {properties.length} biens certifiés disponibles
+              </Text>
+              <View style={styles.andfVerifiedTag}>
+                <SymbolView
+                  name={{ ios: 'checkmark.seal.fill', android: 'verified', web: 'verified' }}
+                  size={12}
+                  tintColor={theme.tertiaryFixedDim || theme.gold}
+                />
+                <Text style={[styles.andfVerifiedText, { color: theme.tertiary }]}>
+                  Certifié ANDF
                 </Text>
               </View>
-              <View style={[styles.promoBtn, { backgroundColor: theme.gold }]}>
-                <Text style={styles.promoBtnText}>Demander</Text>
-              </View>
-            </Pressable>
-
-            {/* Featured Properties Horizontal Carousel */}
-            {properties.length > 0 && (
-              <View style={styles.featuredBlock}>
-                <View style={styles.resultsRow}>
-                  <Text style={[styles.sectionTitle, { color: theme.text }]}>
-                    Propriétés en vedette
-                  </Text>
-                  <Text style={[styles.resultsCount, { color: theme.primary }]}>
-                    Faire défiler →
-                  </Text>
-                </View>
-                <FlatList
-                  data={properties.slice(0, 6)}
-                  horizontal
-                  nestedScrollEnabled={true}
-                  directionalLockEnabled={true}
-                  showsHorizontalScrollIndicator={false}
-                  keyExtractor={(item) => `featured-${item.id}`}
-                  style={styles.featuredList}
-                  contentContainerStyle={styles.featuredContent}
-                  renderItem={({ item }) => (
-                    <Pressable
-                      onPress={() => handleOpenProperty(item)}
-                      style={[
-                        styles.featuredCard,
-                        { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder },
-                      ]}>
-                      <Image
-                        source={typeof item.image === 'string' ? { uri: item.image } : item.image}
-                        style={styles.featuredImage}
-                        contentFit="cover"
-                      />
-                      <View style={styles.featuredCardBody}>
-                        <Text numberOfLines={1} style={[styles.featuredTitle, { color: theme.text }]}>
-                          {item.title}
-                        </Text>
-                        <Text numberOfLines={1} style={[styles.featuredLocation, { color: theme.textSecondary }]}>
-                          {item.location.commune} • {item.location.quartier}
-                        </Text>
-                        <Text numberOfLines={1} style={[styles.featuredPrice, { color: theme.primary }]}>
-                          {item.priceFormatted}
-                        </Text>
-                      </View>
-                    </Pressable>
-                  )}
-                />
-              </View>
-            )}
-
-            <View style={styles.resultsRow}>
-              <Text style={[styles.sectionTitle, { color: theme.text }]}>
-                {selectedCategory === 'tous' ? 'Biens disponibles' : `Catégorie : ${selectedCategory}`}
-              </Text>
-              <Text style={[styles.resultsCount, { color: theme.textSecondary }]}>
-                {properties.length} affiché{properties.length > 1 ? 's' : ''}
-              </Text>
             </View>
+
+            {errorMsg ? (
+              <View style={[styles.errorBox, { backgroundColor: theme.errorContainer }]}>
+                <Text style={[styles.errorText, { color: theme.error }]}>{errorMsg}</Text>
+              </View>
+            ) : null}
           </View>
         }
         renderItem={({ item }) => (
           <PropertyCard
             property={item}
-            onPressCard={handleOpenProperty}
             onPressDetails={handlePressDetails}
+            onPressCard={handleOpenProperty}
             onToggleFavorite={handleToggleFavorite}
+            onUnlockPress={handlePressDetails}
+            onVisitPress={handleOpenProperty}
           />
         )}
         ListEmptyComponent={
-          loading ? (
-            <View style={styles.emptyContainer}>
-              <ActivityIndicator size="large" color={theme.primary} />
+          !loading ? (
+            <View
+              style={[
+                styles.emptyContainer,
+                { backgroundColor: theme.surfaceContainerLowest, borderColor: theme.cardBorder },
+              ]}>
+              <SymbolView
+                name={{ ios: 'doc.text.magnifyingglass', android: 'search_off', web: 'search_off' }}
+                size={36}
+                tintColor={theme.outline}
+              />
+              <Text style={[styles.emptyTitle, { color: theme.text }]}>Aucun bien trouvé</Text>
               <Text style={[styles.emptySubtitle, { color: theme.textSecondary }]}>
-                Chargement du catalogue E-Mobilier...
+                Essayez d'ajuster vos critères ou filtres de recherche.
               </Text>
             </View>
-          ) : (
-            <View style={styles.emptyContainer}>
-              <Text style={[styles.emptyTitle, { color: theme.text }]}>
-                {errorMsg ? 'Erreur de chargement' : 'Aucun bien disponible'}
-              </Text>
-              <Text style={[styles.emptySubtitle, { color: theme.textSecondary }]}>
-                {errorMsg || 'Essayez une autre catégorie ou publiez votre demande de recherche.'}
-              </Text>
-              <Pressable
-                onPress={handleRefresh}
-                style={[styles.retryBtn, { backgroundColor: theme.primary }]}>
-                <Text style={styles.retryText}>Actualiser</Text>
-              </Pressable>
-            </View>
-          )
+          ) : undefined
         }
         ListFooterComponent={
           loadingMore ? (
-            <ActivityIndicator color={theme.primary} style={{ marginVertical: Spacing.three }} />
+            <View style={styles.loadingMoreWrap}>
+              <ActivityIndicator size="small" color={theme.primaryContainer} />
+            </View>
           ) : undefined
         }
       />
 
+      {/* Unlock / Démasquage Modal */}
       <UnlockModal
         visible={unlockModalVisible}
         property={selectedProperty}
         onClose={() => setUnlockModalVisible(false)}
-        onConfirmUnlock={handleConfirmUnlock}
-        onOpenFullDetails={handleOpenProperty}
+        onConfirm={handleConfirmUnlock}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  listContent: { paddingHorizontal: Spacing.three, paddingTop: Spacing.two },
-  headerContainer: { marginBottom: Spacing.two },
-  brandRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: Spacing.three,
+  container: {
+    flex: 1,
   },
-  brandTitleGroup: { flex: 1, minWidth: 0, flexShrink: 1 },
-  titleWithFlag: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  brandName: { fontSize: 20, fontWeight: '900', letterSpacing: -0.5, flexShrink: 1 },
-  flagChip: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, flexShrink: 0 },
-  flagText: { fontSize: 10, fontWeight: '800' },
-  brandSubtitle: { fontSize: 12, marginTop: 2 },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 0 },
-  themeButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  themeButtonText: { fontSize: 15 },
-  notificationButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-  },
-  notificationBadge: {
-    position: 'absolute',
-    top: -3,
-    right: -3,
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: '#EF4444',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 4,
-  },
-  notificationBadgeText: { color: '#FFFFFF', fontSize: 10, fontWeight: '800' },
-  topAuthButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 9,
-    paddingVertical: 7,
-    borderRadius: 18,
-    borderWidth: 1,
-    maxWidth: 98,
-  },
-  topAuthButtonText: { fontSize: 12, fontWeight: '700', flexShrink: 1 },
-  featuredBlock: { marginBottom: Spacing.two },
-  featuredList: { flexGrow: 0 },
-  featuredContent: { gap: 12, paddingRight: 4, paddingBottom: Spacing.two },
-  featuredCard: {
-    width: 244,
-    borderRadius: 16,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
-  featuredImage: { width: '100%', height: 128 },
-  featuredCardBody: { padding: 10, gap: 3 },
-  featuredTitle: { fontSize: 14, fontWeight: '800' },
-  featuredLocation: { fontSize: 11 },
-  featuredPrice: { fontSize: 13, fontWeight: '900', marginTop: 2 },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 16,
-    borderWidth: 1,
+  listContent: {
     paddingHorizontal: Spacing.three,
-    height: 48,
-    gap: 10,
-    marginBottom: Spacing.three,
+    paddingTop: Spacing.two,
   },
-  searchInput: { flex: 1, fontSize: 15, ...Platform.select({ web: { outlineStyle: 'none' } as any }) },
-  filterScroll: { gap: 8, paddingBottom: Spacing.three },
-  filterChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-  },
-  filterChipText: { fontSize: 13 },
-  promoBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: Spacing.three,
-    borderRadius: 16,
+  headerContainer: {
     gap: 12,
     marginBottom: Spacing.three,
   },
-  promoTitle: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
-  promoSub: { color: '#CBD5E1', fontSize: 12, marginTop: 2, lineHeight: 16 },
-  promoBtn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10 },
-  promoBtnText: { color: '#0F172A', fontSize: 12, fontWeight: '800' },
-  resultsRow: {
+  antiFraudBanner: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: Spacing.two,
+    gap: 10,
+    padding: 10,
+    borderRadius: 12,
+    borderWidth: 1,
   },
-  sectionTitle: { fontSize: 17, fontWeight: '800' },
-  resultsCount: { fontSize: 13, fontWeight: '600' },
-  emptyContainer: { alignItems: 'center', paddingVertical: Spacing.six, gap: 10 },
-  emptyTitle: { fontSize: 17, fontWeight: '800' },
-  emptySubtitle: { fontSize: 14, textAlign: 'center', paddingHorizontal: Spacing.four },
-  retryBtn: { paddingHorizontal: 18, paddingVertical: 10, borderRadius: 12, marginTop: 6 },
-  retryText: { color: '#FFFFFF', fontWeight: '700', fontSize: 14 },
+  antiFraudIconBox: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  antiFraudTextWrap: {
+    flex: 1,
+  },
+  antiFraudTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  antiFraudDesc: {
+    fontSize: 11,
+    marginTop: 1,
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 13,
+    paddingVertical: 2,
+  },
+  filterTuneBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  categoryChipsScroll: {
+    flexDirection: 'row',
+    gap: 6,
+    paddingVertical: 2,
+  },
+  categoryChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  categoryChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  resultsMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 2,
+  },
+  resultsCountText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  andfVerifiedTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  andfVerifiedText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  errorBox: {
+    padding: 10,
+    borderRadius: 8,
+  },
+  errorText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  loadingMoreWrap: {
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  emptyContainer: {
+    padding: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 20,
+  },
+  emptyTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  emptySubtitle: {
+    fontSize: 12,
+    textAlign: 'center',
+  },
 });

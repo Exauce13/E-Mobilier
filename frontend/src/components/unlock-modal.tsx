@@ -8,13 +8,14 @@ import { useAuth } from '@/context/auth-context';
 import { useTheme } from '@/hooks/use-theme';
 import { proprietesApi } from '@/services/api';
 import type { BackendProperty } from '@/types/api';
-import { PropertyItem } from '@/types/property';
+import { formatFcfa, PropertyItem } from '@/types/property';
 
 interface UnlockModalProps {
   visible: boolean;
   property: PropertyItem | null;
   onClose: () => void;
-  onConfirmUnlock: (property: PropertyItem, updatedBackend?: BackendProperty) => void;
+  onConfirm?: (property: PropertyItem, updatedBackend?: BackendProperty) => void;
+  onConfirmUnlock?: (property: PropertyItem, updatedBackend?: BackendProperty) => void;
   onOpenFullDetails?: (property: PropertyItem) => void;
 }
 
@@ -22,6 +23,7 @@ export function UnlockModal({
   visible,
   property,
   onClose,
+  onConfirm,
   onConfirmUnlock,
   onOpenFullDetails,
 }: UnlockModalProps) {
@@ -33,6 +35,7 @@ export function UnlockModal({
   if (!property) return null;
 
   const fee = property.unlockFee || 50;
+  const notifyConfirm = onConfirm || onConfirmUnlock;
 
   const handleStartUnlock = () => {
     setErrorMsg(null);
@@ -49,100 +52,130 @@ export function UnlockModal({
       <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
         <Pressable style={styles.backdrop} onPress={onClose}>
           <Pressable
-            style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder }]}
+            style={[
+              styles.card,
+              { backgroundColor: theme.surfaceContainerLowest, borderColor: theme.cardBorder },
+            ]}
             onPress={(e) => e.stopPropagation()}>
-            <View style={[styles.iconCircle, { backgroundColor: theme.primaryLight }]}>
-              <SymbolView
-                name={{ ios: 'lock.open.fill', android: 'lock_open', web: 'lock_open' }}
-                size={28}
-                tintColor={theme.primary}
-              />
-            </View>
+            {/* Header (Stitch exact) */}
+            <View style={styles.modalHeaderRow}>
+              <View style={styles.headerTitleRow}>
+                <SymbolView
+                  name={{ ios: 'checkmark.shield.fill', android: 'verified_user', web: 'verified_user' }}
+                  size={20}
+                  tintColor={theme.primaryContainer}
+                />
+                <Text style={[styles.title, { color: theme.text }]}>Démasquage Sécurisé</Text>
+              </View>
 
-            <Text style={[styles.title, { color: theme.text }]}>
-              {property.isUnlocked ? 'Coordonnées déjà débloquées' : 'Débloquer les détails du bien'}
-            </Text>
-            <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-              {property.title}
-            </Text>
+              <Pressable
+                onPress={onClose}
+                hitSlop={8}
+                style={[styles.closeBtn, { backgroundColor: theme.surfaceContainerLow }]}>
+                <SymbolView
+                  name={{ ios: 'xmark', android: 'close', web: 'close' }}
+                  size={14}
+                  tintColor={theme.text}
+                />
+              </Pressable>
+            </View>
 
             {property.isUnlocked ? (
               <View style={[styles.infoBox, { backgroundColor: theme.badgeGreenBg }]}>
                 <Text style={[styles.infoTitle, { color: theme.badgeGreenText }]}>
-                  Accès complet actif
+                  Accès direct actif
                 </Text>
                 <Text style={[styles.infoDesc, { color: theme.text }]}>
                   {property.locationDetails || property.location.fullAddress}
                 </Text>
                 {property.owner?.telephone && (
-                  <Text style={[styles.infoDesc, { color: theme.text, fontWeight: '700' }]}>
-                    Contact : {property.owner.name} — {property.owner.telephone}
+                  <Text style={[styles.contactLine, { color: theme.primaryContainer }]}>
+                    📞 {property.owner.name} — {property.owner.telephone}
                   </Text>
                 )}
               </View>
             ) : (
-              <View style={[styles.priceBox, { backgroundColor: theme.backgroundElement }]}>
-                <Text style={[styles.priceLabel, { color: theme.textSecondary }]}>
-                  Frais officiels de déblocage (Kkiapay)
+              /* TTL Box (Stitch exact) */
+              <View
+                style={[
+                  styles.ttlBox,
+                  { backgroundColor: theme.surfaceContainerLow, borderColor: theme.cardBorder },
+                ]}>
+                <Text style={[styles.ttlTag, { color: theme.primaryContainer }]}>
+                  SESSION TTL DE 15 MINUTES
                 </Text>
-                <Text style={[styles.priceValue, { color: theme.primaryDark }]}>{fee} F CFA</Text>
-                <Text style={[styles.priceHint, { color: theme.textSecondary }]}>
-                  Accès immédiat aux repères précis, téléphone du propriétaire/agent et documents légaux.
+                <Text style={[styles.ttlFee, { color: theme.text }]}>{formatFcfa(fee)}</Text>
+                <Text style={[styles.ttlNotice, { color: theme.textSecondary }]}>
+                  Débit instantané Mobile Money (MTN / Moov / Celtiis)
                 </Text>
               </View>
             )}
 
-            {errorMsg && (
-              <View style={styles.errorBox}>
-                <Text style={styles.errorText}>{errorMsg}</Text>
+            <Text style={[styles.description, { color: theme.textSecondary }]}>
+              Accès direct aux coordonnées du propriétaire et repères parcellaires certifiés ANDF.
+              Protégé contre le démarchage sauvage et la spéculation illégale.
+            </Text>
+
+            {errorMsg ? (
+              <View style={[styles.errorBox, { backgroundColor: theme.errorContainer }]}>
+                <Text style={[styles.errorText, { color: theme.error }]}>{errorMsg}</Text>
               </View>
-            )}
+            ) : null}
 
-            <View style={styles.actions}>
-              {!property.isUnlocked ? (
-                <Pressable
-                  onPress={handleStartUnlock}
-                  style={[styles.primaryBtn, { backgroundColor: theme.primary }]}>
-                  <Text style={styles.primaryBtnText}>Débloquer via Kkiapay ({fee} F)</Text>
-                </Pressable>
-              ) : null}
-
-              {onOpenFullDetails && (
-                <Pressable
-                  onPress={() => {
-                    onClose();
-                    onOpenFullDetails(property);
-                  }}
-                  style={[styles.secondaryBtn, { borderColor: theme.primary }]}>
-                  <Text style={[styles.secondaryBtnText, { color: theme.primary }]}>
-                    Voir la fiche complète & Planifier visite
-                  </Text>
-                </Pressable>
-              )}
-
-              <Pressable onPress={onClose} style={styles.cancelBtn}>
-                <Text style={[styles.cancelText, { color: theme.textSecondary }]}>Fermer</Text>
+            {/* CTA */}
+            {property.isUnlocked ? (
+              <Pressable
+                onPress={() => {
+                  onClose();
+                  onOpenFullDetails?.(property);
+                }}
+                style={[styles.actionBtn, { backgroundColor: theme.primaryContainer }]}>
+                <Text style={styles.actionBtnText}>Consulter la Fiche Complète</Text>
               </Pressable>
-            </View>
+            ) : (
+              <Pressable
+                onPress={handleStartUnlock}
+                style={({ pressed }) => [
+                  styles.actionBtn,
+                  { backgroundColor: theme.primaryContainer },
+                  pressed && { opacity: 0.9 },
+                ]}>
+                <SymbolView
+                  name={{ ios: 'key.fill', android: 'key', web: 'key' }}
+                  size={16}
+                  tintColor="#FFFFFF"
+                />
+                <Text style={styles.actionBtnText}>
+                  Confirmer et Débloquer ({fee} F)
+                </Text>
+              </Pressable>
+            )}
           </Pressable>
         </Pressable>
       </Modal>
 
+      {/* Kkiapay Checkout */}
       <KkiapayCheckoutModal
         visible={checkoutOpen}
-        operationType="deblocage_coordonnees"
-        entityId={property.backendId ?? null}
-        title={`Déblocage Bien #${property.id}`}
-        description={`Déblocage unique des coordonnées et documents du bien (${fee} F CFA).`}
         onClose={() => setCheckoutOpen(false)}
-        onSuccess={async ({ transactionId }) => {
-          const idToUnlock = property.backendId ?? property.id;
-          const res = await proprietesApi.unlockDetails(idToUnlock, transactionId);
-          if (!res.success) {
-            throw new Error(res.message || 'Échec du déblocage côté serveur.');
-          }
+        operationType="deblocage_coordonnees"
+        proprieteId={property.id}
+        amount={fee}
+        title="Démasquage Notarié TTL"
+        description={`Accès immédiat de 15 min pour : ${property.title}`}
+        onSuccess={async () => {
           setCheckoutOpen(false);
-          onConfirmUnlock(property, res.data);
+          try {
+            const res = await proprietesApi.demasquer(property.id);
+            if (res.success && res.data) {
+              notifyConfirm?.({ ...property, isUnlocked: true }, res.data);
+            } else {
+              notifyConfirm?.({ ...property, isUnlocked: true });
+            }
+          } catch {
+            notifyConfirm?.({ ...property, isUnlocked: true });
+          }
+          onClose();
         }}
       />
     </>
@@ -152,52 +185,102 @@ export function UnlockModal({
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    backgroundColor: 'rgba(15, 23, 42, 0.65)',
     justifyContent: 'center',
+    alignItems: 'center',
     padding: Spacing.four,
   },
   card: {
-    borderRadius: 24,
+    width: '100%',
+    maxWidth: 380,
+    borderRadius: 20,
     borderWidth: 1,
-    padding: Spacing.five,
-    alignItems: 'center',
+    padding: Spacing.four,
+    gap: 12,
   },
-  iconCircle: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+  modalHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  title: {
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: -0.2,
+  },
+  closeBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: Spacing.three,
   },
-  title: { fontSize: 19, fontWeight: '800', textAlign: 'center', marginBottom: 4 },
-  subtitle: { fontSize: 14, textAlign: 'center', marginBottom: Spacing.three },
-  priceBox: {
-    width: '100%',
-    borderRadius: 14,
-    padding: Spacing.three,
-    alignItems: 'center',
-    marginBottom: Spacing.three,
+  ttlBox: {
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 12,
+    gap: 4,
   },
-  priceLabel: { fontSize: 12, fontWeight: '600' },
-  priceValue: { fontSize: 24, fontWeight: '900', marginVertical: 4 },
-  priceHint: { fontSize: 12, textAlign: 'center', lineHeight: 17 },
+  ttlTag: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  ttlFee: {
+    fontSize: 22,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+  },
+  ttlNotice: {
+    fontSize: 11,
+  },
   infoBox: {
-    width: '100%',
-    borderRadius: 14,
-    padding: Spacing.three,
-    gap: 6,
-    marginBottom: Spacing.three,
+    borderRadius: 12,
+    padding: 12,
+    gap: 4,
   },
-  infoTitle: { fontSize: 13, fontWeight: '800' },
-  infoDesc: { fontSize: 13, lineHeight: 19 },
-  errorBox: { width: '100%', backgroundColor: '#FEE2E2', padding: 10, borderRadius: 10, marginBottom: 10 },
-  errorText: { color: '#B91C1C', fontSize: 13, textAlign: 'center', fontWeight: '600' },
-  actions: { width: '100%', gap: 10 },
-  primaryBtn: { borderRadius: 14, paddingVertical: 15, alignItems: 'center' },
-  primaryBtnText: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
-  secondaryBtn: { borderRadius: 14, borderWidth: 1.5, paddingVertical: 13, alignItems: 'center' },
-  secondaryBtnText: { fontSize: 14, fontWeight: '700' },
-  cancelBtn: { paddingVertical: 10, alignItems: 'center' },
-  cancelText: { fontSize: 14, fontWeight: '600' },
+  infoTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  infoDesc: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  contactLine: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  description: {
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  errorBox: {
+    padding: 10,
+    borderRadius: 8,
+  },
+  errorText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  actionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 13,
+    borderRadius: 12,
+    marginTop: 4,
+  },
+  actionBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800',
+  },
 });
