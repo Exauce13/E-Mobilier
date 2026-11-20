@@ -28,13 +28,22 @@ export function LoginView({
   onBack,
 }: LoginViewProps) {
   const theme = useTheme();
-  const { login } = useAuth();
+  const { login, verifyTwoFactorOtp, resendTwoFactorOtp } = useAuth();
 
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  // États pour la double authentification par OTP (2FA Admin)
+  const [step, setStep] = useState<'credentials' | 'otp'>('credentials');
+  const [twoFactorToken, setTwoFactorToken] = useState('');
+  const [otpCode, setOtpCode] = useState('');
+  const [destinationMasked, setDestinationMasked] = useState('');
+  const [testOtpCode, setTestOtpCode] = useState<string | undefined>();
+  const [adminRole, setAdminRole] = useState<string | undefined>();
+  const [resending, setResending] = useState(false);
 
   const handleLogin = async () => {
     setMessage(null);
@@ -59,6 +68,20 @@ export function LoginView({
         return;
       }
 
+      // Si le compte administrateur exige une double authentification OTP
+      if (response.requiresTwoFactor) {
+        setTwoFactorToken(response.twoFactorToken || '');
+        setDestinationMasked(response.destinationMasquee || '');
+        setTestOtpCode(response.testOtpCode);
+        setAdminRole(response.role);
+        setStep('otp');
+        setMessage({
+          text: response.message || 'Double authentification requise. Saisissez le code OTP reçu.',
+          type: 'success',
+        });
+        return;
+      }
+
       setMessage({ text: response.message || 'Connexion réussie ! Bienvenue sur E-Mobilier.', type: 'success' });
       if (onSuccessLogin) {
         onSuccessLogin(phone);
@@ -71,6 +94,72 @@ export function LoginView({
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleVerifyOtp = async () => {
+    setMessage(null);
+    const cleanedOtp = otpCode.trim();
+    if (!cleanedOtp || cleanedOtp.length !== 6) {
+      setMessage({ text: 'Veuillez saisir le code OTP à 6 chiffres.', type: 'error' });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await verifyTwoFactorOtp(twoFactorToken, cleanedOtp);
+
+      if (!response.success) {
+        setMessage({
+          text: response.message || 'Code OTP incorrect ou expiré.',
+          type: 'error',
+        });
+        return;
+      }
+
+      setMessage({ text: response.message || 'Double authentification réussie !', type: 'success' });
+      if (onSuccessLogin) {
+        onSuccessLogin(phone);
+      }
+    } catch {
+      setMessage({
+        text: 'Erreur lors de la validation du code OTP.',
+        type: 'error',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (!twoFactorToken || resending) return;
+    setResending(true);
+    setMessage(null);
+    try {
+      const response = await resendTwoFactorOtp(twoFactorToken);
+      if (response.success) {
+        if (response.twoFactorToken) setTwoFactorToken(response.twoFactorToken);
+        if (response.testOtpCode) setTestOtpCode(response.testOtpCode);
+        setMessage({
+          text: response.message || 'Un nouveau code OTP a été envoyé.',
+          type: 'success',
+        });
+      } else {
+        setMessage({
+          text: response.message || 'Impossible de renvoyer le code OTP.',
+          type: 'error',
+        });
+      }
+    } catch {
+      setMessage({ text: 'Erreur réseau lors du renvoi du code.', type: 'error' });
+    } finally {
+      setResending(false);
+    }
+  };
+
+  const handleBackToCredentials = () => {
+    setStep('credentials');
+    setOtpCode('');
+    setMessage(null);
   };
 
   return (
@@ -109,19 +198,25 @@ export function LoginView({
         <View style={styles.brandContainer}>
           <View style={[styles.logoIconCircle, { backgroundColor: theme.primaryLight }]}>
             <SymbolView
-              name={{ ios: 'house.lodge.fill', android: 'home', web: 'home' }}
+              name={step === 'otp' ? { ios: 'shield.lefthalf.filled.badge.checkmark', android: 'verified_user', web: 'verified_user' } : { ios: 'house.lodge.fill', android: 'home', web: 'home' }}
               size={28}
               tintColor={theme.primary}
             />
           </View>
-          <Text style={[styles.brandTitle, { color: theme.primaryDark }]}>E-Mobilier</Text>
+          <Text style={[styles.brandTitle, { color: theme.primaryDark }]}>
+            {step === 'otp' ? 'Sécurité Admin' : 'E-Mobilier'}
+          </Text>
         </View>
 
         {/* Heading & Sub-headline */}
         <View style={styles.headerBlock}>
-          <Text style={[styles.screenTitle, { color: theme.text }]}>Se connecter</Text>
+          <Text style={[styles.screenTitle, { color: theme.text }]}>
+            {step === 'otp' ? 'Double Authentification' : 'Se connecter'}
+          </Text>
           <Text style={[styles.screenSubtitle, { color: theme.textSecondary }]}>
-            Ravis de vous revoir !
+            {step === 'otp'
+              ? (adminRole ? `${adminRole} • Code OTP à 6 chiffres` : 'Vérification de sécurité administrateur requise')
+              : 'Ravis de vous revoir !'}
           </Text>
         </View>
 
@@ -145,91 +240,202 @@ export function LoginView({
           </View>
         )}
 
-        {/* Form Inputs */}
-        <View style={styles.formSection}>
-          {/* Phone Field */}
-          <Text style={[styles.inputLabel, { color: theme.text }]}>Numéro de téléphone</Text>
-          <View
-            style={[
-              styles.inputRow,
-              {
-                backgroundColor: theme.cardBackground,
-                borderColor: theme.cardBorder,
-              },
-            ]}>
-            <View style={[styles.prefixBadge, { backgroundColor: theme.tagBackground }]}>
-              <Text style={styles.flagEmoji}>🇧🇯</Text>
-              <Text style={[styles.prefixText, { color: theme.text }]}>+229</Text>
+        {/* STEP 2 : OTP Verification Screen for Admin Roles */}
+        {step === 'otp' ? (
+          <View style={styles.formSection}>
+            <View
+              style={[
+                styles.otpInfoBox,
+                { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder },
+              ]}>
+              <SymbolView
+                name={{ ios: 'lock.shield.fill', android: 'security', web: 'security' }}
+                size={22}
+                tintColor={theme.primary}
+              />
+              <Text style={[styles.otpInfoText, { color: theme.text }]}>
+                Un code de vérification à 6 chiffres a été expédié à destination de{' '}
+                <Text style={{ fontWeight: '700', color: theme.primaryDark }}>
+                  {destinationMasked || 'votre contact officiel'}
+                </Text>
+                . Valable pendant 5 minutes.
+              </Text>
             </View>
-            <TextInput
-              style={[styles.textInput, { color: theme.text }]}
-              placeholder="Numéro de téléphone (MTN / Moov)"
-              placeholderTextColor={theme.textSecondary}
-              keyboardType="phone-pad"
-              value={phone}
-              onChangeText={setPhone}
-              autoCapitalize="none"
-            />
-          </View>
 
-          {/* Password Field */}
-          <Text style={[styles.inputLabel, { color: theme.text }]}>Mot de passe</Text>
-          <View
-            style={[
-              styles.inputRow,
-              {
-                backgroundColor: theme.cardBackground,
-                borderColor: theme.cardBorder,
-              },
-            ]}>
-            <View style={styles.iconPrefix}>
-              <SymbolView
-                name={{ ios: 'lock.fill', android: 'lock', web: 'lock' }}
-                size={20}
-                tintColor={theme.textSecondary}
+            {/* Test OTP Helper Banner (en environnement local/test) */}
+            {testOtpCode && (
+              <Pressable
+                onPress={() => setOtpCode(testOtpCode)}
+                style={[styles.testOtpBadge, { backgroundColor: '#FEF3C7', borderColor: '#F59E0B' }]}>
+                <Text style={styles.testOtpText}>
+                  🧪 Code de test détecté : <Text style={{ fontWeight: '800' }}>{testOtpCode}</Text> (cliquer pour insérer)
+                </Text>
+              </Pressable>
+            )}
+
+            <Text style={[styles.inputLabel, { color: theme.text, marginTop: Spacing.two }]}>
+              Code de sécurité OTP
+            </Text>
+            <View
+              style={[
+                styles.inputRow,
+                {
+                  backgroundColor: theme.cardBackground,
+                  borderColor: theme.cardBorder,
+                  justifyContent: 'center',
+                },
+              ]}>
+              <View style={styles.iconPrefix}>
+                <SymbolView
+                  name={{ ios: 'key.fill', android: 'vpn_key', web: 'vpn_key' }}
+                  size={20}
+                  tintColor={theme.textSecondary}
+                />
+              </View>
+              <TextInput
+                style={[styles.otpInput, { color: theme.text }]}
+                placeholder="000000"
+                placeholderTextColor={theme.textSecondary}
+                keyboardType="numeric"
+                maxLength={6}
+                value={otpCode}
+                onChangeText={setOtpCode}
+                autoFocus
+                autoCapitalize="none"
               />
             </View>
-            <TextInput
-              style={[styles.textInput, { color: theme.text }]}
-              placeholder="Mot de passe"
-              placeholderTextColor={theme.textSecondary}
-              secureTextEntry={!showPassword}
-              value={password}
-              onChangeText={setPassword}
-              autoCapitalize="none"
-            />
+
+            {/* Submit OTP Button */}
             <Pressable
-              onPress={() => setShowPassword(!showPassword)}
-              style={styles.eyeButton}
-              hitSlop={10}>
-              <SymbolView
-                name={{
-                  ios: showPassword ? 'eye.fill' : 'eye.slash.fill',
-                  android: showPassword ? 'visibility' : 'visibility_off',
-                  web: showPassword ? 'visibility' : 'visibility_off',
-                }}
-                size={20}
-                tintColor={theme.textSecondary}
-              />
+              onPress={handleVerifyOtp}
+              disabled={loading}
+              style={({ pressed }) => [
+                styles.primaryButton,
+                { backgroundColor: theme.primary, marginTop: Spacing.three },
+                pressed && { opacity: 0.9, transform: [{ scale: 0.99 }] },
+              ]}>
+              {loading ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.primaryButtonText}>Valider et continuer</Text>
+              )}
+            </Pressable>
+
+            {/* Resend OTP Button */}
+            <Pressable
+              onPress={handleResendOtp}
+              disabled={resending || loading}
+              style={({ pressed }) => [
+                styles.secondaryButton,
+                { borderColor: theme.cardBorder, marginTop: Spacing.two },
+                pressed && { opacity: 0.7 },
+              ]}>
+              {resending ? (
+                <ActivityIndicator color={theme.primary} size="small" />
+              ) : (
+                <Text style={[styles.secondaryButtonText, { color: theme.primary }]}>
+                  Renvoyer un nouveau code
+                </Text>
+              )}
+            </Pressable>
+
+            {/* Back to credentials */}
+            <Pressable
+              onPress={handleBackToCredentials}
+              disabled={loading}
+              style={styles.switchModeButton}>
+              <Text style={[styles.switchModeText, { color: theme.textSecondary }]}>
+                ← Revenir à la saisie du mot de passe
+              </Text>
             </Pressable>
           </View>
+        ) : (
+          /* STEP 1 : Normal Credentials (Phone & Password) */
+          <View style={styles.formSection}>
+            {/* Phone Field */}
+            <Text style={[styles.inputLabel, { color: theme.text }]}>Numéro de téléphone</Text>
+            <View
+              style={[
+                styles.inputRow,
+                {
+                  backgroundColor: theme.cardBackground,
+                  borderColor: theme.cardBorder,
+                },
+              ]}>
+              <View style={[styles.prefixBadge, { backgroundColor: theme.tagBackground }]}>
+                <Text style={styles.flagEmoji}>🇧🇯</Text>
+                <Text style={[styles.prefixText, { color: theme.text }]}>+229</Text>
+              </View>
+              <TextInput
+                style={[styles.textInput, { color: theme.text }]}
+                placeholder="Numéro de téléphone (MTN / Moov)"
+                placeholderTextColor={theme.textSecondary}
+                keyboardType="phone-pad"
+                value={phone}
+                onChangeText={setPhone}
+                autoCapitalize="none"
+              />
+            </View>
 
-          {/* Primary Submit Button */}
-          <Pressable
-            onPress={handleLogin}
-            disabled={loading}
-            style={({ pressed }) => [
-              styles.primaryButton,
-              { backgroundColor: theme.primary, marginTop: Spacing.two },
-              pressed && { opacity: 0.9, transform: [{ scale: 0.99 }] },
-            ]}>
-            {loading ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <Text style={styles.primaryButtonText}>Se connecter</Text>
-            )}
-          </Pressable>
-        </View>
+            {/* Password Field */}
+            <Text style={[styles.inputLabel, { color: theme.text }]}>Mot de passe</Text>
+            <View
+              style={[
+                styles.inputRow,
+                {
+                  backgroundColor: theme.cardBackground,
+                  borderColor: theme.cardBorder,
+                },
+              ]}>
+              <View style={styles.iconPrefix}>
+                <SymbolView
+                  name={{ ios: 'lock.fill', android: 'lock', web: 'lock' }}
+                  size={20}
+                  tintColor={theme.textSecondary}
+                />
+              </View>
+              <TextInput
+                style={[styles.textInput, { color: theme.text }]}
+                placeholder="Mot de passe"
+                placeholderTextColor={theme.textSecondary}
+                secureTextEntry={!showPassword}
+                value={password}
+                onChangeText={setPassword}
+                autoCapitalize="none"
+              />
+              <Pressable
+                onPress={() => setShowPassword(!showPassword)}
+                style={styles.eyeButton}
+                hitSlop={10}>
+                <SymbolView
+                  name={{
+                    ios: showPassword ? 'eye.fill' : 'eye.slash.fill',
+                    android: showPassword ? 'visibility' : 'visibility_off',
+                    web: showPassword ? 'visibility' : 'visibility_off',
+                  }}
+                  size={20}
+                  tintColor={theme.textSecondary}
+                />
+              </Pressable>
+            </View>
+
+            {/* Primary Submit Button */}
+            <Pressable
+              onPress={handleLogin}
+              disabled={loading}
+              style={({ pressed }) => [
+                styles.primaryButton,
+                { backgroundColor: theme.primary, marginTop: Spacing.two },
+                pressed && { opacity: 0.9, transform: [{ scale: 0.99 }] },
+              ]}>
+              {loading ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.primaryButtonText}>Se connecter</Text>
+              )}
+            </Pressable>
+          </View>
+        )}
 
         {/* Bottom Switch Link */}
         <View style={styles.footerRow}>
@@ -423,6 +629,40 @@ const styles = StyleSheet.create({
   switchModeText: {
     fontSize: 13,
     fontWeight: '500',
+  },
+  otpInfoBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    padding: Spacing.three,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginBottom: Spacing.two,
+  },
+  otpInfoText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  testOtpBadge: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginBottom: Spacing.two,
+  },
+  testOtpText: {
+    fontSize: 12,
+    color: '#92400E',
+    textAlign: 'center',
+  },
+  otpInput: {
+    flex: 1,
+    fontSize: 22,
+    fontWeight: '800',
+    letterSpacing: 10,
+    textAlign: 'center',
+    height: '100%',
   },
   footerRow: {
     flexDirection: 'row',

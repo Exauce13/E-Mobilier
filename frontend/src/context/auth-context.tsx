@@ -25,9 +25,15 @@ export interface AuthUser {
   balanceFifa: number;
 }
 
-interface AuthResult {
+export interface AuthResult {
   success: boolean;
   message?: string;
+  requiresTwoFactor?: boolean;
+  twoFactorToken?: string;
+  destinationMasquee?: string;
+  expiresIn?: number;
+  testOtpCode?: string;
+  role?: string;
 }
 
 interface AuthContextType {
@@ -41,6 +47,8 @@ interface AuthContextType {
   closeAuthModal: () => void;
   setAuthModalMode: (mode: 'login' | 'register') => void;
   login: (phone: string, password: string) => Promise<AuthResult>;
+  verifyTwoFactorOtp: (twoFactorToken: string, codeOtp: string) => Promise<AuthResult>;
+  resendTwoFactorOtp: (twoFactorToken: string) => Promise<AuthResult>;
   register: (payload: InscriptionPayload) => Promise<AuthResult>;
   logout: () => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -153,10 +161,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (phone: string, password: string): Promise<AuthResult> => {
     const response = await authApi.authentification({ phone, password });
 
-    if (!response.success || !response.data?.user) {
+    if (!response.success) {
       return {
         success: false,
         message: response.message || 'Identifiants incorrects ou erreur serveur.',
+      };
+    }
+
+    // Gestion du challenge de double authentification (2FA OTP) pour les rôles administratifs
+    if (response.data?.requires_two_factor) {
+      return {
+        success: true,
+        requiresTwoFactor: true,
+        twoFactorToken: response.data.two_factor_token,
+        destinationMasquee: response.data.destination_masquee,
+        expiresIn: response.data.expires_in,
+        testOtpCode: response.data.test_otp_code,
+        role: response.data.role,
+        message: response.message || 'Double authentification requise. Un code OTP a été envoyé.',
+      };
+    }
+
+    if (!response.data?.user) {
+      return {
+        success: false,
+        message: response.message || 'Erreur lors de la récupération du profil utilisateur.',
       };
     }
 
@@ -166,6 +195,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return {
       success: true,
       message: response.message,
+    };
+  };
+
+  const verifyTwoFactorOtp = async (
+    twoFactorToken: string,
+    codeOtp: string
+  ): Promise<AuthResult> => {
+    const response = await authApi.verifierOtp2Fa({
+      two_factor_token: twoFactorToken,
+      code_otp: codeOtp,
+    });
+
+    if (!response.success || !response.data?.user) {
+      return {
+        success: false,
+        message: response.message || 'Code OTP invalide ou expiré.',
+      };
+    }
+
+    setUser(mapBackendUserToAuthUser(response.data.user));
+    setAuthModalVisible(false);
+    void refreshUnreadCount();
+    return {
+      success: true,
+      message: response.message,
+    };
+  };
+
+  const resendTwoFactorOtp = async (
+    twoFactorToken: string
+  ): Promise<AuthResult> => {
+    const response = await authApi.renvoyerOtp2Fa({
+      two_factor_token: twoFactorToken,
+    });
+
+    return {
+      success: response.success,
+      message: response.message,
+      twoFactorToken: response.data?.two_factor_token || twoFactorToken,
+      destinationMasquee: response.data?.destination_masquee,
+      expiresIn: response.data?.expires_in,
+      testOtpCode: response.data?.test_otp_code,
     };
   };
 
@@ -236,6 +307,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         closeAuthModal,
         setAuthModalMode,
         login,
+        verifyTwoFactorOtp,
+        resendTwoFactorOtp,
         register,
         logout,
         refreshProfile,

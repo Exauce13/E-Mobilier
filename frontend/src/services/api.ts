@@ -121,7 +121,7 @@ export interface AuthentificationPayload {
 }
 
 export interface AuthResponseData {
-  user: {
+  user?: {
     id: string;
     name: string;
     nom?: string;
@@ -138,8 +138,23 @@ export interface AuthResponseData {
     balanceFifa: number;
     created_at?: string;
   };
-  token: string;
-  token_type: string;
+  token?: string;
+  token_type?: string;
+  requires_two_factor?: boolean;
+  two_factor_token?: string;
+  destination_masquee?: string;
+  expires_in?: number;
+  test_otp_code?: string;
+  role?: string;
+}
+
+export interface VerifierOtp2FaPayload {
+  two_factor_token: string;
+  code_otp: string;
+}
+
+export interface RenvoyerOtp2FaPayload {
+  two_factor_token: string;
 }
 
 function buildQuery(params: Record<string, string | number | boolean | undefined | null>): string {
@@ -233,6 +248,28 @@ export const authApi = {
       await tokenStorage.set(res.data.token);
     }
     return res;
+  },
+
+  verifierOtp2Fa: async (
+    payload: VerifierOtp2FaPayload
+  ): Promise<ApiResponse<AuthResponseData>> => {
+    const res = await apiRequest<AuthResponseData>('/authentification/verifier-otp', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    if (res.success && res.data?.token) {
+      await tokenStorage.set(res.data.token);
+    }
+    return res;
+  },
+
+  renvoyerOtp2Fa: async (
+    payload: RenvoyerOtp2FaPayload
+  ): Promise<ApiResponse<AuthResponseData>> => {
+    return apiRequest<AuthResponseData>('/authentification/renvoyer-otp', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
   },
 
   profil: async (): Promise<ApiResponse<{ user: AuthResponseData['user'] }>> => {

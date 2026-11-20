@@ -52,6 +52,19 @@ return [
     'payout_otp_ttl_minutes' => (int) env('PAYOUT_OTP_TTL_MINUTES', 3),
     'payout_max_otp_attempts' => (int) env('PAYOUT_MAX_OTP_ATTEMPTS', 3),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Double Authentification (2FA OTP) pour les Rôles Administrateurs
+    |--------------------------------------------------------------------------
+    |
+    | Tout compte possédant un rôle d'administration (Super Admin Principal,
+    | Super Admin Technique, Secrétaire, Responsable de zone ou Admin)
+    | nécessite une validation de code OTP à usage unique pour se connecter.
+    |
+    */
+    'admin_2fa_otp_ttl_minutes' => (int) env('ADMIN_2FA_OTP_TTL_MINUTES', 5),
+    'admin_2fa_max_otp_attempts' => (int) env('ADMIN_2FA_MAX_OTP_ATTEMPTS', 3),
+
     'tarifs_officiels' => [
         'visite' => 500,
         'deblocage_coordonnees' => 50,

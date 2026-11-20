@@ -40,6 +40,8 @@ use Illuminate\Support\Facades\Route;
 // Routes publiques d'inscription et d'authentification
 Route::post('/inscription', [InscriptionController::class, 'inscription']);
 Route::post('/authentification', [InscriptionController::class, 'authentification']);
+Route::post('/authentification/verifier-otp', [InscriptionController::class, 'verifierOtp2Fa']);
+Route::post('/authentification/renvoyer-otp', [InscriptionController::class, 'renvoyerOtp2Fa']);
 
 // Webhook public Kkiapay / passerelle agnostique (appelé par les serveurs de paiement)
 Route::post('/kkiapay/webhook', [PaymentController::class, 'webhook']);

@@ -128,6 +128,33 @@ class MultiChannelNotificationService
     }
 
     /**
+     * Expédition prioritaire du code OTP de double authentification pour la connexion d'un administrateur.
+     */
+    public function notifierOtpConnexionAdmin(User $admin, string $codeOtp): void
+    {
+        $roleName = $admin->getRoleNames()->first() ?? 'Administrateur';
+        $ttl = (int) config('emobilier.admin_2fa_otp_ttl_minutes', 5);
+        $msgConfidentiel = "E-MOBILIER SÉCURITÉ : Votre code de double authentification ({$roleName}) est [{$codeOtp}]. Valable {$ttl} minutes. Ne le communiquez à personne.";
+        $msgPublic = "Code OTP expédié pour la double authentification de l'administrateur.";
+        $refEvent = '2FA-AUTH-' . date('YmdHis') . '-' . $admin->id;
+
+        Log::channel('single')->info("[2FA_OTP_ADMIN] Code OTP de connexion pour {$admin->email} ({$admin->telephone}) : {$codeOtp}");
+
+        $this->dispatchWithFallback(
+            canal: 'whatsapp',
+            filePriorite: 'critique-securite',
+            destinataireType: 'admin_connexion',
+            destinataireIdentifiant: $admin->telephone ?: ($admin->email ?? "USER#{$admin->id}"),
+            sujet: 'Code de Sécurité OTP Connexion Admin - E-Mobilier',
+            contenuPublic: $msgPublic,
+            contenuConfidentiel: $msgConfidentiel,
+            montant: null,
+            userId: $admin->id,
+            referenceEvenement: $refEvent
+        );
+    }
+
+    /**
      * Expédition prioritaire du code OTP de retrait pour Justin MAGNIDE.
      */
     public function notifierOtpRetrait(Retrait $retrait, string $codeOtp): void
