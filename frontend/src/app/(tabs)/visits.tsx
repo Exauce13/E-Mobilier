@@ -1,24 +1,18 @@
 import { router } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   FlatList,
-  Linking,
-  Modal,
-  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { InstitutionHeader } from '@/components/ui/institution-header';
 import { BottomTabInset, Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
 import { useTheme } from '@/hooks/use-theme';
@@ -26,22 +20,23 @@ import { visitesApi } from '@/services/api';
 import type { VisiteBackendItem } from '@/types/api';
 import { formatFcfa } from '@/types/property';
 
+const STATUS_TABS = [
+  { key: 'tous', label: 'Toutes' },
+  { key: 'pending', label: 'En attente' },
+  { key: 'confirmed', label: 'Confirmées' },
+  { key: 'completed', label: 'Terminées' },
+  { key: 'cancelled', label: 'Annulées' },
+] as const;
+
 export default function VisitsScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const { isAuthenticated, openAuthModal, user, isAgentMobilier } = useAuth();
+  const { isAuthenticated, openAuthModal, isAgentMobilier, isAdminStaff } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<'upcoming' | 'history'>('upcoming');
+  const [statusFilter, setStatusFilter] = useState<string>('tous');
   const [visits, setVisits] = useState<VisiteBackendItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-
-  // Modals (Stitch exact)
-  const [detailModalOpen, setDetailModalOpen] = useState(false);
-  const [otpModalOpen, setOtpModalOpen] = useState(false);
-  const [selectedVisit, setSelectedVisit] = useState<VisiteBackendItem | null>(null);
-  const [otpCode, setOtpCode] = useState('');
-  const [validatingOtp, setValidatingOtp] = useState(false);
 
   const loadVisits = useCallback(async () => {
     if (!isAuthenticated) {
@@ -49,17 +44,11 @@ export default function VisitsScreen() {
       setLoading(false);
       return;
     }
-    try {
-      const res = await visitesApi.getMyVisits();
-      if (res.success && res.data) {
-        setVisits(res.data.data || []);
-      }
-    } catch {
-      // Fallback
-    } finally {
-      setLoading(false);
+    const res = await visitesApi.getMyVisits(statusFilter === 'tous' ? undefined : statusFilter);
+    if (res.success && res.data) {
+      setVisits(res.data.data || []);
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, statusFilter]);
 
   useEffect(() => {
     let active = true;
@@ -80,955 +69,241 @@ export default function VisitsScreen() {
     setRefreshing(false);
   };
 
-  const handleOpenDetail = (v: VisiteBackendItem) => {
-    setSelectedVisit(v);
-    setDetailModalOpen(true);
+  const handleCancel = (visitId: number) => {
+    Alert.alert(
+      'Annuler cette visite ?',
+      'Cette action marquera la demande de visite comme annulée.',
+      [
+        { text: 'Non', style: 'cancel' },
+        {
+          text: 'Oui, annuler',
+          style: 'destructive',
+          onPress: async () => {
+            const res = await visitesApi.cancelVisit(visitId);
+            if (res.success) {
+              await loadVisits();
+            } else {
+              Alert.alert('Erreur', res.message || "Impossible d'annuler.");
+            }
+          },
+        },
+      ]
+    );
   };
-
-  const handleOpenOtp = (v: VisiteBackendItem) => {
-    setSelectedVisit(v);
-    setOtpCode('');
-    setOtpModalOpen(true);
-  };
-
-  const handleValidateOtp = async () => {
-    if (!selectedVisit) return;
-    if (otpCode.length < 4) {
-      Alert.alert('Code invalide', 'Veuillez saisir le code OTP à 6 chiffres communiqué par le client.');
-      return;
-    }
-
-    setValidatingOtp(true);
-    try {
-      const res = await visitesApi.validerOtp(selectedVisit.id, otpCode);
-      if (res.success) {
-        Alert.alert(
-          'Procès-Verbal Scellé',
-          `La présence sur le terrain a été validée contradictoirement par OTP. Le séquestre bancaire est libéré.`
-        );
-        setOtpModalOpen(false);
-        await loadVisits();
-      } else {
-        Alert.alert('Erreur de validation', res.message || 'Code OTP incorrect.');
-      }
-    } catch (err: any) {
-      Alert.alert('Erreur', err?.message || 'Erreur réseau');
-    } finally {
-      setValidatingOtp(false);
-    }
-  };
-
-  const filteredVisits = visits.filter((v) => {
-    if (activeTab === 'upcoming') {
-      return v.status === 'confirmed' || v.status === 'pending' || v.status === 'in_progress';
-    }
-    return v.status === 'completed' || v.status === 'cancelled';
-  });
 
   if (!isAuthenticated) {
     return (
-      <View style={[styles.container, { backgroundColor: theme.surface }]}>
-        <InstitutionHeader />
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
         <View style={styles.authGate}>
-          <SymbolView
-            name={{ ios: 'figure.walk', android: 'hail', web: 'hail' }}
-            size={48}
-            tintColor={theme.primaryContainer}
-          />
-          <Text style={[styles.gateTitle, { color: theme.text }]}>Visites Foncieres Sécurisées</Text>
+          <Text style={[styles.gateTitle, { color: theme.text }]}>Mes Visites Physiques</Text>
           <Text style={[styles.gateDesc, { color: theme.textSecondary }]}>
-            Connectez-vous pour accéder à vos rendez-vous terrain encadrés par nos agents assermentés.
+            Connectez-vous pour consulter vos demandes de visites (500 F CFA) et rendez-vous confirmés.
           </Text>
-          <Pressable
-            onPress={() => openAuthModal('login')}
-            style={[styles.gateBtn, { backgroundColor: theme.primaryContainer }]}>
-            <Text style={styles.gateBtnText}>Se connecter</Text>
+          <Pressable onPress={() => openAuthModal('login')} style={[styles.primaryBtn, { backgroundColor: theme.primary }]}>
+            <Text style={styles.primaryBtnText}>Se connecter</Text>
           </Pressable>
         </View>
-      </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.surface }]}>
-      <InstitutionHeader />
-
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={theme.primaryContainer} />
-        }
+    <SafeAreaView edges={['top']} style={[styles.container, { backgroundColor: theme.background }]}>
+      <FlatList
+        data={visits}
+        keyExtractor={(item) => String(item.id)}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={theme.primary} />}
         contentContainerStyle={[
-          styles.scrollContent,
+          styles.list,
           { paddingBottom: BottomTabInset + Spacing.six + insets.bottom },
-        ]}>
-        {/* 1. AGENT IDENTITY CARD (STITCH) */}
-        <View
-          style={[
-            styles.agentIdentityCard,
-            { backgroundColor: theme.surfaceContainerLowest, borderColor: theme.cardBorder },
-          ]}>
-          <View style={styles.agentTopRow}>
-            <View style={styles.agentAvatarBox}>
-              <SymbolView
-                name={{ ios: 'person.crop.circle.badge.checkmark', android: 'verified_user', web: 'verified_user' }}
-                size={38}
-                tintColor={theme.primaryContainer}
-              />
-            </View>
-
-            <View style={styles.agentInfoCol}>
-              <View style={styles.agentNameBadgeRow}>
-                <Text style={[styles.agentNameText, { color: theme.text }]}>
-                  {user?.name || 'M. Pamphile Dossou'}
-                </Text>
-                <View style={[styles.agreePill, { backgroundColor: theme.badgeGreenBg }]}>
-                  <Text style={[styles.agreePillText, { color: theme.badgeGreenText }]}>Agréé</Text>
-                </View>
-              </View>
-
-              <Text style={[styles.agentSubText, { color: theme.textSecondary }]}>
-                Agrément n° 2024-AG-0412 • Cabinet Littoral, Cotonou
-              </Text>
-
-              <View style={styles.agentRtkRow}>
-                <View style={[styles.greenLiveDot, { backgroundColor: theme.success }]} />
-                <Text style={[styles.rtkText, { color: theme.primaryContainer }]}>
-                  En service terrain • GPS RTK ±1.5m
+        ]}
+        ListHeaderComponent={
+          <View style={styles.headerBlock}>
+            <View style={styles.headerRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.pageTitle, { color: theme.text }]}>Suivi des Visites</Text>
+                <Text style={[styles.pageSub, { color: theme.textSecondary }]}>
+                  {isAdminStaff
+                    ? 'Vue globale administrateur'
+                    : isAgentMobilier
+                    ? 'Visites reçues & demandées (coordonnées protégées)'
+                    : 'Vos demandes de visites physiques'}
                 </Text>
               </View>
+              {isAdminStaff && (
+                <Pressable
+                  onPress={() => router.push('/admin' as any)}
+                  style={[styles.adminBtn, { backgroundColor: theme.navy }]}>
+                  <Text style={styles.adminBtnText}>Back-Office</Text>
+                </Pressable>
+              )}
             </View>
-          </View>
 
-          <View style={[styles.agentTrustBadges, { borderTopColor: theme.cardBorder }]}>
-            <View style={styles.trustItem}>
-              <Text style={[styles.trustValue, { color: theme.tertiary }]}>★ 4.9</Text>
-              <Text style={[styles.trustLabel, { color: theme.textSecondary }]}>48 sans litige</Text>
-            </View>
-            <View style={styles.trustItem}>
-              <Text style={[styles.trustValue, { color: theme.primaryContainer }]}>100%</Text>
-              <Text style={[styles.trustLabel, { color: theme.textSecondary }]}>PV ANDF scellés</Text>
-            </View>
-            <View style={styles.trustItem}>
-              <Text style={[styles.trustValue, { color: theme.navy }]}>BCEAO</Text>
-              <Text style={[styles.trustLabel, { color: theme.textSecondary }]}>Séquestre vérifié</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* 2. THREE METRICS COUNTERS (STITCH) */}
-        <View style={styles.metricsGrid}>
-          <View
-            style={[
-              styles.metricCard,
-              { backgroundColor: theme.surfaceContainerLowest, borderColor: theme.cardBorder },
-            ]}>
-            <Text style={[styles.metricLabel, { color: theme.textSecondary }]}>Visites du jour</Text>
-            <Text style={[styles.metricVal, { color: theme.primaryContainer }]}>3</Text>
-            <Text style={[styles.metricSub, { color: theme.success }]}>1 en cours</Text>
-          </View>
-
-          <View
-            style={[
-              styles.metricCard,
-              { backgroundColor: theme.surfaceContainerLowest, borderColor: theme.cardBorder },
-            ]}>
-            <Text style={[styles.metricLabel, { color: theme.textSecondary }]}>PV scellés ce mois</Text>
-            <Text style={[styles.metricVal, { color: theme.text }]}>24</Text>
-            <Text style={[styles.metricSub, { color: theme.textSecondary }]}>ANDF Notariat</Text>
-          </View>
-
-          <View
-            style={[
-              styles.metricCard,
-              { backgroundColor: theme.surfaceContainerLowest, borderColor: theme.cardBorder },
-            ]}>
-            <Text style={[styles.metricLabel, { color: theme.textSecondary }]}>Présence OTP</Text>
-            <Text style={[styles.metricVal, { color: theme.tertiary }]}>100%</Text>
-            <Text style={[styles.metricSub, { color: theme.textSecondary }]}>Contradictoire</Text>
-          </View>
-        </View>
-
-        {/* 3. TABS: À VENIR / HISTORIQUE (STITCH) */}
-        <View style={[styles.tabsBar, { backgroundColor: theme.surfaceContainerLow }]}>
-          <Pressable
-            onPress={() => setActiveTab('upcoming')}
-            style={[
-              styles.tabBtn,
-              activeTab === 'upcoming' && { backgroundColor: theme.surfaceContainerLowest },
-            ]}>
-            <Text
-              style={[
-                styles.tabBtnText,
-                { color: activeTab === 'upcoming' ? theme.text : theme.textSecondary },
-              ]}>
-              À venir / En cours ({visits.length || 3})
-            </Text>
-          </Pressable>
-
-          <Pressable
-            onPress={() => setActiveTab('history')}
-            style={[
-              styles.tabBtn,
-              activeTab === 'history' && { backgroundColor: theme.surfaceContainerLowest },
-            ]}>
-            <Text
-              style={[
-                styles.tabBtnText,
-                { color: activeTab === 'history' ? theme.text : theme.textSecondary },
-              ]}>
-              Historique / Clôturées
-            </Text>
-          </Pressable>
-        </View>
-
-        {/* 4. VISITS LIST (STITCH DESIGN) */}
-        {loading ? (
-          <View style={styles.loaderWrap}>
-            <ActivityIndicator size="small" color={theme.primaryContainer} />
-          </View>
-        ) : filteredVisits.length > 0 ? (
-          filteredVisits.map((v) => {
-            const isConfirmed = v.status === 'confirmed';
-            return (
-              <View
-                key={v.id}
-                style={[
-                  styles.visitItemCard,
-                  { backgroundColor: theme.surfaceContainerLowest, borderColor: theme.cardBorder },
-                ]}>
-                <View style={styles.visitItemTop}>
-                  <View style={styles.visitDateHourRow}>
-                    <SymbolView
-                      name={{ ios: 'calendar', android: 'calendar_today', web: 'calendar_today' }}
-                      size={14}
-                      tintColor={theme.primaryContainer}
-                    />
-                    <Text style={[styles.visitHourText, { color: theme.text }]}>
-                      {new Date(v.scheduled_date).toLocaleString('fr-FR', {
-                        weekday: 'short',
-                        day: 'numeric',
-                        month: 'short',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </Text>
-                  </View>
-
-                  <View
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsRow}>
+              {STATUS_TABS.map((tab) => {
+                const active = statusFilter === tab.key;
+                return (
+                  <Pressable
+                    key={tab.key}
+                    onPress={() => setStatusFilter(tab.key)}
                     style={[
-                      styles.statusPill,
+                      styles.tabChip,
                       {
-                        backgroundColor: isConfirmed ? theme.badgeGreenBg : theme.badgeGoldBg,
+                        backgroundColor: active ? theme.primary : theme.cardBackground,
+                        borderColor: active ? theme.primary : theme.cardBorder,
                       },
                     ]}>
-                    <Text
-                      style={[
-                        styles.statusPillText,
-                        { color: isConfirmed ? theme.badgeGreenText : theme.badgeGoldText },
-                      ]}>
-                      {v.status.toUpperCase()}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Property and Client info */}
-                <Text style={[styles.visitPropertyTitle, { color: theme.text }]}>
-                  {(v.propriete as any)?.titre ||
-                    (v.propriete
-                      ? `${v.propriete.type === 'parcelle' ? 'Parcelle' : 'Villa'} ${v.propriete.commune}`
-                      : 'Villa Duplex 4 pièces')}
-                </Text>
-
-                <View style={styles.visitMetaRow}>
-                  <SymbolView
-                    name={{ ios: 'mappin.and.ellipse', android: 'location_on', web: 'location_on' }}
-                    size={13}
-                    tintColor={theme.primaryContainer}
-                  />
-                  <Text style={[styles.visitLocationText, { color: theme.textSecondary }]}>
-                    {v.propriete?.commune || 'Abomey-Calavi'}, {v.propriete?.quartier || 'Togbin'} (GPS RTK)
-                  </Text>
-                </View>
-
-                <View style={styles.visitClientRow}>
-                  <Text style={[styles.clientLabel, { color: theme.textSecondary }]}>Visiteur :</Text>
-                  <Text style={[styles.clientName, { color: theme.text }]}>
-                    {v.client?.name || 'Mme Aïcha Bio'}
-                  </Text>
-                  <Text style={[styles.quittanceTag, { color: theme.primaryContainer }]}>
-                    • Quittance 500 F Réglée
-                  </Text>
-                </View>
-
-                {/* Action Buttons */}
-                <View style={styles.visitCardActions}>
-                  <Pressable
-                    onPress={() => handleOpenDetail(v)}
-                    style={[
-                      styles.detailBtn,
-                      { backgroundColor: theme.surfaceContainerLow, borderColor: theme.cardBorder },
-                    ]}>
-                    <Text style={[styles.detailBtnText, { color: theme.text }]}>
-                      Détail & Itinéraire
+                    <Text style={{ color: active ? '#FFFFFF' : theme.text, fontWeight: '700', fontSize: 13 }}>
+                      {tab.label}
                     </Text>
                   </Pressable>
-
-                  <Pressable
-                    onPress={() => handleOpenOtp(v)}
-                    style={[styles.otpBtn, { backgroundColor: theme.primaryContainer }]}>
-                    <SymbolView
-                      name={{ ios: 'lock.circle.fill', android: 'qr_code_2', web: 'qr_code_2' }}
-                      size={14}
-                      tintColor="#FFFFFF"
-                    />
-                    <Text style={styles.otpBtnText}>Valider OTP Terrain</Text>
-                  </Pressable>
-                </View>
-              </View>
-            );
-          })
-        ) : (
-          /* Empty / Mock State when no dynamic visits */
-          <View
-            style={[
-              styles.emptyVisitsCard,
-              { backgroundColor: theme.surfaceContainerLowest, borderColor: theme.cardBorder },
-            ]}>
-            <SymbolView
-              name={{ ios: 'calendar.badge.exclamationmark', android: 'event_busy', web: 'event_busy' }}
-              size={36}
-              tintColor={theme.outline}
-            />
-            <Text style={[styles.emptyVisitsTitle, { color: theme.text }]}>
-              Aucune visite dans cette section
-            </Text>
-            <Text style={[styles.emptyVisitsDesc, { color: theme.textSecondary }]}>
-              Les rendez-vous planifiés et quittances de visite (500 FCFA) s'afficheront ici.
-            </Text>
-          </View>
-        )}
-      </ScrollView>
-
-      {/* 5. MODAL: DÉTAIL DE LA VISITE CONFIRMÉE (STITCH EXACT) */}
-      <Modal visible={detailModalOpen} animationType="slide" transparent>
-        <View style={styles.modalBackdrop}>
-          <View
-            style={[
-              styles.modalSheet,
-              { backgroundColor: theme.surfaceContainerLowest, paddingBottom: insets.bottom + 20 },
-            ]}>
-            <View style={styles.modalHeaderRow}>
-              <View style={styles.modalBadgeHeader}>
-                <View style={[styles.confirmBadge, { backgroundColor: theme.badgeGreenBg }]}>
-                  <Text style={[styles.confirmBadgeText, { color: theme.badgeGreenText }]}>
-                    CONFIRMÉE & SÉCURISÉE
-                  </Text>
-                </View>
-                <Text style={[styles.refText, { color: theme.textSecondary }]}>VIS-2025-089-BJ</Text>
-              </View>
-              <Pressable
-                onPress={() => setDetailModalOpen(false)}
-                style={[styles.modalCloseBtn, { backgroundColor: theme.surfaceContainerLow }]}>
-                <SymbolView
-                  name={{ ios: 'xmark', android: 'close', web: 'close' }}
-                  size={14}
-                  tintColor={theme.text}
-                />
-              </Pressable>
-            </View>
-
-            <ScrollView showsVerticalScrollIndicator={false} style={styles.modalContentScroll}>
-              <Text style={[styles.visitScheduleH1, { color: theme.text }]}>
-                Samedi 25 Janvier 2025 à 15h30
-              </Text>
-              <Text style={[styles.visitScheduleSub, { color: theme.textSecondary }]}>
-                Heure locale de Cotonou (GMT+1) • Mandant : Mme Aïcha Bio
-              </Text>
-
-              {/* Countdown Banner */}
-              <View style={[styles.countdownBox, { backgroundColor: theme.badgeGoldBg }]}>
-                <SymbolView
-                  name={{ ios: 'clock.badge.checkmark.fill', android: 'timer', web: 'timer' }}
-                  size={16}
-                  tintColor={theme.badgeGoldText}
-                />
-                <Text style={[styles.countdownText, { color: theme.badgeGoldText }]}>
-                  Rendez-vous sur le terrain dans 1j 04h 18m
-                </Text>
-              </View>
-
-              {/* Localisation & Itinéraire */}
-              <View
-                style={[
-                  styles.itineraryBox,
-                  { backgroundColor: theme.surfaceContainerLow, borderColor: theme.cardBorder },
-                ]}>
-                <Text style={[styles.itineraryTitle, { color: theme.text }]}>
-                  Localisation & Itinéraire
-                </Text>
-                <Text style={[styles.gpsCoordinates, { color: theme.primaryContainer }]}>
-                  📍 6.3541° N, 2.3188° E • Parcelle n° 14.821
-                </Text>
-                <Text style={[styles.landmarkDesc, { color: theme.textSecondary }]}>
-                  Point de repère : Carrefour IITA, 200m après pharmacie Togbin Plage.
-                </Text>
-
-                <Pressable
-                  onPress={() => Linking.openURL('https://maps.google.com/?q=6.3541,2.3188')}
-                  style={[styles.mapsBtn, { backgroundColor: theme.primaryContainer }]}>
-                  <SymbolView
-                    name={{ ios: 'location.fill', android: 'navigation', web: 'navigation' }}
-                    size={14}
-                    tintColor="#FFFFFF"
-                  />
-                  <Text style={styles.mapsBtnText}>Ouvrir l'Itinéraire GPS</Text>
-                </Pressable>
-              </View>
-
-              {/* Protocole Cadastral */}
-              <View
-                style={[
-                  styles.protocolBox,
-                  { backgroundColor: theme.surfaceContainerLow, borderColor: theme.cardBorder },
-                ]}>
-                <Text style={[styles.protocolTitle, { color: theme.text }]}>Protocole Cadastral</Text>
-                <Text style={[styles.protocolItem, { color: theme.textSecondary }]}>
-                  ✓ 4 Bornes cadastrales peintes et identifiées
-                </Text>
-                <Text style={[styles.protocolItem, { color: theme.textSecondary }]}>
-                  ✓ Quittance d'accompagnement de 500 FCFA enregistrée
-                </Text>
-                <Text style={[styles.protocolItem, { color: theme.textSecondary }]}>
-                  ✓ Procès-verbal contradictoire avec signature OTP
-                </Text>
-              </View>
+                );
+              })}
             </ScrollView>
           </View>
-        </View>
-      </Modal>
+        }
+        renderItem={({ item }) => {
+          const clientName = item.client
+            ? `${item.client.prenom ?? ''} ${item.client.name ?? ''}`.trim() || item.client.nom_complet || 'Client'
+            : `Demande #${item.id}`;
+          const prop = item.propriete;
 
-      {/* 6. MODAL: VALIDATION CODE OTP & ÉMARGEMENT (STITCH EXACT) */}
-      <Modal visible={otpModalOpen} animationType="slide" transparent>
-        <View style={styles.modalBackdrop}>
-          <View
-            style={[
-              styles.modalSheet,
-              { backgroundColor: theme.surfaceContainerLowest, paddingBottom: insets.bottom + 20 },
-            ]}>
-            <View style={styles.modalHeaderRow}>
-              <View>
-                <Text style={[styles.otpSheetTitle, { color: theme.text }]}>
-                  Validation OTP & Émargement
+          return (
+            <View style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder }]}>
+              <View style={styles.cardTop}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.refText, { color: theme.gold }]}>VIS-{String(item.id).padStart(5, '0')}</Text>
+                  <Text style={[styles.clientName, { color: theme.text }]}>{clientName}</Text>
+                  {item.client?.telephone ? (
+                    <Text style={[styles.phoneText, { color: theme.textSecondary }]}>
+                      📞 {item.client.telephone}
+                    </Text>
+                  ) : isAgentMobilier && !isAdminStaff ? (
+                    <Text style={[styles.maskedNote, { color: theme.textSecondary }]}>
+                      🔒 Coordonnées protégées (gestion E-Mobilier)
+                    </Text>
+                  ) : null}
+                </View>
+
+                <View
+                  style={[
+                    styles.statusBadge,
+                    {
+                      backgroundColor:
+                        item.status === 'confirmed'
+                          ? theme.badgeGreenBg
+                          : item.status === 'cancelled'
+                          ? '#FEE2E2'
+                          : theme.badgeGoldBg,
+                    },
+                  ]}>
+                  <Text
+                    style={{
+                      fontSize: 11,
+                      fontWeight: '800',
+                      color:
+                        item.status === 'confirmed'
+                          ? theme.badgeGreenText
+                          : item.status === 'cancelled'
+                          ? '#B91C1C'
+                          : theme.badgeGoldText,
+                    }}>
+                    {item.status.toUpperCase()}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={[styles.infoStrip, { backgroundColor: theme.backgroundElement }]}>
+                <Text style={[styles.infoText, { color: theme.text }]}>
+                  📅 {new Date(item.scheduled_date).toLocaleString('fr-FR')}
                 </Text>
-                <Text style={[styles.otpSheetSub, { color: theme.textSecondary }]}>
-                  Terrain R+1 Viabilisé 500 m² • Togbin Plage
+                <Text style={[styles.infoText, { color: theme.primary }]}>
+                  {item.is_fee_paid ? '✅ Frais 500 F acquittés' : '⏳ Paiement requis'}
                 </Text>
               </View>
-              <Pressable
-                onPress={() => setOtpModalOpen(false)}
-                style={[styles.modalCloseBtn, { backgroundColor: theme.surfaceContainerLow }]}>
-                <SymbolView
-                  name={{ ios: 'xmark', android: 'close', web: 'close' }}
-                  size={14}
-                  tintColor={theme.text}
-                />
-              </Pressable>
-            </View>
 
-            {/* GPS Match Tag */}
-            <View style={[styles.gpsMatchTag, { backgroundColor: theme.badgeGreenBg }]}>
-              <SymbolView
-                name={{ ios: 'location.circle.fill', android: 'my_location', web: 'my_location' }}
-                size={14}
-                tintColor={theme.badgeGreenText}
-              />
-              <Text style={[styles.gpsMatchText, { color: theme.badgeGreenText }]}>
-                GPS TERRAIN CONFORME ±1.8m • 6.3541° N, 2.3188° E
-              </Text>
-            </View>
-
-            {/* OTP Input Field */}
-            <View style={styles.otpFieldWrap}>
-              <Text style={[styles.otpInputLabel, { color: theme.text }]}>
-                Code OTP de Présence (6 chiffres) :
-              </Text>
-              <Text style={[styles.otpInstruction, { color: theme.textSecondary }]}>
-                Demandez au visiteur le code reçu par SMS/Notification sur son téléphone.
-              </Text>
-              <TextInput
-                value={otpCode}
-                onChangeText={setOtpCode}
-                placeholder="Ex: 849201"
-                placeholderTextColor={theme.outline}
-                keyboardType="numeric"
-                maxLength={6}
-                style={[
-                  styles.otpInputBox,
-                  {
-                    backgroundColor: theme.surfaceContainerLow,
-                    borderColor: theme.cardBorder,
-                    color: theme.text,
-                  },
-                ]}
-              />
-            </View>
-
-            {/* Émargement Bilatéral Button */}
-            <Pressable
-              disabled={validatingOtp}
-              onPress={handleValidateOtp}
-              style={({ pressed }) => [
-                styles.validateOtpBtn,
-                { backgroundColor: theme.primaryContainer },
-                (pressed || validatingOtp) && { opacity: 0.9 },
-              ]}>
-              {validatingOtp ? (
-                <ActivityIndicator color="#FFFFFF" size="small" />
-              ) : (
-                <>
-                  <SymbolView
-                    name={{ ios: 'checkmark.seal.fill', android: 'verified', web: 'verified' }}
-                    size={16}
-                    tintColor="#FFFFFF"
-                  />
-                  <Text style={styles.validateOtpBtnText}>Sceller le PV & Émarger</Text>
-                </>
+              {prop && (
+                <Pressable
+                  onPress={() => router.push(`/property/${prop.id}` as any)}
+                  style={[styles.propBox, { borderColor: theme.cardBorder }]}>
+                  <Text style={[styles.propTitle, { color: theme.text }]}>
+                    {prop.type.toUpperCase()} — {prop.commune} {prop.quartier ? `(${prop.quartier})` : ''}
+                  </Text>
+                  <Text style={[styles.propPrice, { color: theme.primaryDark }]}>{formatFcfa(prop.prix)}</Text>
+                </Pressable>
               )}
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
-    </View>
+
+              {item.instructions_itineraire ? (
+                <Text style={[styles.instructions, { color: theme.textSecondary }]}>
+                  📍 Consignes : {item.instructions_itineraire}
+                </Text>
+              ) : null}
+
+              {item.compte_rendu ? (
+                <Text style={[styles.instructions, { color: theme.text }]}>
+                  📝 Compte-rendu : {item.compte_rendu}
+                </Text>
+              ) : null}
+
+              {item.status === 'pending' && (
+                <Pressable
+                  onPress={() => handleCancel(item.id)}
+                  style={[styles.cancelBtn, { borderColor: '#FCA5A5' }]}>
+                  <Text style={styles.cancelBtnText}>Annuler la visite</Text>
+                </Pressable>
+              )}
+            </View>
+          );
+        }}
+        ListEmptyComponent={
+          loading ? (
+            <ActivityIndicator size="large" color={theme.primary} style={{ marginTop: 40 }} />
+          ) : (
+            <View style={styles.emptyBox}>
+              <Text style={[styles.emptyTitle, { color: theme.text }]}>Aucune visite enregistrée</Text>
+              <Text style={[styles.emptyDesc, { color: theme.textSecondary }]}>
+                Ouvrez la fiche d'un bien depuis le catalogue pour planifier une visite physique (500 F CFA).
+              </Text>
+            </View>
+          )
+        }
+      />
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  authGate: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: Spacing.four,
-    gap: 12,
-  },
-  gateTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    textAlign: 'center',
-  },
-  gateDesc: {
-    fontSize: 13,
-    textAlign: 'center',
-    lineHeight: 18,
-  },
-  gateBtn: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 12,
-    marginTop: 8,
-  },
-  gateBtnText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  scrollContent: {
-    paddingHorizontal: Spacing.three,
-    paddingTop: Spacing.three,
-    gap: Spacing.three,
-  },
-  agentIdentityCard: {
-    borderRadius: 18,
-    borderWidth: 1,
-    padding: Spacing.three,
-    gap: 12,
-  },
-  agentTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  agentAvatarBox: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  agentInfoCol: {
-    flex: 1,
-    gap: 2,
-  },
-  agentNameBadgeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  agentNameText: {
-    fontSize: 15,
-    fontWeight: '800',
-  },
-  agreePill: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  agreePillText: {
-    fontSize: 9,
-    fontWeight: '800',
-  },
-  agentSubText: {
-    fontSize: 11,
-  },
-  agentRtkRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 2,
-  },
-  greenLiveDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  rtkText: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  agentTrustBadges: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    borderTopWidth: 1,
-    paddingTop: 8,
-  },
-  trustItem: {
-    alignItems: 'center',
-  },
-  trustValue: {
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  trustLabel: {
-    fontSize: 10,
-  },
-  metricsGrid: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  metricCard: {
-    flex: 1,
-    borderRadius: 14,
-    borderWidth: 1,
-    padding: 10,
-    gap: 2,
-  },
-  metricLabel: {
-    fontSize: 10,
-    fontWeight: '600',
-  },
-  metricVal: {
-    fontSize: 18,
-    fontWeight: '800',
-    letterSpacing: -0.3,
-  },
-  metricSub: {
-    fontSize: 9,
-    fontWeight: '700',
-  },
-  tabsBar: {
-    flexDirection: 'row',
-    padding: 3,
-    borderRadius: 10,
-  },
-  tabBtn: {
-    flex: 1,
-    paddingVertical: 8,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  tabBtnText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  loaderWrap: {
-    paddingVertical: 20,
-    alignItems: 'center',
-  },
-  visitItemCard: {
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: Spacing.three,
-    gap: 8,
-  },
-  visitItemTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  visitDateHourRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  visitHourText: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  statusPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  statusPillText: {
-    fontSize: 10,
-    fontWeight: '800',
-  },
-  visitPropertyTitle: {
-    fontSize: 15,
-    fontWeight: '800',
-  },
-  visitMetaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  visitLocationText: {
-    fontSize: 12,
-  },
-  visitClientRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  clientLabel: {
-    fontSize: 11,
-  },
-  clientName: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  quittanceTag: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  visitCardActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 4,
-  },
-  detailBtn: {
-    flex: 1,
-    paddingVertical: 9,
-    borderRadius: 9,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  detailBtnText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  otpBtn: {
-    flex: 1.2,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 9,
-    borderRadius: 9,
-  },
-  otpBtnText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  emptyVisitsCard: {
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  emptyVisitsTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  emptyVisitsDesc: {
-    fontSize: 12,
-    textAlign: 'center',
-  },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.65)',
-    justifyContent: 'flex-end',
-  },
-  modalSheet: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: Spacing.four,
-    gap: 12,
-    maxHeight: '85%',
-  },
-  modalHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  modalBadgeHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  confirmBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  confirmBadgeText: {
-    fontSize: 10,
-    fontWeight: '800',
-  },
-  refText: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  modalCloseBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalContentScroll: {
-    maxHeight: 400,
-  },
-  visitScheduleH1: {
-    fontSize: 17,
-    fontWeight: '800',
-    marginTop: 6,
-  },
-  visitScheduleSub: {
-    fontSize: 12,
-    marginTop: 2,
-  },
-  countdownBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    padding: 10,
-    borderRadius: 10,
-    marginTop: 10,
-  },
-  countdownText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  itineraryBox: {
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 12,
-    gap: 6,
-    marginTop: 12,
-  },
-  itineraryTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  gpsCoordinates: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  landmarkDesc: {
-    fontSize: 11,
-  },
-  mapsBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 10,
-    borderRadius: 8,
-    marginTop: 6,
-  },
-  mapsBtnText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  protocolBox: {
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 12,
-    gap: 4,
-    marginTop: 12,
-  },
-  protocolTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    marginBottom: 2,
-  },
-  protocolItem: {
-    fontSize: 11,
-    lineHeight: 16,
-  },
-  otpSheetTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  otpSheetSub: {
-    fontSize: 11,
-    marginTop: 1,
-  },
-  gpsMatchTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    padding: 8,
-    borderRadius: 8,
-  },
-  gpsMatchText: {
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  otpFieldWrap: {
-    gap: 6,
-    marginTop: 4,
-  },
-  otpInputLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  otpInstruction: {
-    fontSize: 11,
-  },
-  otpInputBox: {
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    fontSize: 22,
-    fontWeight: '800',
-    letterSpacing: 8,
-    textAlign: 'center',
-  },
-  validateOtpBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 14,
-    borderRadius: 12,
-    marginTop: 6,
-  },
-  validateOtpBtnText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '800',
-  },
+  container: { flex: 1 },
+  list: { paddingHorizontal: Spacing.three, paddingTop: Spacing.two, gap: Spacing.three },
+  headerBlock: { gap: Spacing.two },
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  pageTitle: { fontSize: 22, fontWeight: '900' },
+  pageSub: { fontSize: 13 },
+  adminBtn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10 },
+  adminBtnText: { color: '#FFFFFF', fontSize: 12, fontWeight: '800' },
+  tabsRow: { gap: 8, paddingVertical: 4 },
+  tabChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 18, borderWidth: 1 },
+  card: { borderRadius: 18, borderWidth: 1, padding: Spacing.three, gap: 10, marginBottom: Spacing.two },
+  cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 },
+  refText: { fontSize: 11, fontWeight: '800' },
+  clientName: { fontSize: 16, fontWeight: '800', marginTop: 2 },
+  phoneText: { fontSize: 13, marginTop: 2 },
+  maskedNote: { fontSize: 12, marginTop: 2, fontStyle: 'italic' },
+  statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
+  infoStrip: { borderRadius: 12, padding: 10, gap: 4 },
+  infoText: { fontSize: 13, fontWeight: '600' },
+  propBox: { borderWidth: 1, borderRadius: 12, padding: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  propTitle: { fontSize: 13, fontWeight: '700', flex: 1 },
+  propPrice: { fontSize: 13, fontWeight: '800' },
+  instructions: { fontSize: 13, lineHeight: 18 },
+  cancelBtn: { borderWidth: 1, borderRadius: 10, paddingVertical: 9, alignItems: 'center' },
+  cancelBtnText: { color: '#DC2626', fontWeight: '700', fontSize: 13 },
+  emptyBox: { alignItems: 'center', paddingVertical: Spacing.six, gap: 8 },
+  emptyTitle: { fontSize: 17, fontWeight: '800' },
+  emptyDesc: { fontSize: 13, textAlign: 'center', paddingHorizontal: Spacing.four },
+  authGate: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: Spacing.five, gap: 12 },
+  gateTitle: { fontSize: 20, fontWeight: '800', textAlign: 'center' },
+  gateDesc: { fontSize: 14, textAlign: 'center' },
+  primaryBtn: { borderRadius: 14, paddingHorizontal: 24, paddingVertical: 14 },
+  primaryBtnText: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
 });

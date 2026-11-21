@@ -407,10 +407,6 @@ export const proprietesApi = {
     });
   },
 
-  store: async (formData: FormData): Promise<ApiResponse<any>> => {
-    return proprietesApi.create(formData);
-  },
-
   update: async (id: number | string, payload: FormData | Record<string, any>): Promise<ApiResponse<any>> => {
     if (typeof FormData !== 'undefined' && payload instanceof FormData) {
       return apiRequest(`/proprietes/${id}`, {
@@ -438,13 +434,6 @@ export const proprietesApi = {
         kkiapay_transaction_id: transactionId,
       }),
     });
-  },
-
-  demasquer: async (
-    id: number | string,
-    transactionId = 'TX_DIRECT'
-  ): Promise<ApiResponse<BackendProperty>> => {
-    return proprietesApi.unlockDetails(id, transactionId);
   },
 };
 
@@ -516,27 +505,6 @@ export const visitesApi = {
     return apiRequest('/visites', {
       method: 'POST',
       body: JSON.stringify(payload),
-    });
-  },
-
-  demander: async (payload: {
-    propriete_id?: number | string;
-    property_id?: number | string;
-    scheduled_date?: string;
-    date_visite_souhaitee?: string;
-    kkiapay_transaction_id?: string;
-  }): Promise<ApiResponse<{ visite: VisiteBackendItem; paiement: any }>> => {
-    return visitesApi.requestVisit({
-      property_id: payload.property_id || payload.propriete_id || 0,
-      scheduled_date: payload.scheduled_date || payload.date_visite_souhaitee || new Date().toISOString(),
-      kkiapay_transaction_id: payload.kkiapay_transaction_id || 'TX_VISITE',
-    });
-  },
-
-  validerOtp: async (id: number | string, code_otp: string): Promise<ApiResponse<any>> => {
-    return apiRequest(`/visites/${id}/valider-presence`, {
-      method: 'POST',
-      body: JSON.stringify({ code_otp }),
     });
   },
 
@@ -877,20 +845,12 @@ export const financeApi = {
     return apiRequest(`/finance/retraits?page=${page}`, { method: 'GET' });
   },
   initierRetrait: async (
-    montantOrPayload:
-      | number
-      | { montant: number; methode?: string; type_compte?: 'mobile_money' | 'virement_bancaire' },
+    montant: number,
     typeCompte: 'mobile_money' | 'virement_bancaire' = 'mobile_money'
   ): Promise<ApiResponse<any>> => {
-    const montant = typeof montantOrPayload === 'number' ? montantOrPayload : montantOrPayload.montant;
-    const compte =
-      typeof montantOrPayload === 'number'
-        ? typeCompte
-        : montantOrPayload.type_compte ||
-          (montantOrPayload.methode === 'bank' ? 'virement_bancaire' : 'mobile_money');
     return apiRequest('/finance/retraits/initier', {
       method: 'POST',
-      body: JSON.stringify({ montant, type_compte: compte }),
+      body: JSON.stringify({ montant, type_compte: typeCompte }),
     });
   },
   confirmerOtpRetrait: async (id: number, codeOtp: string): Promise<ApiResponse<any>> => {

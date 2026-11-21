@@ -15,10 +15,6 @@ export interface PropertyItem {
   type: Exclude<PropertyCategory, 'tous'>;
   transactionType: TransactionType;
   title: string;
-  city?: string;
-  address?: string;
-  surfaceArea?: number;
-  bedrooms?: number;
   location: {
     commune: string;
     arrondissement?: string;
@@ -127,10 +123,6 @@ export function mapBackendPropertyToItem(
     type: prop.type,
     transactionType: prop.transaction_type,
     title: `${typeLabel} ${actionLabel} - ${locationSuffix}`,
-    city: prop.commune,
-    address: prop.quartier ? `${prop.quartier}, ${prop.commune}` : prop.commune,
-    surfaceArea: Number(prop.surface) || undefined,
-    bedrooms: prop.nombres_chambres || undefined,
     location: {
       commune: prop.commune,
       arrondissement: prop.arrondissement ?? undefined,

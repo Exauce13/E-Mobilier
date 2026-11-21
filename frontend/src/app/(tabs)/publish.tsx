@@ -1,7 +1,6 @@
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
 import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -11,969 +10,596 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { KkiapayCheckoutModal } from '@/components/kkiapay-checkout-modal';
-import { InstitutionHeader } from '@/components/ui/institution-header';
 import { BENIN_COMMUNES } from '@/constants/locations';
 import { BottomTabInset, Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
 import { useTheme } from '@/hooks/use-theme';
 import { proprietesApi } from '@/services/api';
 import type { PaymentOperationType } from '@/types/api';
-import { formatFcfa } from '@/types/property';
 
 type PickedAsset = {
   uri: string;
   name: string;
   mimeType: string;
+  kind: 'image' | 'video';
+  file?: File;
 };
 
-type DeclarantProfile = 'proprietaire' | 'agent_agree';
-type LegalDocType = 'titre_foncier' | 'convention_notariee' | 'attestation_recasement';
+type PickedDocument = {
+  uri: string;
+  name: string;
+  mimeType: string;
+  docType: 'titre_foncier' | 'convention_vente' | 'permis_habiter' | 'attestation_recasement' | 'autre';
+  file?: File;
+};
+
+async function appendPickedFileToFormData(
+  formData: FormData,
+  fieldName: string,
+  item: { uri: string; name: string; mimeType: string; file?: File }
+): Promise<void> {
+  if (Platform.OS === 'web') {
+    if (item.file) {
+      formData.append(fieldName, item.file, item.name);
+      return;
+    }
+    const response = await fetch(item.uri);
+    const blob = await response.blob();
+    formData.append(fieldName, blob, item.name);
+    return;
+  }
+
+  formData.append(fieldName, {
+    uri: item.uri,
+    name: item.name,
+    type: item.mimeType,
+  } as any);
+}
 
 export default function PublishScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { isAuthenticated, openAuthModal, isAgentMobilier, isAdminStaff } = useAuth();
 
-  const [step, setStep] = useState<1 | 2 | 3>(1);
-
-  // Step 1: Paramètres & Titre
-  const [declarantProfile, setDeclarantProfile] = useState<DeclarantProfile>(
-    isAgentMobilier ? 'agent_agree' : 'proprietaire'
-  );
-  const [propertyType, setPropertyType] = useState<'parcelle' | 'maison' | 'appartement'>('parcelle');
-  const [transactionType, setTransactionType] = useState<'vente' | 'location'>('vente');
-  const [legalDocType, setLegalDocType] = useState<LegalDocType>('titre_foncier');
-  const [tfNumber, setTfNumber] = useState('');
-
-  // Step 2: Informations du Foncier & Médias
-  const [title, setTitle] = useState('');
-  const [commune, setCommune] = useState('Abomey-Calavi');
-  const [quartier, setQuartier] = useState('Zoundja');
-  const [surface, setSurface] = useState('');
-  const [prix, setPrix] = useState('');
-  const [chambres, setChambres] = useState('0');
-  const [description, setDescription] = useState('');
-  const [photos, setPhotos] = useState<PickedAsset[]>([]);
-  const [documentFile, setDocumentFile] = useState<PickedAsset | null>(null);
-
-  // Step 3: Charte & Paiement
-  const [charteAccepted, setCharteAccepted] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [checkoutVisible, setCheckoutVisible] = useState(false);
-  const [createdPropertyId, setCreatedPropertyId] = useState<number | null>(null);
-
   const publicationFee = useMemo(() => {
     if (isAdminStaff) return 0;
-    if (declarantProfile === 'agent_agree') return 100;
+    if (isAgentMobilier) return 100;
     return 500;
-  }, [isAdminStaff, declarantProfile]);
+  }, [isAdminStaff, isAgentMobilier]);
 
-  const paymentOperationType: PaymentOperationType =
-    declarantProfile === 'agent_agree' ? 'publication_agent' : 'publication_client';
+  const paymentOperationType: PaymentOperationType = isAgentMobilier
+    ? 'publication_agent'
+    : 'publication_client';
 
-  const handlePickImages = async () => {
-    try {
-      const res = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsMultipleSelection: true,
-        selectionLimit: 5,
-        quality: 0.8,
-      });
+  const [propertyType, setPropertyType] = useState<'parcelle' | 'maison' | 'chambre'>('maison');
+  const [transactionType, setTransactionType] = useState<'vente' | 'location'>('location');
+  const [commune, setCommune] = useState('Cotonou');
+  const [arrondissement, setArrondissement] = useState('');
+  const [quartier, setQuartier] = useState('');
+  const [locationDetails, setLocationDetails] = useState('');
+  const [accessibilite, setAccessibilite] = useState('Voie pavée accessible');
+  const [eauCourant, setEauCourant] = useState('SONEB + SBEE (Compteur personnel)');
+  const [surface, setSurface] = useState('');
+  const [chambres, setChambres] = useState('2');
+  const [avanceMois, setAvanceMois] = useState('3');
+  const [prix, setPrix] = useState('');
+  const [isNegotiable, setIsNegotiable] = useState(true);
+  const [description, setDescription] = useState('');
 
-      if (!res.canceled && res.assets) {
-        const picked = res.assets.map((a, i) => ({
-          uri: a.uri,
-          name: a.fileName || `photo_${Date.now()}_${i}.jpg`,
-          mimeType: a.mimeType || 'image/jpeg',
-        }));
-        setPhotos((prev) => [...prev, ...picked].slice(0, 8));
-      }
-    } catch {
-      Alert.alert('Erreur', 'Impossible de sélectionner des images.');
+  const [medias, setMedias] = useState<PickedAsset[]>([]);
+  const [documents, setDocuments] = useState<PickedDocument[]>([]);
+  const [selectedDocType, setSelectedDocType] =
+    useState<PickedDocument['docType']>('titre_foncier');
+
+  const [submitting, setSubmitting] = useState(false);
+  const [checkoutVisible, setCheckoutVisible] = useState(false);
+
+  const handleSelectType = (nextType: 'parcelle' | 'maison' | 'chambre') => {
+    setPropertyType(nextType);
+    if (nextType === 'parcelle' && transactionType === 'location') {
+      setTransactionType('vente');
     }
   };
 
-  const handlePickDocument = async () => {
-    try {
-      const res = await DocumentPicker.getDocumentAsync({
-        type: ['application/pdf', 'image/*'],
-        copyToCacheDirectory: true,
-      });
+  const pickMedia = async () => {
+    const res = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images', 'videos'],
+      allowsMultipleSelection: true,
+      quality: 0.85,
+    });
+    if (res.canceled) return;
 
-      if (!res.canceled && res.assets && res.assets.length > 0) {
-        const f = res.assets[0];
-        setDocumentFile({
-          uri: f.uri,
-          name: f.name,
-          mimeType: f.mimeType || 'application/pdf',
-        });
-      }
-    } catch {
-      Alert.alert('Erreur', 'Impossible de charger le document.');
-    }
+    const added: PickedAsset[] = res.assets.map((asset, idx) => {
+      const isVideo = asset.type === 'video';
+      const fallbackName = isVideo ? `video_${Date.now()}_${idx}.mp4` : `photo_${Date.now()}_${idx}.jpg`;
+      return {
+        uri: asset.uri,
+        name: asset.fileName || fallbackName,
+        mimeType: asset.mimeType || (isVideo ? 'video/mp4' : 'image/jpeg'),
+        kind: isVideo ? 'video' : 'image',
+        file: (asset as any).file,
+      };
+    });
+    setMedias((prev) => [...prev, ...added]);
   };
 
-  const handleNextStep = () => {
-    if (step === 1) {
-      setStep(2);
-    } else if (step === 2) {
-      if (!title.trim()) {
-        Alert.alert('Champ requis', "Veuillez renseigner un titre pour l'annonce.");
-        return;
-      }
-      if (!prix || Number(prix) <= 0) {
-        Alert.alert('Champ requis', 'Veuillez saisir un prix valide en FCFA.');
-        return;
-      }
-      setStep(3);
-    }
+  const pickLegalDocument = async () => {
+    const res = await DocumentPicker.getDocumentAsync({
+      type: ['application/pdf', 'image/*'],
+      copyToCacheDirectory: true,
+    });
+    if (res.canceled || !res.assets?.[0]) return;
+    const file = res.assets[0];
+    setDocuments((prev) => [
+      ...prev,
+      {
+        uri: file.uri,
+        name: file.name || `document_${Date.now()}.pdf`,
+        mimeType: file.mimeType || 'application/pdf',
+        docType: selectedDocType,
+        file: (file as any).file,
+      },
+    ]);
   };
 
-  const handleFinalSubmit = async () => {
-    if (!isAuthenticated) {
-      openAuthModal('login');
-      return;
+  const validateForm = (): string | null => {
+    if (propertyType === 'parcelle' && transactionType === 'location') {
+      return 'Une parcelle ne peut pas être mise en location.';
     }
-    if (!charteAccepted) {
-      Alert.alert('Charte requise', 'Veuillez accepter la charte de conformité foncière.');
-      return;
+    if (!arrondissement.trim() || !quartier.trim()) {
+      return "L'arrondissement et le quartier sont obligatoires.";
     }
+    if (!accessibilite.trim() || !eauCourant.trim()) {
+      return "L'accessibilité et l'accès eau/électricité sont obligatoires.";
+    }
+    if (!surface.trim() || Number(surface) < 1) {
+      return 'Veuillez indiquer une surface valide en m².';
+    }
+    if (!prix.trim() || Number(prix) <= 0) {
+      return 'Veuillez indiquer un prix valide en F CFA.';
+    }
+    if (transactionType === 'location' && (!avanceMois.trim() || Number(avanceMois) < 0)) {
+      return "Veuillez indiquer le nombre de mois d'avance.";
+    }
+    if (medias.length === 0) {
+      return 'Ajoutez au moins une photo ou vidéo du bien (requis par le backend).';
+    }
+    if (transactionType === 'vente' && (propertyType === 'parcelle' || propertyType === 'maison') && documents.length === 0) {
+      return 'Pour une vente de maison ou parcelle, au moins un document justificatif (titre foncier, convention...) est obligatoire.';
+    }
+    return null;
+  };
 
+  const submitPropertyToBackend = async (kkiapayTxId?: string) => {
     setSubmitting(true);
     try {
       const formData = new FormData();
-      formData.append('titre', title.trim() || 'Bien foncier vérifié');
-      formData.append('type', propertyType === 'parcelle' ? 'parcelle' : propertyType === 'maison' ? 'maison' : 'chambre');
+      formData.append('type', propertyType);
       formData.append('transaction_type', transactionType);
       formData.append('commune', commune);
-      formData.append('quartier', quartier || 'Centre');
-      formData.append('prix', String(Number(prix.replace(/\s+/g, '')) || 1000000));
-      formData.append('surface', String(Number(surface) || 500));
-      formData.append('description', description.trim() || 'Bien foncier régularisé au cadastre national.');
+      formData.append('arrondissement', arrondissement.trim());
+      formData.append('quartier', quartier.trim());
+      if (locationDetails.trim()) formData.append('location_details', locationDetails.trim());
+      formData.append('accessibilite', accessibilite.trim());
+      formData.append('eau_courant', eauCourant.trim());
+      formData.append('surface', String(Number(surface)));
+      formData.append('nombres_chambres', propertyType === 'parcelle' ? '0' : String(Number(chambres) || 0));
+      formData.append('avance_mois', transactionType === 'location' ? String(Number(avanceMois) || 0) : '0');
+      formData.append('prix', String(Number(prix)));
+      formData.append('is_negotiable', isNegotiable ? '1' : '0');
+      if (description.trim()) formData.append('description', description.trim());
+      if (kkiapayTxId) formData.append('kkiapay_transaction_id', kkiapayTxId);
 
-      if (propertyType !== 'parcelle' && Number(chambres) > 0) {
-        formData.append('nombres_chambres', chambres);
+      for (const m of medias) {
+        const field = m.kind === 'video' ? 'videos[]' : 'photos[]';
+        await appendPickedFileToFormData(formData, field, m);
       }
 
-      photos.forEach((p, idx) => {
-        formData.append(`medias[${idx}]`, {
-          uri: p.uri,
-          name: p.name,
-          type: p.mimeType,
-        } as any);
-      });
-
-      if (documentFile) {
-        formData.append('documents[0][file]', {
-          uri: documentFile.uri,
-          name: documentFile.name,
-          type: documentFile.mimeType,
-        } as any);
-        formData.append('documents[0][type]', legalDocType);
+      for (let idx = 0; idx < documents.length; idx++) {
+        const doc = documents[idx];
+        await appendPickedFileToFormData(formData, `documents[${idx}]`, doc);
+        formData.append(`document_types[${idx}]`, doc.docType);
       }
 
-      const res = await proprietesApi.store(formData);
-      if (res.success && res.data) {
-        setCreatedPropertyId(Number(res.data.id));
-        if (publicationFee > 0) {
-          setCheckoutVisible(true);
-        } else {
-          Alert.alert(
-            'Publication soumise',
-            'Votre annonce est désormais en cours de validation par nos modérateurs fonciers.',
-            [{ text: 'Voir le catalogue', onPress: () => router.replace('/' as any) }]
-          );
-        }
-      } else {
-        Alert.alert('Erreur', res.message || 'Impossible de créer la propriété.');
+      const res = await proprietesApi.create(formData);
+      if (!res.success) {
+        const errText = res.errors
+          ? Object.values(res.errors).flat().join('\n')
+          : res.message || 'Erreur lors de la publication.';
+        Alert.alert('Publication refusée', errText);
+        return;
       }
-    } catch (err: any) {
-      Alert.alert('Erreur', err?.message || 'Erreur lors de la soumission.');
+
+      Alert.alert(
+        'Annonce soumise !',
+        res.message || 'Votre bien a été enregistré et transmis pour modération.',
+        [
+          { text: 'Voir mes annonces', onPress: () => router.push('/my-properties' as any) },
+          { text: 'OK' },
+        ]
+      );
+
+      setArrondissement('');
+      setQuartier('');
+      setLocationDetails('');
+      setSurface('');
+      setPrix('');
+      setDescription('');
+      setMedias([]);
+      setDocuments([]);
     } finally {
       setSubmitting(false);
     }
   };
 
-  return (
-    <View style={[styles.container, { backgroundColor: theme.surface }]}>
-      <InstitutionHeader title="Publier Un Bien" showBack={step > 1} onBack={() => setStep((s) => (s - 1) as any)} />
+  const handlePublishPress = () => {
+    if (!isAuthenticated) {
+      openAuthModal('login');
+      return;
+    }
+    const validationErr = validateForm();
+    if (validationErr) {
+      Alert.alert('Formulaire incomplet', validationErr);
+      return;
+    }
+    if (publicationFee > 0) {
+      setCheckoutVisible(true);
+    } else {
+      void submitPropertyToBackend();
+    }
+  };
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: BottomTabInset + Spacing.six + insets.bottom }]}>
-        {/* STEPPER HEADER (STITCH) */}
-        <View style={styles.stepperContainer}>
-          <View style={styles.stepperTopRow}>
-            <Text style={[styles.stepCurrentText, { color: theme.primaryContainer }]}>
-              Étape {step} sur 3
-            </Text>
-            <Text style={[styles.stepTitleSub, { color: theme.textSecondary }]}>
-              {step === 1
-                ? '1. Paramètres & Titre'
-                : step === 2
-                ? '2. Géolocalisation & Documents'
-                : '3. Validation Notariale'}
-            </Text>
-          </View>
-
-          {/* Progress bar */}
-          <View style={[styles.progressTrack, { backgroundColor: theme.surfaceContainerLow }]}>
-            <View
-              style={[
-                styles.progressBar,
-                {
-                  backgroundColor: theme.primaryContainer,
-                  width: step === 1 ? '33%' : step === 2 ? '66%' : '100%',
-                },
-              ]}
-            />
-          </View>
+  if (!isAuthenticated) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+        <View style={styles.authGate}>
+          <Text style={[styles.gateTitle, { color: theme.text }]}>Publier un bien sur E-Mobilier</Text>
+          <Text style={[styles.gateDesc, { color: theme.textSecondary }]}>
+            Connectez-vous en tant que Client (500 F) ou Agent mobilier (100 F) pour déposer une annonce.
+          </Text>
+          <Pressable onPress={() => openAuthModal('login')} style={[styles.primaryBtn, { backgroundColor: theme.primary }]}>
+            <Text style={styles.primaryBtnText}>Se connecter</Text>
+          </Pressable>
         </View>
+      </SafeAreaView>
+    );
+  }
 
-        {/* STEP 1: PARAMÈTRES & TITRE */}
-        {step === 1 && (
-          <View style={styles.stepSection}>
-            {/* Profil déclarant */}
-            <View style={styles.fieldset}>
-              <Text style={[styles.fieldsetHeading, { color: theme.text }]}>
-                Profil déclarant
-              </Text>
-              <View style={styles.toggleRow}>
-                <Pressable
-                  onPress={() => setDeclarantProfile('proprietaire')}
-                  style={[
-                    styles.profileCard,
-                    {
-                      borderColor:
-                        declarantProfile === 'proprietaire' ? theme.primaryContainer : theme.cardBorder,
-                      backgroundColor:
-                        declarantProfile === 'proprietaire' ? theme.badgeGreenBg : theme.surfaceContainerLowest,
-                    },
-                  ]}>
-                  <SymbolView
-                    name={{ ios: 'person.fill', android: 'person', web: 'person' }}
-                    size={16}
-                    tintColor={declarantProfile === 'proprietaire' ? theme.badgeGreenText : theme.textSecondary}
-                  />
-                  <Text
-                    style={[
-                      styles.profileCardText,
-                      { color: declarantProfile === 'proprietaire' ? theme.badgeGreenText : theme.text },
-                    ]}>
-                    Propriétaire (Client)
-                  </Text>
-                </Pressable>
+  return (
+    <SafeAreaView edges={['top']} style={[styles.container, { backgroundColor: theme.background }]}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+        <ScrollView
+          contentContainerStyle={[
+            styles.scroll,
+            { paddingBottom: BottomTabInset + Spacing.six + insets.bottom },
+          ]}
+          showsVerticalScrollIndicator={false}>
+          <Text style={[styles.pageTitle, { color: theme.text }]}>Déposer une annonce</Text>
 
-                <Pressable
-                  onPress={() => setDeclarantProfile('agent_agree')}
-                  style={[
-                    styles.profileCard,
-                    {
-                      borderColor:
-                        declarantProfile === 'agent_agree' ? theme.secondary : theme.cardBorder,
-                      backgroundColor:
-                        declarantProfile === 'agent_agree' ? theme.secondaryContainer : theme.surfaceContainerLowest,
-                    },
-                  ]}>
-                  <SymbolView
-                    name={{ ios: 'person.badge.shield.checkmark.fill', android: 'real_estate_agent', web: 'real_estate_agent' }}
-                    size={16}
-                    tintColor={declarantProfile === 'agent_agree' ? theme.navy : theme.textSecondary}
-                  />
-                  <Text
-                    style={[
-                      styles.profileCardText,
-                      { color: declarantProfile === 'agent_agree' ? theme.navy : theme.text },
-                    ]}>
-                    Agent Agréé BJ
-                  </Text>
-                </Pressable>
-              </View>
-            </View>
-
-            {/* Nature du Patrimoine */}
-            <View style={styles.fieldset}>
-              <Text style={[styles.fieldsetHeading, { color: theme.text }]}>
-                Nature du Patrimoine
-              </Text>
-
-              {/* Type de bien */}
-              <View style={styles.selectorRow}>
-                {[
-                  { id: 'parcelle', label: 'Parcelle / Terrain', icon: 'landscape' },
-                  { id: 'maison', label: 'Maison / Villa', icon: 'cottage' },
-                  { id: 'appartement', label: 'Appartement', icon: 'apartment' },
-                ].map((item) => (
-                  <Pressable
-                    key={item.id}
-                    onPress={() => setPropertyType(item.id as any)}
-                    style={[
-                      styles.naturePill,
-                      {
-                        backgroundColor:
-                          propertyType === item.id ? theme.primaryContainer : theme.surfaceContainerLowest,
-                        borderColor:
-                          propertyType === item.id ? theme.primaryContainer : theme.cardBorder,
-                      },
-                    ]}>
-                    <Text
-                      style={[
-                        styles.naturePillText,
-                        { color: propertyType === item.id ? '#FFFFFF' : theme.text },
-                      ]}>
-                      {item.label}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-
-              {/* Operation type: Vente vs Location */}
-              <View style={[styles.opSelectorBar, { backgroundColor: theme.surfaceContainerLow }]}>
-                <Pressable
-                  onPress={() => setTransactionType('vente')}
-                  style={[
-                    styles.opTabBtn,
-                    transactionType === 'vente' && { backgroundColor: theme.primaryContainer },
-                  ]}>
-                  <Text
-                    style={[
-                      styles.opTabText,
-                      { color: transactionType === 'vente' ? '#FFFFFF' : theme.textSecondary },
-                    ]}>
-                    À Vendre (Vente Notariée)
-                  </Text>
-                </Pressable>
-
-                <Pressable
-                  onPress={() => setTransactionType('location')}
-                  style={[
-                    styles.opTabBtn,
-                    transactionType === 'location' && { backgroundColor: theme.navy },
-                  ]}>
-                  <Text
-                    style={[
-                      styles.opTabText,
-                      { color: transactionType === 'location' ? '#FFFFFF' : theme.textSecondary },
-                    ]}>
-                    À Louer (Bail Sécurisé)
-                  </Text>
-                </Pressable>
-              </View>
-
-              {/* Titre de propriété */}
-              <Text style={[styles.fieldSubLabel, { color: theme.textSecondary }]}>
-                Titre de propriété juridique
-              </Text>
-              <View style={styles.docTypeCol}>
-                {[
-                  { id: 'titre_foncier', label: 'Titre Foncier (TF) • Vérifié ANDF' },
-                  { id: 'convention_notariee', label: 'Convention Notariée Enregistrée' },
-                  { id: 'attestation_recasement', label: 'Attestation de Recasement & Bornage' },
-                ].map((doc) => (
-                  <Pressable
-                    key={doc.id}
-                    onPress={() => setLegalDocType(doc.id as any)}
-                    style={[
-                      styles.docTypeRadio,
-                      {
-                        borderColor: legalDocType === doc.id ? theme.primaryContainer : theme.cardBorder,
-                        backgroundColor:
-                          legalDocType === doc.id ? theme.badgeGreenBg : theme.surfaceContainerLowest,
-                      },
-                    ]}>
-                    <Text
-                      style={[
-                        styles.docTypeText,
-                        { color: legalDocType === doc.id ? theme.badgeGreenText : theme.text },
-                      ]}>
-                      {doc.label}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-
-              {/* N° Titre Foncier */}
-              <Text style={[styles.fieldSubLabel, { color: theme.textSecondary }]}>
-                Numéro du Titre Foncier / Référence ANDF
-              </Text>
-              <TextInput
-                value={tfNumber}
-                onChangeText={setTfNumber}
-                placeholder="Ex: TF n° 14.821 / Littoral"
-                placeholderTextColor={theme.outline}
-                style={[
-                  styles.textInputBox,
-                  { backgroundColor: theme.surfaceContainerLowest, borderColor: theme.cardBorder, color: theme.text },
-                ]}
-              />
-            </View>
-
-            <Pressable
-              onPress={handleNextStep}
-              style={[styles.nextCtaBtn, { backgroundColor: theme.primaryContainer }]}>
-              <Text style={styles.nextCtaBtnText}>Étape suivante : Géolocalisation</Text>
-              <SymbolView
-                name={{ ios: 'arrow.right', android: 'arrow_forward', web: 'arrow_forward' }}
-                size={16}
-                tintColor="#FFFFFF"
-              />
-            </Pressable>
+          {/* Role Fee Banner */}
+          <View style={[styles.feeBanner, { backgroundColor: theme.navy }]}>
+            <Text style={styles.feeLabel}>
+              Tarif de publication ({isAdminStaff ? 'Admin' : isAgentMobilier ? 'Agent mobilier' : 'Client'})
+            </Text>
+            <Text style={[styles.feeValue, { color: theme.gold }]}>
+              {publicationFee === 0 ? 'Gratuit (Dispensé)' : `${publicationFee} F CFA via Kkiapay`}
+            </Text>
           </View>
-        )}
 
-        {/* STEP 2: GÉOLOCALISATION & MÉDIAS */}
-        {step === 2 && (
-          <View style={styles.stepSection}>
-            <View style={styles.fieldset}>
-              <Text style={[styles.fieldsetHeading, { color: theme.text }]}>
-                Informations du Foncier
-              </Text>
+          {/* 1. Type & Opération */}
+          <View style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder }]}>
+            <Text style={[styles.cardTitle, { color: theme.text }]}>1. Type de bien & Opération</Text>
+            <View style={styles.rowWrap}>
+              {(['maison', 'parcelle', 'chambre'] as const).map((t) => {
+                const active = propertyType === t;
+                return (
+                  <Pressable
+                    key={t}
+                    onPress={() => handleSelectType(t)}
+                    style={[
+                      styles.pill,
+                      {
+                        backgroundColor: active ? theme.primary : theme.backgroundElement,
+                        borderColor: active ? theme.primary : 'transparent',
+                      },
+                    ]}>
+                    <Text style={{ color: active ? '#FFFFFF' : theme.text, fontWeight: '700', textTransform: 'capitalize' }}>
+                      {t}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
 
-              {/* Title */}
-              <Text style={[styles.fieldSubLabel, { color: theme.textSecondary }]}>Titre de l'annonce</Text>
-              <TextInput
-                value={title}
-                onChangeText={setTitle}
-                placeholder="Ex: Belle Parcelle 500m² avec Titre Foncier Global n°4821"
-                placeholderTextColor={theme.outline}
-                style={[
-                  styles.textInputBox,
-                  { backgroundColor: theme.surfaceContainerLowest, borderColor: theme.cardBorder, color: theme.text },
-                ]}
-              />
+            <View style={styles.rowWrap}>
+              {(['vente', 'location'] as const).map((tr) => {
+                const disabled = propertyType === 'parcelle' && tr === 'location';
+                const active = transactionType === tr;
+                return (
+                  <Pressable
+                    key={tr}
+                    disabled={disabled}
+                    onPress={() => setTransactionType(tr)}
+                    style={[
+                      styles.pill,
+                      {
+                        backgroundColor: active ? theme.gold : theme.backgroundElement,
+                        opacity: disabled ? 0.4 : 1,
+                      },
+                    ]}>
+                    <Text style={{ color: active ? '#0F172A' : theme.text, fontWeight: '700', textTransform: 'capitalize' }}>
+                      {tr}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
 
-              {/* Commune */}
-              <Text style={[styles.fieldSubLabel, { color: theme.textSecondary }]}>Commune</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.communePillsRow}>
-                {BENIN_COMMUNES.slice(0, 6).map((c) => (
+          {/* 2. Localisation */}
+          <View style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder }]}>
+            <Text style={[styles.cardTitle, { color: theme.text }]}>2. Localisation</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rowWrap}>
+              {BENIN_COMMUNES.filter((c) => c !== 'Toutes les communes').map((c) => {
+                const active = commune === c;
+                return (
                   <Pressable
                     key={c}
                     onPress={() => setCommune(c)}
                     style={[
-                      styles.naturePill,
-                      {
-                        backgroundColor: commune === c ? theme.primaryContainer : theme.surfaceContainerLowest,
-                        borderColor: commune === c ? theme.primaryContainer : theme.cardBorder,
-                      },
+                      styles.pill,
+                      { backgroundColor: active ? theme.navy : theme.backgroundElement },
                     ]}>
-                    <Text
-                      style={[
-                        styles.naturePillText,
-                        { color: commune === c ? '#FFFFFF' : theme.text },
-                      ]}>
+                    <Text style={{ color: active ? '#FFFFFF' : theme.text, fontWeight: '600', fontSize: 13 }}>
                       {c}
                     </Text>
                   </Pressable>
-                ))}
+                );
+              })}
+            </ScrollView>
+
+            <TextInput
+              style={[styles.input, { color: theme.text, borderColor: theme.cardBorder, backgroundColor: theme.backgroundElement }]}
+              placeholder="Arrondissement * (ex: 12ème Arrondissement)"
+              placeholderTextColor={theme.textSecondary}
+              value={arrondissement}
+              onChangeText={setArrondissement}
+            />
+            <TextInput
+              style={[styles.input, { color: theme.text, borderColor: theme.cardBorder, backgroundColor: theme.backgroundElement }]}
+              placeholder="Quartier * (ex: Fidjrossè)"
+              placeholderTextColor={theme.textSecondary}
+              value={quartier}
+              onChangeText={setQuartier}
+            />
+            <TextInput
+              style={[styles.input, { color: theme.text, borderColor: theme.cardBorder, backgroundColor: theme.backgroundElement }]}
+              placeholder="Repères d'accès (masqué avant déblocage 50 F)"
+              placeholderTextColor={theme.textSecondary}
+              value={locationDetails}
+              onChangeText={setLocationDetails}
+            />
+          </View>
+
+          {/* 3. Caractéristiques & Prix */}
+          <View style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder }]}>
+            <Text style={[styles.cardTitle, { color: theme.text }]}>3. Caractéristiques & Prix</Text>
+            <TextInput
+              style={[styles.input, { color: theme.text, borderColor: theme.cardBorder, backgroundColor: theme.backgroundElement }]}
+              placeholder="Accessibilité * (ex: Voie pavée, Goudron à 100m)"
+              placeholderTextColor={theme.textSecondary}
+              value={accessibilite}
+              onChangeText={setAccessibilite}
+            />
+            <TextInput
+              style={[styles.input, { color: theme.text, borderColor: theme.cardBorder, backgroundColor: theme.backgroundElement }]}
+              placeholder="Eau & Courant * (ex: SONEB + SBEE)"
+              placeholderTextColor={theme.textSecondary}
+              value={eauCourant}
+              onChangeText={setEauCourant}
+            />
+            <View style={styles.rowWrap}>
+              <TextInput
+                style={[styles.input, styles.half, { color: theme.text, borderColor: theme.cardBorder, backgroundColor: theme.backgroundElement }]}
+                placeholder="Surface (m²) *"
+                placeholderTextColor={theme.textSecondary}
+                keyboardType="numeric"
+                value={surface}
+                onChangeText={setSurface}
+              />
+              {propertyType !== 'parcelle' && (
+                <TextInput
+                  style={[styles.input, styles.half, { color: theme.text, borderColor: theme.cardBorder, backgroundColor: theme.backgroundElement }]}
+                  placeholder="Chambres"
+                  placeholderTextColor={theme.textSecondary}
+                  keyboardType="numeric"
+                  value={chambres}
+                  onChangeText={setChambres}
+                />
+              )}
+            </View>
+            <View style={styles.rowWrap}>
+              <TextInput
+                style={[styles.input, styles.half, { color: theme.text, borderColor: theme.cardBorder, backgroundColor: theme.backgroundElement }]}
+                placeholder={transactionType === 'location' ? 'Loyer/mois (F) *' : 'Prix (F CFA) *'}
+                placeholderTextColor={theme.textSecondary}
+                keyboardType="numeric"
+                value={prix}
+                onChangeText={setPrix}
+              />
+              {transactionType === 'location' && (
+                <TextInput
+                  style={[styles.input, styles.half, { color: theme.text, borderColor: theme.cardBorder, backgroundColor: theme.backgroundElement }]}
+                  placeholder="Avance (mois) *"
+                  placeholderTextColor={theme.textSecondary}
+                  keyboardType="numeric"
+                  value={avanceMois}
+                  onChangeText={setAvanceMois}
+                />
+              )}
+            </View>
+
+            <View style={styles.switchRow}>
+              <Text style={[styles.switchLabel, { color: theme.text }]}>Prix négociable</Text>
+              <Switch value={isNegotiable} onValueChange={setIsNegotiable} trackColor={{ true: theme.primary }} />
+            </View>
+
+            <TextInput
+              style={[styles.textArea, { color: theme.text, borderColor: theme.cardBorder, backgroundColor: theme.backgroundElement }]}
+              placeholder="Description détaillée du bien..."
+              placeholderTextColor={theme.textSecondary}
+              multiline
+              value={description}
+              onChangeText={setDescription}
+            />
+          </View>
+
+          {/* 4. Médias */}
+          <View style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder }]}>
+            <Text style={[styles.cardTitle, { color: theme.text }]}>4. Photos & Vidéos ({medias.length})</Text>
+            <Pressable onPress={pickMedia} style={[styles.uploadBtn, { borderColor: theme.primary }]}>
+              <Text style={[styles.uploadBtnText, { color: theme.primary }]}>+ Ajouter des photos / vidéos</Text>
+            </Pressable>
+            {medias.map((m, idx) => (
+              <View key={`${m.uri}-${idx}`} style={styles.fileRow}>
+                <Text numberOfLines={1} style={[styles.fileName, { color: theme.text }]}>
+                  {m.kind === 'video' ? '🎬' : '🖼️'} {m.name}
+                </Text>
+                <Pressable onPress={() => setMedias((prev) => prev.filter((_, i) => i !== idx))}>
+                  <Text style={styles.removeText}>Retirer</Text>
+                </Pressable>
+              </View>
+            ))}
+          </View>
+
+          {/* 5. Documents légaux (requis en vente) */}
+          {transactionType === 'vente' && (
+            <View style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder }]}>
+              <Text style={[styles.cardTitle, { color: theme.text }]}>
+                5. Documents justificatifs ({documents.length}) *
+              </Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rowWrap}>
+                {(
+                  [
+                    { key: 'titre_foncier', label: 'Titre Foncier' },
+                    { key: 'convention_vente', label: 'Convention' },
+                    { key: 'permis_habiter', label: 'Permis Habiter' },
+                    { key: 'attestation_recasement', label: 'Recasement' },
+                    { key: 'autre', label: 'Autre' },
+                  ] as const
+                ).map((d) => {
+                  const active = selectedDocType === d.key;
+                  return (
+                    <Pressable
+                      key={d.key}
+                      onPress={() => setSelectedDocType(d.key)}
+                      style={[
+                        styles.pill,
+                        { backgroundColor: active ? theme.primary : theme.backgroundElement },
+                      ]}>
+                      <Text style={{ color: active ? '#FFFFFF' : theme.text, fontSize: 12, fontWeight: '600' }}>
+                        {d.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
               </ScrollView>
 
-              {/* Quartier / Zone */}
-              <Text style={[styles.fieldSubLabel, { color: theme.textSecondary }]}>Quartier / Zone</Text>
-              <TextInput
-                value={quartier}
-                onChangeText={setQuartier}
-                placeholder="Ex: Zoundja, Togbin, Haie Vive..."
-                placeholderTextColor={theme.outline}
-                style={[
-                  styles.textInputBox,
-                  { backgroundColor: theme.surfaceContainerLowest, borderColor: theme.cardBorder, color: theme.text },
-                ]}
-              />
-
-              {/* Surface & Prix */}
-              <View style={styles.dualInputsRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.fieldSubLabel, { color: theme.textSecondary }]}>Superficie (m²)</Text>
-                  <TextInput
-                    value={surface}
-                    onChangeText={setSurface}
-                    placeholder="500"
-                    placeholderTextColor={theme.outline}
-                    keyboardType="numeric"
-                    style={[
-                      styles.textInputBox,
-                      { backgroundColor: theme.surfaceContainerLowest, borderColor: theme.cardBorder, color: theme.text },
-                    ]}
-                  />
-                </View>
-
-                <View style={{ flex: 1.5 }}>
-                  <Text style={[styles.fieldSubLabel, { color: theme.textSecondary }]}>Prix demandé (FCFA)</Text>
-                  <TextInput
-                    value={prix}
-                    onChangeText={setPrix}
-                    placeholder="18 500 000"
-                    placeholderTextColor={theme.outline}
-                    keyboardType="numeric"
-                    style={[
-                      styles.textInputBox,
-                      { backgroundColor: theme.surfaceContainerLowest, borderColor: theme.cardBorder, color: theme.text },
-                    ]}
-                  />
-                </View>
-              </View>
-            </View>
-
-            {/* Médias & Justificatifs */}
-            <View style={styles.fieldset}>
-              <Text style={[styles.fieldsetHeading, { color: theme.text }]}>
-                Médias & Justificatifs
-              </Text>
-
-              {/* Photo Upload */}
-              <Text style={[styles.fieldSubLabel, { color: theme.textSecondary }]}>
-                Photos du bien ({photos.length} sélectionnée{photos.length > 1 ? 's' : ''})
-              </Text>
-              <Pressable
-                onPress={handlePickImages}
-                style={[
-                  styles.uploadBox,
-                  { backgroundColor: theme.surfaceContainerLowest, borderColor: theme.cardBorder },
-                ]}>
-                <SymbolView
-                  name={{ ios: 'photo.on.rectangle.angled', android: 'add_a_photo', web: 'add_a_photo' }}
-                  size={24}
-                  tintColor={theme.primaryContainer}
-                />
-                <Text style={[styles.uploadText, { color: theme.text }]}>
-                  Ajouter des photos (Min. 3 recommandées)
-                </Text>
+              <Pressable onPress={pickLegalDocument} style={[styles.uploadBtn, { borderColor: theme.gold }]}>
+                <Text style={[styles.uploadBtnText, { color: theme.text }]}>+ Joindre un document (PDF/Image)</Text>
               </Pressable>
 
-              {/* Document Notarié Upload */}
-              <Text style={[styles.fieldSubLabel, { color: theme.textSecondary }]}>
-                Titre Foncier / Justificatif notarié (PDF ou photo)
-              </Text>
-              <Pressable
-                onPress={handlePickDocument}
-                style={[
-                  styles.uploadBox,
-                  {
-                    backgroundColor: documentFile ? theme.badgeGreenBg : theme.surfaceContainerLowest,
-                    borderColor: documentFile ? theme.primaryContainer : theme.cardBorder,
-                  },
-                ]}>
-                <SymbolView
-                  name={{ ios: 'doc.badge.plus', android: 'post_add', web: 'post_add' }}
-                  size={24}
-                  tintColor={documentFile ? theme.badgeGreenText : theme.primaryContainer}
-                />
-                <Text
-                  style={[
-                    styles.uploadText,
-                    { color: documentFile ? theme.badgeGreenText : theme.text },
-                  ]}>
-                  {documentFile ? documentFile.name : 'Sélectionner le Titre Foncier (Crypté)'}
-                </Text>
-              </Pressable>
-              <Text style={[styles.docSecurityNotice, { color: theme.textSecondary }]}>
-                🔒 Le titre sera chiffré et audité uniquement par l'ANDF et les secrétaires notariaux.
-              </Text>
-            </View>
-
-            <Pressable
-              onPress={handleNextStep}
-              style={[styles.nextCtaBtn, { backgroundColor: theme.primaryContainer }]}>
-              <Text style={styles.nextCtaBtnText}>Étape suivante : Validation Notariale</Text>
-              <SymbolView
-                name={{ ios: 'arrow.right', android: 'arrow_forward', web: 'arrow_forward' }}
-                size={16}
-                tintColor="#FFFFFF"
-              />
-            </Pressable>
-          </View>
-        )}
-
-        {/* STEP 3: VALIDATION NOTARIALE & DÉPÔT */}
-        {step === 3 && (
-          <View style={styles.stepSection}>
-            {/* Bordereau de Dépôt */}
-            <View
-              style={[
-                styles.summaryCard,
-                { backgroundColor: theme.surfaceContainerLowest, borderColor: theme.cardBorder },
-              ]}>
-              <Text style={[styles.summaryCardHeader, { color: theme.text }]}>
-                Bordereau de Dépôt • BJ-REG-2025
-              </Text>
-
-              <View style={styles.summaryRow}>
-                <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>
-                  Frais de publication cadastrale
-                </Text>
-                <Text style={[styles.summaryVal, { color: theme.text }]}>
-                  {formatFcfa(publicationFee)}
-                </Text>
-              </View>
-
-              <View style={styles.summaryRow}>
-                <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>
-                  Vérification d'authenticité ANDF
-                </Text>
-                <Text style={[styles.summaryVal, { color: theme.badgeGreenText }]}>
-                  Inclus (0 FCFA)
-                </Text>
-              </View>
-
-              <View style={[styles.totalRow, { borderTopColor: theme.cardBorder }]}>
-                <Text style={[styles.totalLabel, { color: theme.text }]}>Total à régler</Text>
-                <Text style={[styles.totalPrice, { color: theme.primaryContainer }]}>
-                  {formatFcfa(publicationFee)}
-                </Text>
-              </View>
-            </View>
-
-            {/* Charte Anti-Contournement */}
-            <Pressable
-              onPress={() => setCharteAccepted(!charteAccepted)}
-              style={[
-                styles.charteCard,
-                { backgroundColor: theme.surfaceContainerLow, borderColor: theme.cardBorder },
-              ]}>
-              <View
-                style={[
-                  styles.checkboxBox,
-                  {
-                    borderColor: charteAccepted ? theme.primaryContainer : theme.outline,
-                    backgroundColor: charteAccepted ? theme.primaryContainer : 'transparent',
-                  },
-                ]}>
-                {charteAccepted && (
-                  <SymbolView
-                    name={{ ios: 'checkmark', android: 'check', web: 'check' }}
-                    size={11}
-                    tintColor="#FFFFFF"
-                  />
-                )}
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.charteTitle, { color: theme.text }]}>
-                  Charte Foncier Bénin & Anti-Contournement
-                </Text>
-                <Text style={[styles.charteDesc, { color: theme.textSecondary }]}>
-                  Je certifie sur l'honneur l'exactitude des informations et l'absence de tout litige foncier
-                  en cours auprès du Tribunal ou de l'ANDF.
-                </Text>
-              </View>
-            </Pressable>
-
-            {/* Submit & Pay CTA */}
-            <Pressable
-              disabled={submitting}
-              onPress={handleFinalSubmit}
-              style={({ pressed }) => [
-                styles.finalSubmitBtn,
-                { backgroundColor: theme.primaryContainer },
-                (pressed || submitting) && { opacity: 0.9 },
-              ]}>
-              {submitting ? (
-                <ActivityIndicator color="#FFFFFF" size="small" />
-              ) : (
-                <>
-                  <SymbolView
-                    name={{ ios: 'creditcard.fill', android: 'payments', web: 'payments' }}
-                    size={18}
-                    tintColor="#FFFFFF"
-                  />
-                  <Text style={styles.finalSubmitBtnText}>
-                    Payer via Kkiapay (Momo / Moov / Celtiis)
+              {documents.map((doc, idx) => (
+                <View key={`${doc.uri}-${idx}`} style={styles.fileRow}>
+                  <Text numberOfLines={1} style={[styles.fileName, { color: theme.text }]}>
+                    📄 [{doc.docType}] {doc.name}
                   </Text>
-                </>
-              )}
-            </Pressable>
-
-            <View style={styles.securityTagRow}>
-              <SymbolView
-                name={{ ios: 'checkmark.shield.fill', android: 'verified_user', web: 'verified_user' }}
-                size={12}
-                tintColor={theme.primaryContainer}
-              />
-              <Text style={[styles.securityTagText, { color: theme.textSecondary }]}>
-                Conforme ARCEP Bénin • Séquestre Kkiapay sécurisé
-              </Text>
+                  <Pressable onPress={() => setDocuments((prev) => prev.filter((_, i) => i !== idx))}>
+                    <Text style={styles.removeText}>Retirer</Text>
+                  </Pressable>
+                </View>
+              ))}
             </View>
-          </View>
-        )}
-      </ScrollView>
+          )}
 
-      {/* Kkiapay Modal */}
-      {createdPropertyId && (
-        <KkiapayCheckoutModal
-          visible={checkoutVisible}
-          onClose={() => setCheckoutVisible(false)}
-          operationType={paymentOperationType}
-          entityId={createdPropertyId}
-          amount={publicationFee}
-          title="Frais de Publication Cadastrale"
-          description={`Publication et indexation notariée pour : ${title}`}
-          onSuccess={() => {
-            setCheckoutVisible(false);
-            Alert.alert(
-              'Paiement Validé',
-              'Votre annonce a été soumise avec succès et est transmise à la modération notariée.',
-              [{ text: 'Voir le catalogue', onPress: () => router.replace('/' as any) }]
-            );
-          }}
-        />
-      )}
-    </View>
+          <Pressable
+            onPress={handlePublishPress}
+            disabled={submitting}
+            style={[styles.primaryBtn, { backgroundColor: theme.primary, opacity: submitting ? 0.7 : 1 }]}>
+            {submitting ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={styles.primaryBtnText}>
+                {publicationFee > 0
+                  ? `Payer ${publicationFee} F & Publier`
+                  : 'Publier le bien maintenant'}
+              </Text>
+            )}
+          </Pressable>
+        </ScrollView>
+      </KeyboardAvoidingView>
+
+      <KkiapayCheckoutModal
+        visible={checkoutVisible}
+        operationType={paymentOperationType}
+        title="Frais de publication E-Mobilier"
+        description={`Règlement officiel de ${publicationFee} F CFA pour publier votre annonce immobilière.`}
+        onClose={() => setCheckoutVisible(false)}
+        onSuccess={async ({ transactionId }) => {
+          setCheckoutVisible(false);
+          await submitPropertyToBackend(transactionId);
+        }}
+      />
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: Spacing.three,
-    paddingTop: Spacing.three,
-    gap: Spacing.four,
-  },
-  stepperContainer: {
-    gap: 8,
-  },
-  stepperTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  stepCurrentText: {
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  stepTitleSub: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  progressTrack: {
-    width: '100%',
-    height: 6,
-    borderRadius: 3,
-    overflow: 'hidden',
-  },
-  progressBar: {
-    height: '100%',
-    borderRadius: 3,
-  },
-  stepSection: {
-    gap: Spacing.four,
-  },
-  fieldset: {
-    gap: 10,
-  },
-  fieldsetHeading: {
-    fontSize: 15,
-    fontWeight: '800',
-    letterSpacing: -0.2,
-  },
-  toggleRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  profileCard: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    padding: 12,
+  container: { flex: 1 },
+  scroll: { padding: Spacing.three, gap: Spacing.three },
+  pageTitle: { fontSize: 22, fontWeight: '900' },
+  feeBanner: { borderRadius: 16, padding: Spacing.three, gap: 4 },
+  feeLabel: { color: '#CBD5E1', fontSize: 12, fontWeight: '600' },
+  feeValue: { fontSize: 17, fontWeight: '900' },
+  card: { borderRadius: 18, borderWidth: 1, padding: Spacing.three, gap: 10 },
+  cardTitle: { fontSize: 15, fontWeight: '800' },
+  rowWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  pill: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 14, borderWidth: 1, borderColor: 'transparent' },
+  input: { borderRadius: 12, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 11, fontSize: 14 },
+  half: { flex: 1 },
+  textArea: {
     borderRadius: 12,
-    borderWidth: 1.5,
-  },
-  profileCardText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  selectorRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  naturePill: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
     borderWidth: 1,
-  },
-  naturePillText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  opSelectorBar: {
-    flexDirection: 'row',
-    padding: 3,
-    borderRadius: 10,
-    marginTop: 4,
-  },
-  opTabBtn: {
-    flex: 1,
-    paddingVertical: 8,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  opTabText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  fieldSubLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    marginTop: 4,
-  },
-  docTypeCol: {
-    gap: 6,
-  },
-  docTypeRadio: {
-    padding: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  docTypeText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  textInputBox: {
     paddingHorizontal: 12,
     paddingVertical: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-    fontSize: 13,
+    fontSize: 14,
+    minHeight: 88,
+    textAlignVertical: 'top',
   },
-  communePillsRow: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  dualInputsRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  uploadBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    padding: 16,
-    borderRadius: 12,
+  switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  switchLabel: { fontSize: 14, fontWeight: '600' },
+  uploadBtn: {
     borderWidth: 1.5,
     borderStyle: 'dashed',
-  },
-  uploadText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  docSecurityNotice: {
-    fontSize: 11,
-    lineHeight: 15,
-  },
-  nextCtaBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 14,
     borderRadius: 12,
-    marginTop: 8,
-  },
-  nextCtaBtnText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  summaryCard: {
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: Spacing.four,
-    gap: 10,
-  },
-  summaryCardHeader: {
-    fontSize: 14,
-    fontWeight: '800',
-    letterSpacing: -0.2,
-    marginBottom: 4,
-  },
-  summaryRow: {
-    flexDirection: 'row',
+    paddingVertical: 13,
     alignItems: 'center',
-    justifyContent: 'space-between',
   },
-  summaryLabel: {
-    fontSize: 12,
-  },
-  summaryVal: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  totalRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: 8,
-    borderTopWidth: 1,
-    marginTop: 4,
-  },
-  totalLabel: {
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  totalPrice: {
-    fontSize: 18,
-    fontWeight: '800',
-    letterSpacing: -0.3,
-  },
-  charteCard: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-    padding: Spacing.three,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  checkboxBox: {
-    width: 18,
-    height: 18,
-    borderRadius: 4,
-    borderWidth: 1.5,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 2,
-  },
-  charteTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  charteDesc: {
-    fontSize: 11,
-    lineHeight: 16,
-    marginTop: 2,
-  },
-  finalSubmitBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 14,
-    borderRadius: 12,
-    marginTop: 4,
-  },
-  finalSubmitBtnText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  securityTagRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-  },
-  securityTagText: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
+  uploadBtnText: { fontSize: 13, fontWeight: '800' },
+  fileRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 },
+  fileName: { flex: 1, fontSize: 12, fontWeight: '600' },
+  removeText: { color: '#DC2626', fontSize: 12, fontWeight: '700' },
+  primaryBtn: { borderRadius: 14, paddingVertical: 16, alignItems: 'center' },
+  primaryBtnText: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
+  authGate: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: Spacing.five, gap: 12 },
+  gateTitle: { fontSize: 20, fontWeight: '800', textAlign: 'center' },
+  gateDesc: { fontSize: 14, textAlign: 'center' },
 });

@@ -442,7 +442,7 @@ export function VisitesOpsSection({ onCharteRequired }: { onCharteRequired: Char
                   setStatusMotif('');
                   setActionMode('statut');
                 }}
-                style={[styles.chipBtn, { backgroundColor: '#008751' }]}>
+                style={[styles.chipBtn, { backgroundColor: '#0F766E' }]}>
                 <Text style={styles.chipBtnText}>Statut</Text>
               </Pressable>
               <Pressable
