@@ -255,8 +255,14 @@ export default function ProfileScreen() {
         </View>
 
         <Pressable
-          onPress={logout}
-          style={[styles.logoutBtn, { borderColor: '#FCA5A5', backgroundColor: '#FEF2F2' }]}>
+          onPress={async () => {
+            await logout();
+          }}
+          style={({ pressed }) => [
+            styles.logoutBtn,
+            { borderColor: '#FCA5A5', backgroundColor: '#FEF2F2' },
+            pressed && { opacity: 0.75 },
+          ]}>
           <Text style={styles.logoutText}>Se déconnecter</Text>
         </Pressable>
       </ScrollView>

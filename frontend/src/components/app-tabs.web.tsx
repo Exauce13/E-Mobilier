@@ -20,36 +20,33 @@ export default function AppTabs() {
     <Tabs>
       <TabSlot style={{ height: '100%' }} />
 
-      {/* La barre de navigation web n'est affichée QUE lorsque l'utilisateur est connecté */}
-      {isAuthenticated && (
-        <TabList asChild>
-          <CustomTabList>
-            <TabTrigger name="home" href="/" asChild>
-              <TabButton>Catalogue</TabButton>
+      <TabList asChild>
+        <CustomTabList>
+          <TabTrigger name="home" href="/" asChild>
+            <TabButton>{isAuthenticated ? 'Catalogue' : 'Accueil'}</TabButton>
+          </TabTrigger>
+
+          <TabTrigger name="explore" href="/explore" asChild>
+            <TabButton>Recherche</TabButton>
+          </TabTrigger>
+
+          {isAuthenticated && (
+            <TabTrigger name="publish" href="/publish" asChild>
+              <TabButton>Publier</TabButton>
             </TabTrigger>
+          )}
 
-            <TabTrigger name="explore" href="/explore" asChild>
-              <TabButton>Recherche</TabButton>
+          {isAuthenticated && (
+            <TabTrigger name="visits" href="/visits" asChild>
+              <TabButton>Visites</TabButton>
             </TabTrigger>
+          )}
 
-            {user?.role === 'agent_immobilier' || user ? (
-              <TabTrigger name="publish" href="/publish" asChild>
-                <TabButton>Publier</TabButton>
-              </TabTrigger>
-            ) : null}
-
-            {user?.role === 'agent_immobilier' || user ? (
-              <TabTrigger name="visits" href="/visits" asChild>
-                <TabButton>Visites</TabButton>
-              </TabTrigger>
-            ) : null}
-
-            <TabTrigger name="profile" href="/profile" asChild>
-              <TabButton>Mon Profil</TabButton>
-            </TabTrigger>
-          </CustomTabList>
-        </TabList>
-      )}
+          <TabTrigger name="profile" href="/profile" asChild>
+            <TabButton>{isAuthenticated ? 'Mon Profil' : 'Connexion'}</TabButton>
+          </TabTrigger>
+        </CustomTabList>
+      </TabList>
     </Tabs>
   );
 }

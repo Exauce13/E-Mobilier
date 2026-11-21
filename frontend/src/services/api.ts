@@ -71,6 +71,17 @@ export const tokenStorage = {
     } catch {
       // Ignore
     }
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && window?.localStorage) {
+      try {
+        const stored = window.localStorage.getItem(AUTH_TOKEN_KEY);
+        if (stored) {
+          inMemoryToken = stored;
+          return stored;
+        }
+      } catch {
+        // Ignore
+      }
+    }
     return inMemoryToken;
   },
   set: async (token: string): Promise<void> => {
@@ -80,6 +91,13 @@ export const tokenStorage = {
     } catch {
       // Ignore
     }
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && window?.localStorage) {
+      try {
+        window.localStorage.setItem(AUTH_TOKEN_KEY, token);
+      } catch {
+        // Ignore
+      }
+    }
   },
   remove: async (): Promise<void> => {
     inMemoryToken = null;
@@ -87,6 +105,13 @@ export const tokenStorage = {
       await AsyncStorage.removeItem(AUTH_TOKEN_KEY);
     } catch {
       // Ignore
+    }
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && window?.localStorage) {
+      try {
+        window.localStorage.removeItem(AUTH_TOKEN_KEY);
+      } catch {
+        // Ignore
+      }
     }
   },
 };
@@ -277,9 +302,14 @@ export const authApi = {
   },
 
   deconnexion: async (): Promise<ApiResponse> => {
-    const res = await apiRequest('/deconnexion', { method: 'POST' });
-    await tokenStorage.remove();
-    return res;
+    try {
+      const res = await apiRequest('/deconnexion', { method: 'POST' });
+      return res;
+    } catch {
+      return { success: true, message: 'Déconnecté avec succès.' };
+    } finally {
+      await tokenStorage.remove();
+    }
   },
 };
 

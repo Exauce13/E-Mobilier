@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 
 import {
@@ -267,9 +268,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
-    await authApi.deconnexion();
-    setUser(null);
-    setUnreadNotificationsCount(0);
+    try {
+      await authApi.deconnexion();
+    } catch (e) {
+      console.warn('Erreur lors de la déconnexion backend:', e);
+    } finally {
+      await tokenStorage.remove();
+      setUser(null);
+      setUnreadNotificationsCount(0);
+      try {
+        router.replace('/' as any);
+      } catch {
+        // Ignore navigation error
+      }
+    }
   };
 
   const hasRole = useCallback(
