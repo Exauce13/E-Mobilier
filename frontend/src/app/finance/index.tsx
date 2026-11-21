@@ -124,7 +124,7 @@ export default function FinanceVaultScreen() {
                 Coffre-Fort Trésorerie Niveau 0 • Root
               </Text>
             </View>
-            <View style={[styles.bceaoPill, { backgroundColor: '#065F46' }]}>
+            <View style={[styles.bceaoPill, { backgroundColor: '#008751' }]}>
               <Text style={styles.bceaoPillText}>BCEAO Scellé ✓</Text>
             </View>
           </View>

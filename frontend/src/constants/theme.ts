@@ -34,16 +34,16 @@ export const Colors = {
     inverseSurface: '#213145',
     inverseOnSurface: '#EAF1FF',
 
-    // Primary: Vert Émeraude Foncier (#005C55 & #0F766E)
-    primary: '#005C55',
-    primaryContainer: '#0F766E',
-    primaryDark: '#00201D',
-    primaryLight: '#9CF2E8',
-    primaryBorder: '#80D5CB',
-    primaryFixed: '#9CF2E8',
-    primaryFixedDim: '#80D5CB',
+    // Primary: Vert Feu Tricolore (#008751)
+    primary: '#008751',
+    primaryContainer: '#008751',
+    primaryDark: '#005A36',
+    primaryLight: '#86EFAC',
+    primaryBorder: '#10B981',
+    primaryFixed: '#D1FAE5',
+    primaryFixedDim: '#A7F3D0',
     onPrimary: '#FFFFFF',
-    onPrimaryContainer: '#A3FAEF',
+    onPrimaryContainer: '#FFFFFF',
 
     // Secondary: Bleu Nuit Institutionnel (#565E74 & #0F172A)
     secondary: '#565E74',
@@ -66,14 +66,14 @@ export const Colors = {
     tagBackground: '#EFF4FF',
     tagText: '#0B1C30',
     badgeGreenBg: '#DCFCE7',
-    badgeGreenText: '#166534',
+    badgeGreenText: '#008751',
     badgeBlueBg: '#EFF6FF',
     badgeBlueText: '#1E40AF',
     badgeGoldBg: '#FEF3C7',
     badgeGoldText: '#92400E',
     error: '#BA1A1A',
     errorContainer: '#FFDAD6',
-    success: '#16A34A',
+    success: '#008751',
     successBg: '#DCFCE7',
   },
   dark: {
@@ -102,16 +102,16 @@ export const Colors = {
     inverseSurface: '#F8F9FF',
     inverseOnSurface: '#0B1C30',
 
-    // Primary
-    primary: '#80D5CB',
-    primaryContainer: '#0F766E',
-    primaryDark: '#005C55',
-    primaryLight: '#9CF2E8',
-    primaryBorder: '#80D5CB',
-    primaryFixed: '#9CF2E8',
-    primaryFixedDim: '#80D5CB',
-    onPrimary: '#00201D',
-    onPrimaryContainer: '#A3FAEF',
+    // Primary: Vert Feu Tricolore
+    primary: '#10B981',
+    primaryContainer: '#008751',
+    primaryDark: '#005A36',
+    primaryLight: '#86EFAC',
+    primaryBorder: '#10B981',
+    primaryFixed: '#D1FAE5',
+    primaryFixedDim: '#A7F3D0',
+    onPrimary: '#002012',
+    onPrimaryContainer: '#D1FAE5',
 
     // Secondary
     secondary: '#BEC6E0',
@@ -133,16 +133,16 @@ export const Colors = {
     // Status
     tagBackground: '#20324E',
     tagText: '#EAF1FF',
-    badgeGreenBg: '#064E3B',
-    badgeGreenText: '#A7F3D0',
+    badgeGreenBg: '#052E16',
+    badgeGreenText: '#86EFAC',
     badgeBlueBg: '#1E3A8A',
     badgeBlueText: '#BFDBFE',
     badgeGoldBg: '#451A03',
     badgeGoldText: '#FDE68A',
     error: '#FFB4AB',
     errorContainer: '#93000A',
-    success: '#4ADE80',
-    successBg: '#064E3B',
+    success: '#10B981',
+    successBg: '#052E16',
   },
 } as const;
 

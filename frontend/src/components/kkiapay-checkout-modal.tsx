@@ -288,8 +288,8 @@ export function KkiapayCheckoutModal({
                   style={[
                     styles.providerCard,
                     {
-                      borderColor: provider === 'celtiis' ? '#0F766E' : theme.cardBorder,
-                      backgroundColor: provider === 'celtiis' ? '#F0FDFA' : theme.surfaceContainerLowest,
+                      borderColor: provider === 'celtiis' ? '#008751' : theme.cardBorder,
+                      backgroundColor: provider === 'celtiis' ? '#F0FDF4' : theme.surfaceContainerLowest,
                     },
                   ]}>
                   <View style={[styles.momoLogoBox, { backgroundColor: '#0A2540' }]}>
@@ -300,8 +300,8 @@ export function KkiapayCheckoutModal({
                     style={[
                       styles.radioCircle,
                       {
-                        borderColor: provider === 'celtiis' ? '#0F766E' : theme.outline,
-                        backgroundColor: provider === 'celtiis' ? '#0F766E' : 'transparent',
+                        borderColor: provider === 'celtiis' ? '#008751' : theme.outline,
+                        backgroundColor: provider === 'celtiis' ? '#008751' : 'transparent',
                       },
                     ]}
                   />
