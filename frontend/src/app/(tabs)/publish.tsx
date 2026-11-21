@@ -564,7 +564,13 @@ export default function PublishScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  scroll: { padding: Spacing.three, gap: Spacing.three },
+  scroll: {
+    padding: Spacing.three,
+    gap: Spacing.three,
+    maxWidth: 800,
+    width: '100%',
+    alignSelf: 'center',
+  },
   pageTitle: { fontSize: 22, fontWeight: '900' },
   feeBanner: { borderRadius: 16, padding: Spacing.three, gap: 4 },
   feeLabel: { color: '#CBD5E1', fontSize: 12, fontWeight: '600' },

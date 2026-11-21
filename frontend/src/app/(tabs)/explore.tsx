@@ -364,7 +364,13 @@ export default function ExploreScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  listContent: { paddingHorizontal: Spacing.three, paddingTop: Spacing.two },
+  listContent: {
+    paddingHorizontal: Spacing.three,
+    paddingTop: Spacing.two,
+    maxWidth: 960,
+    width: '100%',
+    alignSelf: 'center',
+  },
   headerBlock: { gap: Spacing.two, marginBottom: Spacing.three },
   topRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   pageTitle: { fontSize: 22, fontWeight: '900' },

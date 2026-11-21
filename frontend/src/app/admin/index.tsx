@@ -190,7 +190,12 @@ const styles = StyleSheet.create({
   tabBarWrap: { borderBottomWidth: 1, paddingVertical: 8 },
   tabScroll: { paddingHorizontal: Spacing.three, gap: 8 },
   tabPill: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 16 },
-  scroll: { padding: Spacing.three },
+  scroll: {
+    padding: Spacing.three,
+    maxWidth: 1000,
+    width: '100%',
+    alignSelf: 'center',
+  },
   charteBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
   charteBtnText: { color: '#0F172A', fontWeight: '800', fontSize: 12 },
   deniedBox: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: Spacing.five, gap: 8 },

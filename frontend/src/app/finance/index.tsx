@@ -375,7 +375,12 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   tabRow: { flexDirection: 'row', padding: 8, gap: 6, borderBottomWidth: 1 },
   tabBtn: { flex: 1, paddingVertical: 8, borderRadius: 10, alignItems: 'center' },
-  scroll: { padding: Spacing.three },
+  scroll: {
+    padding: Spacing.three,
+    maxWidth: 1000,
+    width: '100%',
+    alignSelf: 'center',
+  },
   section: { gap: Spacing.two },
   vaultCard: { borderRadius: 18, padding: Spacing.four },
   card: { borderRadius: 16, borderWidth: 1, padding: Spacing.three, gap: 8 },

@@ -350,7 +350,12 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: Spacing.four, gap: 12 },
   errorText: { fontSize: 15, fontWeight: '600', textAlign: 'center' },
-  scroll: { gap: Spacing.three },
+  scroll: {
+    gap: Spacing.three,
+    maxWidth: 860,
+    width: '100%',
+    alignSelf: 'center',
+  },
   gallery: { height: 260 },
   heroImg: { width: 380, height: 260 },
   noMediaBox: { height: 180, alignItems: 'center', justifyContent: 'center' },

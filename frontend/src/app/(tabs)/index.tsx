@@ -51,7 +51,14 @@ function AuthenticatedCatalog() {
   const theme = useTheme();
   const { isDark, toggleTheme } = useThemeMode();
   const insets = useSafeAreaInsets();
-  const { user, unreadNotificationsCount, refreshUnreadCount } = useAuth();
+  const {
+    user,
+    unreadNotificationsCount,
+    refreshUnreadCount,
+    isAdminStaff,
+    isAgentMobilier,
+    isSuperAdminPrincipal,
+  } = useAuth();
   const storageBaseUrl = useMemo(() => getStorageBaseUrl(), []);
 
   const [selectedCategory, setSelectedCategory] = useState<PropertyCategory>('tous');
@@ -244,6 +251,72 @@ function AuthenticatedCatalog() {
               </View>
             </View>
 
+            {/* Role-Specific Contextual Banner */}
+            {isAdminStaff && (
+              <View
+                style={[
+                  styles.roleBanner,
+                  { backgroundColor: theme.primaryLight, borderColor: theme.primaryBorder },
+                ]}>
+                <View style={styles.roleBannerLeft}>
+                  <View style={[styles.roleDot, { backgroundColor: theme.primary }]} />
+                  <View>
+                    <Text style={[styles.roleBannerTitle, { color: theme.primaryDark }]}>
+                      Espace {user?.roles?.find((r) => r.includes('Admin') || r.includes('Secrétaire') || r.includes('Responsable')) || 'Administration'}
+                    </Text>
+                    <Text style={[styles.roleBannerSub, { color: theme.textSecondary }]}>
+                      Supervision des biens, visites et conformité
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.roleBannerActions}>
+                  <Pressable
+                    onPress={() => router.push('/admin' as any)}
+                    style={[styles.roleActionBtn, { backgroundColor: theme.primary }]}>
+                    <Text style={styles.roleActionBtnText}>Console Admin</Text>
+                  </Pressable>
+                  {isSuperAdminPrincipal && (
+                    <Pressable
+                      onPress={() => router.push('/finance' as any)}
+                      style={[styles.roleActionBtnOutline, { borderColor: theme.primary }]}>
+                      <Text style={[styles.roleActionBtnOutlineText, { color: theme.primary }]}>
+                        Trésorerie
+                      </Text>
+                    </Pressable>
+                  )}
+                </View>
+              </View>
+            )}
+
+            {isAgentMobilier && !isAdminStaff && (
+              <View
+                style={[
+                  styles.roleBanner,
+                  { backgroundColor: theme.primaryLight, borderColor: theme.primaryBorder },
+                ]}>
+                <View style={styles.roleBannerLeft}>
+                  <SymbolView
+                    name={{ ios: 'figure.walk', android: 'directions_walk', web: 'directions_walk' }}
+                    size={20}
+                    tintColor={theme.primary}
+                  />
+                  <View>
+                    <Text style={[styles.roleBannerTitle, { color: theme.primaryDark }]}>
+                      Espace Agent Terrain Agréé
+                    </Text>
+                    <Text style={[styles.roleBannerSub, { color: theme.textSecondary }]}>
+                      Gestion des visites et des mandats
+                    </Text>
+                  </View>
+                </View>
+                <Pressable
+                  onPress={() => router.push('/visits' as any)}
+                  style={[styles.roleActionBtn, { backgroundColor: theme.primary }]}>
+                  <Text style={styles.roleActionBtnText}>Mes Visites Terrain</Text>
+                </Pressable>
+              </View>
+            )}
+
             {/* Search Input */}
             <View
               style={[
@@ -433,14 +506,76 @@ function AuthenticatedCatalog() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  listContent: { paddingHorizontal: Spacing.three, paddingTop: Spacing.two },
+  listContent: {
+    paddingHorizontal: Spacing.three,
+    paddingTop: Spacing.two,
+    maxWidth: 960,
+    width: '100%',
+    alignSelf: 'center',
+  },
   headerContainer: { marginBottom: Spacing.two },
   brandRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: 8,
+    marginBottom: Spacing.two,
+  },
+  roleBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: Spacing.two + 4,
+    borderRadius: 14,
+    borderWidth: 1,
     marginBottom: Spacing.three,
+    gap: 10,
+    flexWrap: 'wrap',
+  },
+  roleBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+    minWidth: 180,
+  },
+  roleDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  roleBannerTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  roleBannerSub: {
+    fontSize: 11,
+    marginTop: 1,
+  },
+  roleBannerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  roleActionBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 10,
+  },
+  roleActionBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  roleActionBtnOutline: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  roleActionBtnOutlineText: {
+    fontSize: 12,
+    fontWeight: '800',
   },
   brandTitleGroup: { flex: 1, minWidth: 0, flexShrink: 1 },
   titleWithFlag: { flexDirection: 'row', alignItems: 'center', gap: 6 },

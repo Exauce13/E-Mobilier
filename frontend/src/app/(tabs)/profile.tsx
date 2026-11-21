@@ -27,6 +27,7 @@ export default function ProfileScreen() {
     unreadNotificationsCount,
     isAdminStaff,
     isSuperAdminPrincipal,
+    isAgentMobilier,
     openAuthModal,
   } = useAuth();
 
@@ -154,6 +155,22 @@ export default function ProfileScreen() {
               </Text>
             </View>
             <SymbolView name={{ ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' }} size={20} tintColor="#FFFFFF" />
+          </Pressable>
+        )}
+
+        {isAgentMobilier && !isAdminStaff && (
+          <Pressable
+            onPress={() => router.push('/visits' as any)}
+            style={[styles.specialCard, { backgroundColor: theme.primaryLight, borderColor: theme.primaryBorder }]}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.specialTitle, { color: theme.primaryDark }]}>
+                🚶 Espace Agent Mobilier de Terrain
+              </Text>
+              <Text style={[styles.specialSub, { color: theme.textSecondary }]}>
+                Consulter vos visites assignées, vérifier les biens sur place et gérer vos rendez-vous.
+              </Text>
+            </View>
+            <SymbolView name={{ ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' }} size={20} tintColor={theme.primary} />
           </Pressable>
         )}
 
@@ -293,7 +310,13 @@ function MenuRow({
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  scrollContent: { padding: Spacing.three, gap: Spacing.three },
+  scrollContent: {
+    padding: Spacing.three,
+    gap: Spacing.three,
+    maxWidth: 760,
+    width: '100%',
+    alignSelf: 'center',
+  },
   profileHeaderCard: { borderRadius: 22, padding: Spacing.four, gap: Spacing.three },
   profileTopRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   avatarCircle: { width: 58, height: 58, borderRadius: 29, alignItems: 'center', justifyContent: 'center' },
@@ -341,7 +364,16 @@ const styles = StyleSheet.create({
   badgeText: { color: '#FFFFFF', fontSize: 11, fontWeight: '800' },
   logoutBtn: { borderRadius: 14, borderWidth: 1, paddingVertical: 14, alignItems: 'center' },
   logoutText: { color: '#DC2626', fontSize: 15, fontWeight: '800' },
-  guestContent: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: Spacing.five, gap: 14 },
+  guestContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: Spacing.five,
+    gap: 14,
+    maxWidth: 600,
+    width: '100%',
+    alignSelf: 'center',
+  },
   guestAvatar: { width: 96, height: 96, borderRadius: 48, alignItems: 'center', justifyContent: 'center' },
   guestTitle: { fontSize: 22, fontWeight: '900', textAlign: 'center' },
   guestSub: { fontSize: 14, textAlign: 'center', lineHeight: 21 },

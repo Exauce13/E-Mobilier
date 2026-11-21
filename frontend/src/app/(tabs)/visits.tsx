@@ -173,7 +173,9 @@ export default function VisitsScreen() {
               <View style={styles.cardTop}>
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.refText, { color: theme.gold }]}>VIS-{String(item.id).padStart(5, '0')}</Text>
-                  <Text style={[styles.clientName, { color: theme.text }]}>{clientName}</Text>
+                  <Text style={[styles.clientName, { color: theme.text }]}>
+                    {isAgentMobilier && !isAdminStaff ? `Demandeur : ${clientName}` : clientName}
+                  </Text>
                   {item.client?.telephone ? (
                     <Text style={[styles.phoneText, { color: theme.textSecondary }]}>
                       📞 {item.client.telephone}
@@ -208,7 +210,15 @@ export default function VisitsScreen() {
                           ? '#B91C1C'
                           : theme.badgeGoldText,
                     }}>
-                    {item.status.toUpperCase()}
+                    {item.status === 'pending'
+                      ? 'EN ATTENTE'
+                      : item.status === 'confirmed'
+                      ? 'CONFIRMÉE'
+                      : item.status === 'completed'
+                      ? 'TERMINÉE'
+                      : item.status === 'cancelled'
+                      ? 'ANNULÉE'
+                      : item.status.toUpperCase()}
                   </Text>
                 </View>
               </View>
@@ -218,19 +228,45 @@ export default function VisitsScreen() {
                   📅 {new Date(item.scheduled_date).toLocaleString('fr-FR')}
                 </Text>
                 <Text style={[styles.infoText, { color: theme.primary }]}>
-                  {item.is_fee_paid ? '✅ Frais 500 F acquittés' : '⏳ Paiement requis'}
+                  {item.is_fee_paid ? '✅ Frais 500 F acquittés' : '⏳ Frais de visite requis'}
                 </Text>
               </View>
 
+              {/* Propriété associée */}
               {prop && (
                 <Pressable
                   onPress={() => router.push(`/property/${prop.id}` as any)}
                   style={[styles.propBox, { borderColor: theme.cardBorder }]}>
-                  <Text style={[styles.propTitle, { color: theme.text }]}>
-                    {prop.type.toUpperCase()} — {prop.commune} {prop.quartier ? `(${prop.quartier})` : ''}
-                  </Text>
-                  <Text style={[styles.propPrice, { color: theme.primaryDark }]}>{formatFcfa(prop.prix)}</Text>
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text style={[styles.propTitle, { color: theme.text }]}>
+                      {prop.type.toUpperCase()} — {prop.commune} {prop.quartier ? `(${prop.quartier})` : ''}
+                    </Text>
+                    <Text style={[styles.propSub, { color: theme.textSecondary }]}>
+                      Voir la fiche du bien →
+                    </Text>
+                  </View>
+                  <Text style={[styles.propPrice, { color: theme.primary }]}>{formatFcfa(prop.prix)}</Text>
                 </Pressable>
+              )}
+
+              {/* Agent assigné (si vue client) */}
+              {!isAgentMobilier && item.agent && (
+                <View style={[styles.agentBox, { backgroundColor: theme.primaryLight, borderColor: theme.primaryBorder }]}>
+                  <Text style={[styles.agentBoxTitle, { color: theme.primaryDark }]}>
+                    👨‍💼 Agent mandaté : {item.agent.prenom ? `${item.agent.prenom} ${item.agent.name}` : item.agent.name}
+                  </Text>
+                  {item.agent.telephone ? (
+                    <Text style={[styles.agentBoxPhone, { color: theme.textSecondary }]}>
+                      Contact : {item.agent.telephone}
+                    </Text>
+                  ) : null}
+                </View>
+              )}
+
+              {!isAgentMobilier && !item.agent && item.status === 'pending' && (
+                <Text style={[styles.pendingAgentNote, { color: theme.textSecondary }]}>
+                  ⏳ Attribution d'un agent de zone en cours par l'équipe E-Mobilier.
+                </Text>
               )}
 
               {item.instructions_itineraire ? (
@@ -249,7 +285,7 @@ export default function VisitsScreen() {
                 <Pressable
                   onPress={() => handleCancel(item.id)}
                   style={[styles.cancelBtn, { borderColor: '#FCA5A5' }]}>
-                  <Text style={styles.cancelBtnText}>Annuler la visite</Text>
+                  <Text style={styles.cancelBtnText}>Annuler cette visite</Text>
                 </Pressable>
               )}
             </View>
@@ -274,7 +310,14 @@ export default function VisitsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  list: { paddingHorizontal: Spacing.three, paddingTop: Spacing.two, gap: Spacing.three },
+  list: {
+    paddingHorizontal: Spacing.three,
+    paddingTop: Spacing.two,
+    gap: Spacing.three,
+    maxWidth: 900,
+    width: '100%',
+    alignSelf: 'center',
+  },
   headerBlock: { gap: Spacing.two },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   pageTitle: { fontSize: 22, fontWeight: '900' },
@@ -292,9 +335,27 @@ const styles = StyleSheet.create({
   statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
   infoStrip: { borderRadius: 12, padding: 10, gap: 4 },
   infoText: { fontSize: 13, fontWeight: '600' },
-  propBox: { borderWidth: 1, borderRadius: 12, padding: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  propBox: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 10,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 8,
+  },
   propTitle: { fontSize: 13, fontWeight: '700', flex: 1 },
+  propSub: { fontSize: 11, marginTop: 1 },
   propPrice: { fontSize: 13, fontWeight: '800' },
+  agentBox: {
+    padding: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 2,
+  },
+  agentBoxTitle: { fontSize: 13, fontWeight: '700' },
+  agentBoxPhone: { fontSize: 12 },
+  pendingAgentNote: { fontSize: 12, fontStyle: 'italic' },
   instructions: { fontSize: 13, lineHeight: 18 },
   cancelBtn: { borderWidth: 1, borderRadius: 10, paddingVertical: 9, alignItems: 'center' },
   cancelBtnText: { color: '#DC2626', fontWeight: '700', fontSize: 13 },
