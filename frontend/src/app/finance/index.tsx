@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { SuperAdminPrincipalPortal } from '@/components/super-admin/super-admin-portal';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
@@ -22,6 +23,16 @@ import { formatFcfa } from '@/types/property';
 type FinanceTab = 'dashboard' | 'ledger' | 'payouts' | 'security' | 'webhooks_notifs';
 
 export default function FinanceVaultScreen() {
+  const { isSuperAdminPrincipal } = useAuth();
+
+  if (isSuperAdminPrincipal) {
+    return <SuperAdminPrincipalPortal initialPage="finance" />;
+  }
+
+  return <LegacyFinanceVaultScreen />;
+}
+
+function LegacyFinanceVaultScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { isSuperAdminPrincipal } = useAuth();

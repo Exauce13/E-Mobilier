@@ -18,6 +18,8 @@ export interface AuthUser {
   fullName?: string;
   phone: string;
   email?: string;
+  photo_profil?: string | null;
+  photo_url?: string | null;
   role: UserRole;
   roles: string[];
   is_verifed: boolean;
@@ -88,6 +90,8 @@ function mapBackendUserToAuthUser(u: any): AuthUser {
     fullName: u.fullName,
     phone: u.phone || u.telephone || '',
     email: u.email,
+    photo_profil: u.photo_profil ?? null,
+    photo_url: u.photo_url ?? null,
     role,
     roles,
     is_verifed: Boolean(u.is_verifed),

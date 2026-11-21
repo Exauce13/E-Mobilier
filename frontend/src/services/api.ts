@@ -155,6 +155,8 @@ export interface AuthResponseData {
     phone: string;
     telephone?: string;
     email?: string;
+    photo_profil?: string | null;
+    photo_url?: string | null;
     role: 'client_proprietaire' | 'agent_immobilier';
     roles?: string[];
     is_verifed: boolean;
@@ -299,6 +301,24 @@ export const authApi = {
 
   profil: async (): Promise<ApiResponse<{ user: AuthResponseData['user'] }>> => {
     return apiRequest('/profil', { method: 'GET' });
+  },
+
+  updateProfil: async (payload: { name?: string; prenom?: string }): Promise<ApiResponse<{ user: AuthResponseData['user'] }>> => {
+    return apiRequest('/profil', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  uploadPhotoProfil: async (formData: FormData): Promise<ApiResponse<{ user: AuthResponseData['user'] }>> => {
+    return apiRequest('/profil/photo', {
+      method: 'POST',
+      body: formData,
+    });
+  },
+
+  deletePhotoProfil: async (): Promise<ApiResponse<{ user: AuthResponseData['user'] }>> => {
+    return apiRequest('/profil/photo', { method: 'DELETE' });
   },
 
   deconnexion: async (): Promise<ApiResponse> => {
@@ -644,7 +664,13 @@ export const adminApi = {
   },
 
   // Audit logs
-  getAuditLogs: async (filters?: { action?: string; page?: number }): Promise<ApiResponse<PaginatedPayload<AuditLogItem>>> => {
+  getAuditLogs: async (filters?: {
+    action?: string;
+    module?: string;
+    search?: string;
+    page?: number;
+    per_page?: number;
+  }): Promise<ApiResponse<PaginatedPayload<AuditLogItem>>> => {
     return apiRequest(`/admin/audit-logs${buildQuery(filters || {})}`, { method: 'GET' });
   },
 
@@ -688,7 +714,16 @@ export const adminApi = {
     return apiRequest(`/admin/dossiers/${type}/${id}/coordonnees`, { method: 'GET' });
   },
 
-  // Brique A : Modération catalogue
+  // Brique A : Modération catalogue & Tous les posts (Clients & Agents)
+  getAllProprietes: async (filters?: {
+    author_role?: 'all' | 'client' | 'agent';
+    status?: string;
+    search?: string;
+    page?: number;
+    per_page?: number;
+  }): Promise<ApiResponse<BackendProperty[]>> => {
+    return apiRequest(`/admin/proprietes${buildQuery(filters || {})}`, { method: 'GET' });
+  },
   getProprietesEnAttente: async (page = 1): Promise<ApiResponse<BackendProperty[]>> => {
     return apiRequest(`/admin/proprietes/en-attente?page=${page}`, { method: 'GET' });
   },

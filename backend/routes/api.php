@@ -58,6 +58,9 @@ Route::get('/cgu/courante', [LegalDocumentController::class, 'cguCourante']);
 Route::middleware(['auth:sanctum', 'active'])->group(function () {
     // Profil et compte utilisateur commun
     Route::get('/profil', [InscriptionController::class, 'profil']);
+    Route::put('/profil', [InscriptionController::class, 'updateProfil']);
+    Route::post('/profil/photo', [InscriptionController::class, 'updatePhotoProfil']);
+    Route::delete('/profil/photo', [InscriptionController::class, 'deletePhotoProfil']);
     Route::post('/deconnexion', [InscriptionController::class, 'deconnexion']);
     Route::get('/user', function (Request $request) {
         return $request->user();
@@ -148,6 +151,7 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
 
     // BRIQUE A : Modération du Catalogue & Audit des Titres Fonciers
     Route::middleware(['role:Super Admin Principal|Super Admin Technique|Secrétaire|Responsable de zone|Admin', 'charte.signed'])->group(function () {
+        Route::get('/admin/proprietes', [CatalogModerationController::class, 'index']);
         Route::get('/admin/proprietes/en-attente', [CatalogModerationController::class, 'enAttente']);
         Route::post('/admin/proprietes/{id}/marquer-conclu', [CatalogModerationController::class, 'marquerConclu']);
     });

@@ -22,6 +22,7 @@ import {
   ModerationSection,
   VisitesOpsSection,
 } from '@/components/admin/admin-ops-sections';
+import { SuperAdminPrincipalPortal } from '@/components/super-admin/super-admin-portal';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
@@ -39,6 +40,16 @@ type AdminTabKey =
   | 'tech';
 
 export default function AdminDashboardScreen() {
+  const { isSuperAdminPrincipal } = useAuth();
+
+  if (isSuperAdminPrincipal) {
+    return <SuperAdminPrincipalPortal initialPage="dashboard" />;
+  }
+
+  return <StandardAdminDashboard />;
+}
+
+function StandardAdminDashboard() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { isAdminStaff, isSuperAdmin, hasAnyRole } = useAuth();

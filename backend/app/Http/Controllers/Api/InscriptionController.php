@@ -398,6 +398,101 @@ class InscriptionController extends Controller
         }
     }
 
+    /**
+     * Mise à jour des informations de profil (nom, prénom).
+     */
+    public function updateProfil(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        if (! $user) {
+            return response()->json(['success' => false, 'message' => 'Non authentifié.'], 401);
+        }
+
+        $validated = $request->validate([
+            'name' => ['sometimes', 'required', 'string', 'min:2', 'max:100'],
+            'prenom' => ['sometimes', 'required', 'string', 'min:2', 'max:100'],
+        ]);
+
+        $user->update($validated);
+        $user->refresh();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Profil mis à jour avec succès.',
+            'data' => [
+                'user' => $this->formatUserResponse($user),
+            ],
+        ], 200);
+    }
+
+    /**
+     * Mise à jour de la photo de profil de l'utilisateur connecté.
+     */
+    public function updatePhotoProfil(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        if (! $user) {
+            return response()->json(['success' => false, 'message' => 'Non authentifié.'], 401);
+        }
+
+        $request->validate([
+            'photo' => ['required', 'image', 'mimes:jpeg,png,jpg,webp', 'max:5120'],
+        ]);
+
+        try {
+            if ($user->photo_profil && \Illuminate\Support\Facades\Storage::disk('public')->exists($user->photo_profil)) {
+                \Illuminate\Support\Facades\Storage::disk('public')->delete($user->photo_profil);
+            }
+
+            $path = $request->file('photo')->store('avatars', 'public');
+            $user->update(['photo_profil' => $path]);
+            $user->refresh();
+
+            \App\Services\AuditService::log('profil_photo_modifiee', $user, [
+                'photo_profil' => $path,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Photo de profil mise à jour avec succès.',
+                'data' => [
+                    'user' => $this->formatUserResponse($user),
+                ],
+            ], 200);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Impossible de mettre à jour la photo de profil.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Suppression de la photo de profil de l'utilisateur connecté.
+     */
+    public function deletePhotoProfil(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        if (! $user) {
+            return response()->json(['success' => false, 'message' => 'Non authentifié.'], 401);
+        }
+
+        if ($user->photo_profil && \Illuminate\Support\Facades\Storage::disk('public')->exists($user->photo_profil)) {
+            \Illuminate\Support\Facades\Storage::disk('public')->delete($user->photo_profil);
+        }
+
+        $user->update(['photo_profil' => null]);
+        $user->refresh();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Photo de profil supprimée.',
+            'data' => [
+                'user' => $this->formatUserResponse($user),
+            ],
+        ], 200);
+    }
 
     /**
      * Formate les données de l'utilisateur pour le frontend.
@@ -412,6 +507,13 @@ class InscriptionController extends Controller
             default => 'client_proprietaire',
         };
 
+        $photoUrl = null;
+        if (! empty($user->photo_profil)) {
+            $photoUrl = str_starts_with($user->photo_profil, 'http')
+                ? $user->photo_profil
+                : url('storage/' . ltrim($user->photo_profil, '/'));
+        }
+
         return [
             'id' => (string) $user->id,
             'name' => $user->fullName ?: trim("{$user->prenom} {$user->name}"),
@@ -421,6 +523,8 @@ class InscriptionController extends Controller
             'phone' => $user->telephone,
             'telephone' => $user->telephone,
             'email' => $user->email,
+            'photo_profil' => $user->photo_profil,
+            'photo_url' => $photoUrl,
             'role' => $frontendRole,
             'roles' => $roles,
             'statut' => $user->statut ?? 'actif',

@@ -14,39 +14,41 @@ import { useAuth } from '@/context/auth-context';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function AppTabs() {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, isSuperAdminPrincipal } = useAuth();
 
   return (
     <Tabs>
       <TabSlot style={{ height: '100%' }} />
 
-      <TabList asChild>
-        <CustomTabList>
-          <TabTrigger name="home" href="/" asChild>
-            <TabButton>{isAuthenticated ? 'Catalogue' : 'Accueil'}</TabButton>
-          </TabTrigger>
-
-          <TabTrigger name="explore" href="/explore" asChild>
-            <TabButton>Recherche</TabButton>
-          </TabTrigger>
-
-          {isAuthenticated && (
-            <TabTrigger name="publish" href="/publish" asChild>
-              <TabButton>Publier</TabButton>
+      {!isSuperAdminPrincipal && (
+        <TabList asChild>
+          <CustomTabList>
+            <TabTrigger name="home" href="/" asChild>
+              <TabButton>{isAuthenticated ? 'Catalogue' : 'Accueil'}</TabButton>
             </TabTrigger>
-          )}
 
-          {isAuthenticated && (
-            <TabTrigger name="visits" href="/visits" asChild>
-              <TabButton>Visites</TabButton>
+            <TabTrigger name="explore" href="/explore" asChild>
+              <TabButton>Recherche</TabButton>
             </TabTrigger>
-          )}
 
-          <TabTrigger name="profile" href="/profile" asChild>
-            <TabButton>{isAuthenticated ? 'Mon Profil' : 'Connexion'}</TabButton>
-          </TabTrigger>
-        </CustomTabList>
-      </TabList>
+            {isAuthenticated && (
+              <TabTrigger name="publish" href="/publish" asChild>
+                <TabButton>Publier</TabButton>
+              </TabTrigger>
+            )}
+
+            {isAuthenticated && (
+              <TabTrigger name="visits" href="/visits" asChild>
+                <TabButton>Visites</TabButton>
+              </TabTrigger>
+            )}
+
+            <TabTrigger name="profile" href="/profile" asChild>
+              <TabButton>{isAuthenticated ? 'Mon Profil' : 'Connexion'}</TabButton>
+            </TabTrigger>
+          </CustomTabList>
+        </TabList>
+      )}
     </Tabs>
   );
 }

@@ -14,7 +14,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Laravel\Sanctum\HasApiTokens;
 use Spatie\Permission\Traits\HasRoles;
 
-#[Fillable(['name', 'prenom', 'email', 'telephone', 'is_verifed', 'password', 'device_token', 'zone_id', 'statut', 'two_factor_token', 'two_factor_otp_hash', 'two_factor_otp_expires_at', 'two_factor_otp_tentatives'])]
+#[Fillable(['name', 'prenom', 'email', 'telephone', 'photo_profil', 'is_verifed', 'password', 'device_token', 'zone_id', 'statut', 'two_factor_token', 'two_factor_otp_hash', 'two_factor_otp_expires_at', 'two_factor_otp_tentatives'])]
 #[Hidden(['password', 'remember_token', 'two_factor_token', 'two_factor_otp_hash'])]
 class User extends Authenticatable
 {
