@@ -103,6 +103,21 @@ class RoleSeeder extends Seeder
         }
         $justin->syncRoles(['Super Admin Principal', 'Admin']);
 
+        // 3b. Initialisation du second Super Administrateur Principal
+        $secondaryEmail = config('emobilier.super_admin_principal_secondary_email', 'admin.principal2@e-mobilier.bj');
+        $secondPrincipal = User::firstOrCreate(
+            ['email' => $secondaryEmail],
+            [
+                'name' => 'PRINCIPAL',
+                'prenom' => 'Super Admin 2',
+                'telephone' => '+2290197000002',
+                'password' => Hash::make('SuperAdmin2@2026!'),
+                'is_verifed' => true,
+                'statut' => 'actif',
+            ]
+        );
+        $secondPrincipal->syncRoles(['Super Admin Principal', 'Admin']);
+
         // 4. Initialisation / Attribution du Super Administrateur Technique (Jean-Paul GNIKPO)
         $techUser = User::where('email', 'jeanpaul@gmail.com')
             ->orWhere('email', 'jeanpaulgnikpo@gmail.com')

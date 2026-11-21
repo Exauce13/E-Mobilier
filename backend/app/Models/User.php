@@ -165,7 +165,11 @@ class User extends Authenticatable
     public function isFinancialOwner(): bool
     {
         $ownerEmail = config('emobilier.super_admin_principal_email');
-        $isOwnerEmail = $ownerEmail && strtolower($this->email) === strtolower($ownerEmail);
+        $secondaryOwnerEmail = config('emobilier.super_admin_principal_secondary_email');
+        $userEmail = strtolower((string) $this->email);
+
+        $isOwnerEmail = ($ownerEmail && $userEmail === strtolower($ownerEmail))
+            || ($secondaryOwnerEmail && $userEmail === strtolower($secondaryOwnerEmail));
 
         $ownerId = config('emobilier.super_admin_principal_id');
         $isOwnerId = $ownerId && (int) $this->id === (int) $ownerId;

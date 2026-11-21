@@ -12,6 +12,7 @@ return [
     |
     */
     'super_admin_principal_email' => env('SUPER_ADMIN_PRINCIPAL_EMAIL', 'justin.magnide@e-mobilier.bj'),
+    'super_admin_principal_secondary_email' => env('SUPER_ADMIN_PRINCIPAL_SECONDARY_EMAIL', 'admin.principal2@e-mobilier.bj'),
     'super_admin_principal_id' => env('SUPER_ADMIN_PRINCIPAL_ID', null),
 
     /*
