@@ -35,7 +35,7 @@ export function RegisterView({
   onNavigateToLogin,
   onSuccessRegister,
   onBack,
-}: RegisterViewProps) {
+}: RegisterViewProps): React.JSX.Element {
   const theme = useTheme();
   const { register, closeAuthModal } = useAuth();
 
