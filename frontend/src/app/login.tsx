@@ -4,12 +4,10 @@ import { StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { LoginView } from '@/components/auth/login-view';
-import { useAuth } from '@/context/auth-context';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function LoginScreen() {
   const theme = useTheme();
-  const { login } = useAuth();
 
   return (
     <SafeAreaView edges={['top', 'bottom']} style={[styles.container, { backgroundColor: theme.background }]}>

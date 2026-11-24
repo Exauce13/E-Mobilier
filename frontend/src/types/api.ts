@@ -483,3 +483,87 @@ export interface RetraitItem {
   statut: 'en_attente_otp' | 'execute' | 'annule' | 'echec' | string;
   created_at: string;
 }
+
+export type InquiryActionType =
+  | 'demande_visite'
+  | 'rendez_vous'
+  | 'contact'
+  | 'formulaire_client';
+
+export type InquiryMeetingMode = 'sur_place' | 'appel' | 'agence';
+
+export interface PropertyInquiryPayload {
+  property_id?: number | null;
+  type: InquiryActionType;
+  nom: string;
+  prenom: string;
+  telephone: string;
+  email: string;
+  scheduled_date?: string | null;
+  meeting_mode?: InquiryMeetingMode | null;
+  sujet?: string | null;
+  commune?: string | null;
+  quartier?: string | null;
+  budget?: number | null;
+  message?: string | null;
+}
+
+export interface PropertyInquiryItem {
+  id: number;
+  property_id?: number | null;
+  user_id?: number | null;
+  recipient_id?: number | null;
+  type: InquiryActionType;
+  nom: string;
+  prenom: string;
+  telephone: string;
+  email: string;
+  scheduled_date?: string | null;
+  meeting_mode?: InquiryMeetingMode | null;
+  sujet?: string | null;
+  commune?: string | null;
+  quartier?: string | null;
+  budget?: number | string | null;
+  message?: string | null;
+  status: 'nouveau' | 'en_cours' | 'confirme' | 'traite' | 'annule' | string;
+  propriete?: {
+    id: number;
+    type: string;
+    transaction_type: string;
+    commune: string;
+    quartier?: string | null;
+    prix: number | string;
+    status: string;
+  } | null;
+  created_at: string;
+}
+
+export interface AgentClientLead {
+  key: string;
+  nom: string;
+  prenom: string;
+  telephone: string;
+  email: string;
+  total_demandes: number;
+  derniere_interaction?: string | null;
+  dernier_type: InquiryActionType;
+  dernier_statut: string;
+}
+
+export interface AgentDashboardData {
+  kpis: {
+    total_biens: number;
+    biens_publies: number;
+    biens_en_attente: number;
+    biens_conclus: number;
+    total_visites: number;
+    visites_en_attente: number;
+    total_demandes: number;
+    demandes_nouvelles: number;
+    total_clients: number;
+  };
+  proprietes: BackendProperty[];
+  inquiries: PropertyInquiryItem[];
+  visites: VisiteBackendItem[];
+  clients: AgentClientLead[];
+}

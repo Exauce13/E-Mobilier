@@ -14,8 +14,6 @@ export function AuthModal() {
     authModalMode,
     closeAuthModal,
     setAuthModalMode,
-    login,
-    register,
   } = useAuth();
 
   if (!authModalVisible) return null;

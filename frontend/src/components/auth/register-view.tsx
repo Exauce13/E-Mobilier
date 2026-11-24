@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import React, { useState } from 'react';
 import {
@@ -15,6 +16,7 @@ import {
 import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
 import { useTheme } from '@/hooks/use-theme';
+import { isValidEmail, isValidPersonName, isValidPhone } from '@/utils/validation';
 
 export type UserRole = 'client_proprietaire' | 'agent_immobilier';
 
@@ -35,7 +37,7 @@ export function RegisterView({
   onBack,
 }: RegisterViewProps) {
   const theme = useTheme();
-  const { register } = useAuth();
+  const { register, closeAuthModal } = useAuth();
 
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
@@ -49,12 +51,16 @@ export function RegisterView({
 
   const handleRegister = async () => {
     setMessage(null);
-    if (!fullName.trim()) {
-      setMessage({ text: 'Veuillez renseigner votre nom complet.', type: 'error' });
+    if (!isValidPersonName(fullName)) {
+      setMessage({ text: 'Veuillez renseigner un nom complet valide (lettres uniquement, min. 2 caractères).', type: 'error' });
       return;
     }
-    if (!phone.trim()) {
-      setMessage({ text: 'Veuillez saisir votre numéro de téléphone (MTN ou Moov).', type: 'error' });
+    if (!isValidPhone(phone, true)) {
+      setMessage({ text: 'Veuillez saisir un numéro béninois valide commençant par 01 (10 chiffres, ex: 0197001122).', type: 'error' });
+      return;
+    }
+    if (email.trim() && !isValidEmail(email)) {
+      setMessage({ text: 'Veuillez saisir une adresse e-mail valide.', type: 'error' });
       return;
     }
     if (!password.trim() || password.length < 6) {
@@ -400,7 +406,12 @@ export function RegisterView({
             </View>
             <Text style={[styles.termsText, { color: theme.text }]}>
               J'accepte les{' '}
-              <Text style={[styles.termsLink, { color: theme.primary }]}>
+              <Text
+                onPress={() => {
+                  closeAuthModal();
+                  router.push('/cgu' as any);
+                }}
+                style={[styles.termsLink, { color: theme.primary }]}>
                 conditions d'utilisation
               </Text>
             </Text>

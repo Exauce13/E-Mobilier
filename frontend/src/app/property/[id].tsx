@@ -1,59 +1,120 @@
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
+import { SymbolView } from 'expo-symbols';
 import * as WebBrowser from 'expo-web-browser';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Modal,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { KkiapayCheckoutModal } from '@/components/kkiapay-checkout-modal';
+import { PropertyActionModal, PropertyActionTab } from '@/components/property/property-action-modal';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
+import { MOCK_PROPERTIES } from '@/data/mock-properties';
+import { useResponsive } from '@/hooks/use-responsive';
 import { useTheme } from '@/hooks/use-theme';
 import { getStorageBaseUrl, proprietesApi, visitesApi } from '@/services/api';
+import { favoritesStorage } from '@/services/local-store';
 import type { BackendProperty } from '@/types/api';
 import { formatFcfa, resolveStorageUrl } from '@/types/property';
-
-function toLocalIsoFuture(daysAhead: number, hour: number): string {
-  const d = new Date(Date.now() + daysAhead * 86400 * 1000);
-  d.setHours(hour, 0, 0, 0);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:00:00`;
-}
+import { formatLocalFutureDate, getStatusDisplay } from '@/utils/validation';
 
 export default function PropertyDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const { isDesktop, contentMaxWidth, horizontalPadding } = useResponsive();
   const { isAuthenticated, openAuthModal } = useAuth();
   const storageBaseUrl = useMemo(() => getStorageBaseUrl(), []);
 
   const [property, setProperty] = useState<BackendProperty | null>(null);
+  const [fallbackImage, setFallbackImage] = useState<any>(null);
+  const [activePhotoIndex, setActivePhotoIndex] = useState(0);
+  const [isFavorite, setIsFavorite] = useState(false);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const [unlockCheckoutOpen, setUnlockCheckoutOpen] = useState(false);
-  const [visitModalOpen, setVisitModalOpen] = useState(false);
-  const [visitDateInput, setVisitDateInput] = useState(() => toLocalIsoFuture(1, 10));
   const [visitCheckoutOpen, setVisitCheckoutOpen] = useState(false);
+  const [pendingVisitDate, setPendingVisitDate] = useState(() => formatLocalFutureDate(1, 10));
+
+  const [actionModalOpen, setActionModalOpen] = useState(false);
+  const [actionModalTab, setActionModalTab] = useState<PropertyActionTab>('demande_visite');
 
   const loadDetail = useCallback(async () => {
     if (!id) return;
     setLoading(true);
     setErrorMsg(null);
+    setFallbackImage(null);
+
+    const favs = await favoritesStorage.getAll();
+    setIsFavorite(favs.has(String(id)));
+
+    // Check if demo mock ID
+    const mockMatch = MOCK_PROPERTIES.find((m) => m.id === String(id));
+    if (mockMatch && Number.isNaN(Number(id))) {
+      setFallbackImage(mockMatch.image);
+      setProperty({
+        id: 0,
+        user_id: 0,
+        type: mockMatch.type,
+        transaction_type: mockMatch.transactionType,
+        commune: mockMatch.location.commune,
+        quartier: mockMatch.location.quartier,
+        location_details: mockMatch.location.fullAddress,
+        accessibilite: 'Voie pavée / Goudron proche',
+        eau_courant: mockMatch.features.eauElectricite || 'SONEB + SBEE',
+        surface: mockMatch.features.surface || 250,
+        nombres_chambres: mockMatch.features.chambres || 0,
+        prix: mockMatch.price,
+        is_negotiable: true,
+        description: `${mockMatch.title}. Bien sélectionné sur le catalogue E-Mobilier Bénin (${mockMatch.tags.join(', ')}).`,
+        status: 'published',
+        is_unlocked: false,
+        unlock_fee: mockMatch.unlockFee,
+        visit_fee: 500,
+        user: {
+          id: 0,
+          name: 'Conseiller E-Mobilier Bénin',
+          telephone: '+229 01 97 00 11 22',
+          email: 'contact@e-mobilier.bj',
+        },
+      });
+      setLoading(false);
+      return;
+    }
+
     const res = await proprietesApi.getById(id);
     if (res.success && res.data) {
       setProperty(res.data);
+    } else if (mockMatch) {
+      setFallbackImage(mockMatch.image);
+      setProperty({
+        id: 0,
+        user_id: 0,
+        type: mockMatch.type,
+        transaction_type: mockMatch.transactionType,
+        commune: mockMatch.location.commune,
+        quartier: mockMatch.location.quartier,
+        location_details: mockMatch.location.fullAddress,
+        surface: mockMatch.features.surface || 250,
+        nombres_chambres: mockMatch.features.chambres || 0,
+        prix: mockMatch.price,
+        status: 'published',
+        is_unlocked: false,
+        unlock_fee: mockMatch.unlockFee,
+        visit_fee: 500,
+      });
     } else {
       setErrorMsg(res.message || 'Impossible de charger les détails du bien.');
     }
@@ -64,22 +125,15 @@ export default function PropertyDetailScreen() {
     void loadDetail();
   }, [loadDetail]);
 
-  const handleOpenVisitFlow = () => {
-    if (!isAuthenticated) {
-      openAuthModal('login');
-      return;
-    }
-    setVisitModalOpen(true);
+  const handleToggleFavorite = async () => {
+    if (!id) return;
+    const next = await favoritesStorage.toggle(String(id));
+    setIsFavorite(next.has(String(id)));
   };
 
-  const handleProceedVisitPayment = () => {
-    const parsed = new Date(visitDateInput.replace(' ', 'T'));
-    if (Number.isNaN(parsed.getTime()) || parsed.getTime() <= Date.now()) {
-      Alert.alert('Date invalide', 'Veuillez saisir une date future valide (ex: AAAA-MM-JJ HH:MM:SS).');
-      return;
-    }
-    setVisitModalOpen(false);
-    setVisitCheckoutOpen(true);
+  const openActionModal = (tab: PropertyActionTab) => {
+    setActionModalTab(tab);
+    setActionModalOpen(true);
   };
 
   const images = useMemo(() => {
@@ -90,11 +144,40 @@ export default function PropertyDetailScreen() {
       .filter((u): u is string => Boolean(u));
   }, [property, storageBaseUrl]);
 
+  const propertyTitle = property
+    ? `${property.type === 'parcelle' ? 'Parcelle' : property.type === 'chambre' ? 'Chambre' : 'Maison'} ${
+        property.transaction_type === 'location' ? 'à louer' : 'à vendre'
+      } — ${property.commune}`
+    : 'Détail du bien';
+
+  const fullAddress = property
+    ? [property.quartier, property.arrondissement, property.commune].filter(Boolean).join(', ')
+    : '';
+
+  const isRealBackendProperty = Boolean(property && property.id > 0);
+  const statusDisplay = property ? getStatusDisplay(property.status) : null;
+
   return (
     <SafeAreaView edges={['top']} style={[styles.container, { backgroundColor: theme.background }]}>
       <ScreenHeader
-        title={property ? `${property.type.toUpperCase()} — ${property.commune}` : 'Détail du bien'}
+        title={propertyTitle}
         subtitle={property ? (property.transaction_type === 'location' ? 'À LOUER' : 'À VENDRE') : undefined}
+        rightAction={
+          <Pressable
+            onPress={handleToggleFavorite}
+            style={styles.favHeaderBtn}
+            hitSlop={8}>
+            <SymbolView
+              name={{
+                ios: isFavorite ? 'heart.fill' : 'heart',
+                android: isFavorite ? 'favorite' : 'favorite_border',
+                web: isFavorite ? 'favorite' : 'favorite_border',
+              }}
+              size={20}
+              tintColor={isFavorite ? '#EF4444' : '#FFFFFF'}
+            />
+          </Pressable>
+        }
       />
 
       {loading ? (
@@ -109,142 +192,326 @@ export default function PropertyDetailScreen() {
           </Pressable>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 36 }]}>
-          {/* Media gallery */}
-          {images.length > 0 ? (
-            <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false} style={styles.gallery}>
-              {images.map((uri, idx) => (
-                <Image key={`${uri}-${idx}`} source={{ uri }} style={styles.heroImg} contentFit="cover" />
-              ))}
-            </ScrollView>
-          ) : (
-            <View style={[styles.noMediaBox, { backgroundColor: theme.backgroundElement }]}>
-              <Text style={{ color: theme.textSecondary, fontWeight: '600' }}>Aucune photo disponible</Text>
-            </View>
-          )}
-
-          {/* Main Info */}
-          <View style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder }]}>
-            <View style={styles.priceRow}>
-              <Text style={[styles.priceText, { color: theme.primaryDark }]}>
-                {formatFcfa(property.prix)}
-                {property.transaction_type === 'location' ? '/mois' : ''}
-              </Text>
-              {property.is_negotiable && (
-                <View style={[styles.pill, { backgroundColor: theme.badgeGoldBg }]}>
-                  <Text style={{ color: theme.badgeGoldText, fontSize: 11, fontWeight: '800' }}>NÉGOCIABLE</Text>
-                </View>
-              )}
-            </View>
-
-            <Text style={[styles.locationTitle, { color: theme.text }]}>
-              {[property.quartier, property.arrondissement, property.commune].filter(Boolean).join(', ')}
-            </Text>
-
-            <View style={styles.specsGrid}>
-              <SpecBadge label="Surface" value={`${property.surface} m²`} theme={theme} />
-              {property.nombres_chambres ? (
-                <SpecBadge label="Chambres" value={`${property.nombres_chambres}`} theme={theme} />
-              ) : null}
-              {property.transaction_type === 'location' && property.avance_mois ? (
-                <SpecBadge label="Avance" value={`${property.avance_mois} mois`} theme={theme} />
-              ) : null}
-              <SpecBadge label="Statut" value={property.status} theme={theme} />
-            </View>
-
-            {property.accessibilite && (
-              <Text style={[styles.detailLine, { color: theme.textSecondary }]}>
-                🛣️ Accessibilité : <Text style={{ color: theme.text, fontWeight: '600' }}>{property.accessibilite}</Text>
-              </Text>
-            )}
-            {property.eau_courant && (
-              <Text style={[styles.detailLine, { color: theme.textSecondary }]}>
-                💧 Eau & Électricité : <Text style={{ color: theme.text, fontWeight: '600' }}>{property.eau_courant}</Text>
-              </Text>
-            )}
-            {property.description && (
-              <Text style={[styles.description, { color: theme.text }]}>{property.description}</Text>
-            )}
-          </View>
-
-          {/* Coordinates & Documents Section (50 FCFA unlock gate) */}
-          <View style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder }]}>
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>
-              {property.is_unlocked ? '🔓 Coordonnées & Documents Débloqués' : '🔒 Coordonnées & Documents Protégés'}
-            </Text>
-            <Text style={[styles.detailLine, { color: theme.textSecondary }]}>
-              {property.location_details || 'Repères précis non renseignés.'}
-            </Text>
-
-            {property.user && (
-              <View style={[styles.contactBox, { backgroundColor: theme.backgroundElement }]}>
-                <Text style={[styles.contactName, { color: theme.text }]}>
-                  {property.user.prenom ? `${property.user.prenom} ${property.user.name}` : property.user.name}
-                </Text>
-                {property.user.telephone ? (
-                  <Text style={[styles.contactLine, { color: theme.primaryDark }]}>
-                    📞 {property.user.telephone}
-                  </Text>
-                ) : null}
-                {property.user.email ? (
-                  <Text style={[styles.contactLine, { color: theme.textSecondary }]}>
-                    ✉️ {property.user.email}
-                  </Text>
-                ) : null}
-              </View>
-            )}
-
-            {property.is_unlocked && property.documents && property.documents.length > 0 && (
-              <View style={{ gap: 8, marginTop: 6 }}>
-                <Text style={[styles.docHeader, { color: theme.text }]}>Documents justificatifs :</Text>
-                {property.documents.map((doc) => {
-                  const docUrl = resolveStorageUrl(doc.document_url || doc.url_consultation, storageBaseUrl);
-                  return (
-                    <Pressable
-                      key={doc.id}
-                      onPress={() => docUrl && WebBrowser.openBrowserAsync(docUrl)}
-                      style={[styles.docRow, { borderColor: theme.cardBorder }]}>
-                      <Text style={{ color: theme.text, fontWeight: '700', flex: 1 }}>
-                        📄 {(doc.document_type || doc.type || 'Document').toUpperCase()}
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={[
+            styles.scroll,
+            {
+              paddingHorizontal: horizontalPadding,
+              paddingBottom: insets.bottom + 40,
+            },
+          ]}>
+          <View style={[styles.innerWrap, { maxWidth: contentMaxWidth }]}>
+            <View style={[styles.layoutGrid, isDesktop && styles.layoutGridDesktop]}>
+              {/* LEFT / MAIN COLUMN */}
+              <View style={[styles.mainCol, isDesktop && { flex: 1.55 }]}>
+                {/* Responsive Photo Gallery */}
+                <View
+                  style={[
+                    styles.galleryCard,
+                    { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder },
+                  ]}>
+                  {images.length > 0 ? (
+                    <>
+                      <Image
+                        source={{ uri: images[activePhotoIndex] || images[0] }}
+                        style={[styles.heroImg, isDesktop && { height: 390 }]}
+                        contentFit="cover"
+                      />
+                      {images.length > 1 && (
+                        <ScrollView
+                          horizontal
+                          showsHorizontalScrollIndicator={false}
+                          contentContainerStyle={styles.thumbRow}>
+                          {images.map((uri, idx) => (
+                            <Pressable
+                              key={`${uri}-${idx}`}
+                              onPress={() => setActivePhotoIndex(idx)}
+                              style={[
+                                styles.thumbWrap,
+                                {
+                                  borderColor:
+                                    idx === activePhotoIndex ? theme.primary : 'transparent',
+                                },
+                              ]}>
+                              <Image source={{ uri }} style={styles.thumbImg} contentFit="cover" />
+                            </Pressable>
+                          ))}
+                        </ScrollView>
+                      )}
+                    </>
+                  ) : fallbackImage ? (
+                    <Image
+                      source={fallbackImage}
+                      style={[styles.heroImg, isDesktop && { height: 390 }]}
+                      contentFit="cover"
+                    />
+                  ) : (
+                    <View style={[styles.noMediaBox, { backgroundColor: theme.backgroundElement }]}>
+                      <Text style={{ color: theme.textSecondary, fontWeight: '600' }}>
+                        Aucune photo disponible
                       </Text>
-                      <Text style={{ color: theme.primary, fontWeight: '800', fontSize: 12 }}>Ouvrir</Text>
+                    </View>
+                  )}
+                </View>
+
+                {/* Main Info Card */}
+                <View
+                  style={[
+                    styles.card,
+                    { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder },
+                  ]}>
+                  <View style={styles.priceRow}>
+                    <Text style={[styles.priceText, { color: theme.primary }]}>
+                      {formatFcfa(property.prix)}
+                      {property.transaction_type === 'location' ? '/mois' : ''}
+                    </Text>
+                    <View style={{ flexDirection: 'row', gap: 6 }}>
+                      {property.is_negotiable && (
+                        <View style={[styles.pill, { backgroundColor: theme.badgeGoldBg }]}>
+                          <Text style={{ color: theme.badgeGoldText, fontSize: 11, fontWeight: '800' }}>
+                            NÉGOCIABLE
+                          </Text>
+                        </View>
+                      )}
+                      {statusDisplay && (
+                        <View style={[styles.pill, { backgroundColor: statusDisplay.bg }]}>
+                          <Text style={{ color: statusDisplay.text, fontSize: 11, fontWeight: '800' }}>
+                            {statusDisplay.label}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+
+                  <Text style={[styles.locationTitle, { color: theme.text }]}>
+                    📍 {fullAddress}
+                  </Text>
+
+                  <View style={styles.specsGrid}>
+                    <SpecBadge label="Type" value={property.type.toUpperCase()} theme={theme} />
+                    <SpecBadge label="Surface" value={`${property.surface} m²`} theme={theme} />
+                    {property.nombres_chambres ? (
+                      <SpecBadge label="Chambres" value={`${property.nombres_chambres}`} theme={theme} />
+                    ) : null}
+                    {property.transaction_type === 'location' && property.avance_mois ? (
+                      <SpecBadge label="Avance" value={`${property.avance_mois} mois`} theme={theme} />
+                    ) : null}
+                  </View>
+
+                  {property.accessibilite && (
+                    <Text style={[styles.detailLine, { color: theme.textSecondary }]}>
+                      🛣️ Accessibilité :{' '}
+                      <Text style={{ color: theme.text, fontWeight: '700' }}>
+                        {property.accessibilite}
+                      </Text>
+                    </Text>
+                  )}
+                  {property.eau_courant && (
+                    <Text style={[styles.detailLine, { color: theme.textSecondary }]}>
+                      💧 Eau & Électricité :{' '}
+                      <Text style={{ color: theme.text, fontWeight: '700' }}>
+                        {property.eau_courant}
+                      </Text>
+                    </Text>
+                  )}
+                  {property.description && (
+                    <View style={{ gap: 4, marginTop: 4 }}>
+                      <Text style={[styles.sectionTitle, { color: theme.text }]}>Description</Text>
+                      <Text style={[styles.description, { color: theme.text }]}>
+                        {property.description}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+
+                {/* Protected Coordinates & Documents */}
+                <View
+                  style={[
+                    styles.card,
+                    { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder },
+                  ]}>
+                  <Text style={[styles.sectionTitle, { color: theme.text }]}>
+                    {property.is_unlocked
+                      ? '🔓 Coordonnées & Documents Débloqués'
+                      : '🔒 Coordonnées & Documents Justificatifs'}
+                  </Text>
+                  <Text style={[styles.detailLine, { color: theme.textSecondary }]}>
+                    {property.location_details ||
+                      'Repères exacts et documents légaux disponibles après déblocage.'}
+                  </Text>
+
+                  {property.user && (
+                    <View style={[styles.contactBox, { backgroundColor: theme.backgroundElement }]}>
+                      <Text style={[styles.contactName, { color: theme.text }]}>
+                        {property.user.prenom
+                          ? `${property.user.prenom} ${property.user.name}`
+                          : property.user.name}
+                      </Text>
+                      {property.user.telephone ? (
+                        <Pressable
+                          onPress={() => Linking.openURL(`tel:${property.user!.telephone}`)}>
+                          <Text style={[styles.contactLine, { color: theme.primary }]}>
+                            📞 {property.user.telephone}
+                          </Text>
+                        </Pressable>
+                      ) : null}
+                      {property.user.email ? (
+                        <Pressable
+                          onPress={() => Linking.openURL(`mailto:${property.user!.email}`)}>
+                          <Text style={[styles.contactLine, { color: theme.textSecondary }]}>
+                            ✉️ {property.user.email}
+                          </Text>
+                        </Pressable>
+                      ) : null}
+                    </View>
+                  )}
+
+                  {property.is_unlocked && property.documents && property.documents.length > 0 && (
+                    <View style={{ gap: 8, marginTop: 4 }}>
+                      <Text style={[styles.docHeader, { color: theme.text }]}>
+                        Documents justificatifs :
+                      </Text>
+                      {property.documents.map((doc) => {
+                        const docUrl = resolveStorageUrl(
+                          doc.document_url || doc.url_consultation,
+                          storageBaseUrl
+                        );
+                        return (
+                          <Pressable
+                            key={doc.id}
+                            onPress={() => docUrl && WebBrowser.openBrowserAsync(docUrl)}
+                            style={[styles.docRow, { borderColor: theme.cardBorder }]}>
+                            <Text style={{ color: theme.text, fontWeight: '700', flex: 1 }}>
+                              📄 {(doc.document_type || doc.type || 'Document').toUpperCase()}
+                            </Text>
+                            <Text style={{ color: theme.primary, fontWeight: '800', fontSize: 12 }}>
+                              Ouvrir
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  )}
+
+                  {!property.is_unlocked && isRealBackendProperty && (
+                    <Pressable
+                      onPress={() => {
+                        if (!isAuthenticated) openAuthModal('login');
+                        else setUnlockCheckoutOpen(true);
+                      }}
+                      style={[styles.primaryBtn, { backgroundColor: theme.primary }]}>
+                      <Text style={styles.primaryBtnText}>
+                        Débloquer coordonnées & documents ({property.unlock_fee ?? 50} F CFA)
+                      </Text>
                     </Pressable>
-                  );
-                })}
+                  )}
+                </View>
               </View>
-            )}
 
-            {!property.is_unlocked && (
-              <Pressable
-                onPress={() => {
-                  if (!isAuthenticated) openAuthModal('login');
-                  else setUnlockCheckoutOpen(true);
-                }}
-                style={[styles.primaryBtn, { backgroundColor: theme.primary }]}>
-                <Text style={styles.primaryBtnText}>
-                  Débloquer coordonnées & documents ({property.unlock_fee ?? 50} F)
-                </Text>
-              </Pressable>
-            )}
-          </View>
+              {/* RIGHT / ACTIONS SIDEBAR COLUMN */}
+              <View style={[styles.sideCol, isDesktop && { flex: 1 }]}>
+                {/* 3 Core Property Actions Card */}
+                <View style={[styles.actionsPanel, { backgroundColor: theme.navy }]}>
+                  <Text style={styles.panelEyebrow}>✦ ACTIONS SUR CE BIEN</Text>
+                  <Text style={styles.panelTitle}>Intéressé par cette propriété ?</Text>
+                  <Text style={styles.panelDesc}>
+                    Enregistrez vos coordonnées (Nom, Prénom, Téléphone, E-mail) pour demander une
+                    visite, prendre rendez-vous ou contacter le propriétaire / l'agent.
+                  </Text>
 
-          {/* Physical Visit CTA (500 FCFA) */}
-          <View style={[styles.card, { backgroundColor: theme.navy }]}>
-            <Text style={styles.visitCtaTitle}>Visiter ce bien physiquement</Text>
-            <Text style={styles.visitCtaDesc}>
-              Un conseiller terrain E-Mobilier organise et sécurise votre visite (Frais officiels : {property.visit_fee ?? 500} F CFA).
-            </Text>
-            <Pressable
-              onPress={handleOpenVisitFlow}
-              style={[styles.visitBtn, { backgroundColor: theme.gold }]}>
-              <Text style={styles.visitBtnText}>Planifier une visite ({property.visit_fee ?? 500} F)</Text>
-            </Pressable>
+                  <View style={styles.actionStack}>
+                    <Pressable
+                      onPress={() => openActionModal('demande_visite')}
+                      style={[styles.goldActionBtn, { backgroundColor: '#F59E0B' }]}>
+                      <Text style={styles.goldActionText}>🏠 Demander une visite</Text>
+                    </Pressable>
+
+                    <Pressable
+                      onPress={() => openActionModal('rendez_vous')}
+                      style={[styles.primaryActionBtn, { backgroundColor: theme.primary }]}>
+                      <Text style={styles.primaryBtnText}>📅 Prendre un rendez-vous</Text>
+                    </Pressable>
+
+                    <Pressable
+                      onPress={() => openActionModal('contact')}
+                      style={styles.outlineActionBtn}>
+                      <Text style={styles.outlineActionText}>
+                        ✉️ Contacter le propriétaire / l'agent
+                      </Text>
+                    </Pressable>
+                  </View>
+
+                  {isRealBackendProperty && (
+                    <View style={styles.paidVisitBox}>
+                      <Text style={styles.paidVisitTitle}>
+                        Visite physique encadrée E-Mobilier ({property.visit_fee ?? 500} F CFA)
+                      </Text>
+                      <Text style={styles.paidVisitSub}>
+                        Réservez un créneau officiel accompagné par un conseiller terrain agréé.
+                      </Text>
+                      <Pressable
+                        onPress={() => {
+                          if (!isAuthenticated) {
+                            openAuthModal('login');
+                          } else {
+                            setPendingVisitDate(formatLocalFutureDate(1, 10));
+                            setVisitCheckoutOpen(true);
+                          }
+                        }}
+                        style={styles.paidVisitBtn}>
+                        <Text style={styles.paidVisitBtnText}>
+                          Réserver visite encadrée ({property.visit_fee ?? 500} F)
+                        </Text>
+                      </Pressable>
+                    </View>
+                  )}
+                </View>
+
+                {/* Guarantees Card */}
+                <View
+                  style={[
+                    styles.card,
+                    { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder },
+                  ]}>
+                  <Text style={[styles.sectionTitle, { color: theme.text }]}>
+                    Garanties E-Mobilier
+                  </Text>
+                  <Text style={[styles.detailLine, { color: theme.textSecondary }]}>
+                    • Vérification des pièces et titres fonciers avant publication.
+                  </Text>
+                  <Text style={[styles.detailLine, { color: theme.textSecondary }]}>
+                    • Protection anti-contournement et quittance officielle Kkiapay.
+                  </Text>
+                  <Text style={[styles.detailLine, { color: theme.textSecondary }]}>
+                    • Suivi complet dans votre Espace Client & Notifications.
+                  </Text>
+                </View>
+              </View>
+            </View>
           </View>
         </ScrollView>
       )}
 
-      {/* Unlock 50 FCFA Checkout */}
+      {/* Property Actions Modal (Demande de visite, Prise de RDV, Contact avec Nom/Prénom/Tél/Email) */}
       {property && (
+        <PropertyActionModal
+          visible={actionModalOpen}
+          initialAction={actionModalTab}
+          propertyId={isRealBackendProperty ? property.id : null}
+          propertyTitle={propertyTitle}
+          propertyLocation={fullAddress}
+          recipientLabel={property.user?.name || "le propriétaire / l'agent"}
+          onClose={() => setActionModalOpen(false)}
+          onRequestPaidVisit={(dateStr) => {
+            setPendingVisitDate(dateStr);
+            setVisitCheckoutOpen(true);
+          }}
+        />
+      )}
+
+      {/* Unlock 50 FCFA Checkout */}
+      {property && isRealBackendProperty && (
         <KkiapayCheckoutModal
           visible={unlockCheckoutOpen}
           operationType="deblocage_coordonnees"
@@ -264,62 +531,19 @@ export default function PropertyDetailScreen() {
         />
       )}
 
-      {/* Visit Date Picker Modal */}
-      <Modal visible={visitModalOpen} transparent animationType="fade" onRequestClose={() => setVisitModalOpen(false)}>
-        <View style={styles.modalBackdrop}>
-          <View style={[styles.modalCard, { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder }]}>
-            <Text style={[styles.modalTitle, { color: theme.text }]}>Choisir la date de visite</Text>
-            <View style={styles.presets}>
-              <Pressable
-                onPress={() => setVisitDateInput(toLocalIsoFuture(1, 10))}
-                style={[styles.presetBtn, { backgroundColor: theme.backgroundElement }]}>
-                <Text style={{ color: theme.text, fontSize: 12, fontWeight: '700' }}>Demain 10h00</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => setVisitDateInput(toLocalIsoFuture(2, 15))}
-                style={[styles.presetBtn, { backgroundColor: theme.backgroundElement }]}>
-                <Text style={{ color: theme.text, fontSize: 12, fontWeight: '700' }}>Dans 2 jours 15h00</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => setVisitDateInput(toLocalIsoFuture(3, 9))}
-                style={[styles.presetBtn, { backgroundColor: theme.backgroundElement }]}>
-                <Text style={{ color: theme.text, fontSize: 12, fontWeight: '700' }}>Dans 3 jours 09h00</Text>
-              </Pressable>
-            </View>
-
-            <TextInput
-              style={[styles.dateInput, { color: theme.text, borderColor: theme.cardBorder, backgroundColor: theme.backgroundElement }]}
-              value={visitDateInput}
-              onChangeText={setVisitDateInput}
-              placeholder="AAAA-MM-JJ HH:MM:SS"
-              placeholderTextColor={theme.textSecondary}
-            />
-
-            <View style={styles.modalActions}>
-              <Pressable onPress={handleProceedVisitPayment} style={[styles.primaryBtn, { backgroundColor: theme.primary }]}>
-                <Text style={styles.primaryBtnText}>Continuer vers paiement (500 F)</Text>
-              </Pressable>
-              <Pressable onPress={() => setVisitModalOpen(false)} style={styles.cancelLink}>
-                <Text style={{ color: theme.textSecondary, fontWeight: '600' }}>Annuler</Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
       {/* Visit 500 FCFA Checkout */}
-      {property && (
+      {property && isRealBackendProperty && (
         <KkiapayCheckoutModal
           visible={visitCheckoutOpen}
           operationType="visite"
           entityId={property.id}
           title="Frais de visite physique (500 F)"
-          description={`Visite prévue le ${visitDateInput} pour le bien #${property.id}.`}
+          description={`Visite prévue le ${pendingVisitDate} pour le bien #${property.id}.`}
           onClose={() => setVisitCheckoutOpen(false)}
           onSuccess={async ({ transactionId }) => {
             const res = await visitesApi.requestVisit({
               property_id: property.id,
-              scheduled_date: visitDateInput,
+              scheduled_date: pendingVisitDate,
               kkiapay_transaction_id: transactionId,
             });
             if (!res.success) {
@@ -348,45 +572,84 @@ function SpecBadge({ label, value, theme }: { label: string; value: string; them
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  favHeaderBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: Spacing.four, gap: 12 },
   errorText: { fontSize: 15, fontWeight: '600', textAlign: 'center' },
-  scroll: { gap: Spacing.three },
-  gallery: { height: 260 },
-  heroImg: { width: 380, height: 260 },
-  noMediaBox: { height: 180, alignItems: 'center', justifyContent: 'center' },
-  card: {
-    marginHorizontal: Spacing.three,
-    borderRadius: 18,
-    borderWidth: 1,
-    padding: Spacing.three,
-    gap: 10,
+  scroll: { paddingTop: Spacing.three },
+  innerWrap: { width: '100%', alignSelf: 'center' },
+  layoutGrid: { gap: 18 },
+  layoutGridDesktop: { flexDirection: 'row', alignItems: 'flex-start' },
+  mainCol: { gap: 16 },
+  sideCol: { gap: 16 },
+  galleryCard: { borderRadius: 20, borderWidth: 1, overflow: 'hidden' },
+  heroImg: { width: '100%', height: 270 },
+  thumbRow: { padding: 10, gap: 8 },
+  thumbWrap: { borderRadius: 10, borderWidth: 2, overflow: 'hidden' },
+  thumbImg: { width: 72, height: 52 },
+  noMediaBox: { height: 220, alignItems: 'center', justifyContent: 'center' },
+  card: { borderRadius: 20, borderWidth: 1, padding: 18, gap: 10 },
+  priceRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 8,
   },
-  priceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  priceText: { fontSize: 22, fontWeight: '900' },
+  priceText: { fontSize: 24, fontWeight: '900' },
   pill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
   locationTitle: { fontSize: 16, fontWeight: '800' },
   specsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   specItem: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10 },
-  detailLine: { fontSize: 13, lineHeight: 19 },
-  description: { fontSize: 14, lineHeight: 21, marginTop: 4 },
-  sectionTitle: { fontSize: 16, fontWeight: '800' },
-  contactBox: { borderRadius: 12, padding: Spacing.three, gap: 4 },
+  detailLine: { fontSize: 13, lineHeight: 20 },
+  description: { fontSize: 14, lineHeight: 22 },
+  sectionTitle: { fontSize: 16, fontWeight: '900' },
+  contactBox: { borderRadius: 14, padding: 14, gap: 5 },
   contactName: { fontSize: 15, fontWeight: '800' },
-  contactLine: { fontSize: 13, fontWeight: '600' },
+  contactLine: { fontSize: 13, fontWeight: '700' },
   docHeader: { fontSize: 13, fontWeight: '800' },
   docRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 10, padding: 10 },
+  actionsPanel: { borderRadius: 22, padding: 20, gap: 12 },
+  panelEyebrow: { color: '#FDE68A', fontSize: 11, fontWeight: '800', letterSpacing: 0.7 },
+  panelTitle: { color: '#FFFFFF', fontSize: 20, fontWeight: '900' },
+  panelDesc: { color: '#CBD5E1', fontSize: 13, lineHeight: 19 },
+  actionStack: { gap: 10, marginTop: 4 },
+  goldActionBtn: { borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
+  goldActionText: { color: '#0F172A', fontSize: 15, fontWeight: '900' },
+  primaryActionBtn: { borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
+  outlineActionBtn: {
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.3)',
+    paddingVertical: 13,
+    alignItems: 'center',
+  },
+  outlineActionText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
+  paidVisitBox: {
+    marginTop: 8,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.12)',
+    gap: 6,
+  },
+  paidVisitTitle: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
+  paidVisitSub: { color: '#94A3B8', fontSize: 12, lineHeight: 17 },
+  paidVisitBtn: {
+    marginTop: 4,
+    backgroundColor: 'rgba(20, 184, 166, 0.2)',
+    borderColor: 'rgba(20, 184, 166, 0.5)',
+    borderWidth: 1,
+    borderRadius: 11,
+    paddingVertical: 11,
+    alignItems: 'center',
+  },
+  paidVisitBtnText: { color: '#99F6E4', fontSize: 13, fontWeight: '800' },
   primaryBtn: { borderRadius: 14, paddingVertical: 14, paddingHorizontal: 16, alignItems: 'center' },
   primaryBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
-  visitCtaTitle: { color: '#FFFFFF', fontSize: 17, fontWeight: '900' },
-  visitCtaDesc: { color: '#CBD5E1', fontSize: 13, lineHeight: 19 },
-  visitBtn: { borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 4 },
-  visitBtnText: { color: '#0F172A', fontSize: 15, fontWeight: '900' },
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(15,23,42,0.65)', justifyContent: 'center', padding: Spacing.four },
-  modalCard: { borderRadius: 20, borderWidth: 1, padding: Spacing.four, gap: 12 },
-  modalTitle: { fontSize: 18, fontWeight: '800' },
-  presets: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  presetBtn: { paddingHorizontal: 10, paddingVertical: 8, borderRadius: 10 },
-  dateInput: { borderRadius: 12, borderWidth: 1, padding: 12, fontSize: 14 },
-  modalActions: { gap: 8, marginTop: 4 },
-  cancelLink: { alignItems: 'center', paddingVertical: 8 },
 });

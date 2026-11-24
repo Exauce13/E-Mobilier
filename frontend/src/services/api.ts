@@ -5,6 +5,7 @@ import type {
   AdminDemandeClientItem,
   AdminUserItem,
   AdminVisiteItem,
+  AgentDashboardData,
   AgentKycDossier,
   AgentKycItem,
   AuditLogItem,
@@ -24,6 +25,8 @@ import type {
   PaymentOperationType,
   PaymentReceiptData,
   PropertyDocumentItem,
+  PropertyInquiryItem,
+  PropertyInquiryPayload,
   RetraitItem,
   SystemHealthReport,
   TechNotificationLogItem,
@@ -344,7 +347,12 @@ export const proprietesApi = {
     quartier?: string;
     prix_min?: number;
     prix_max?: number;
+    surface_min?: number;
     nombres_chambres?: number;
+    is_negotiable?: boolean;
+    eau_courant?: string;
+    accessibilite?: string;
+    sort?: 'recent' | 'prix_asc' | 'prix_desc' | 'surface_desc';
     search?: string;
     page?: number;
     per_page?: number;
@@ -843,5 +851,43 @@ export const financeApi = {
   },
   getSecurityStatut: async (): Promise<ApiResponse<{ retraits_geles: boolean }>> => {
     return apiRequest('/finance/securite/statut', { method: 'GET' });
+  },
+};
+
+/**
+ * Actions sur biens (Demande de visite, Prise de RDV, Contact) & Formulaire client / Dashboard Agent.
+ */
+export const inquiriesApi = {
+  create: async (payload: PropertyInquiryPayload): Promise<ApiResponse<PropertyInquiryItem>> => {
+    const endpoint = payload.property_id
+      ? `/proprietes/${payload.property_id}/inquiries`
+      : '/inquiries';
+    return apiRequest(endpoint, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  getMyInquiries: async (filters?: {
+    type?: string;
+    status?: string;
+    page?: number;
+  }): Promise<ApiResponse<PaginatedPayload<PropertyInquiryItem>>> => {
+    const query = buildQuery(filters || {});
+    return apiRequest(`/mes-inquiries${query}`, { method: 'GET' });
+  },
+
+  getAgentDashboard: async (): Promise<ApiResponse<AgentDashboardData>> => {
+    return apiRequest('/agent/dashboard', { method: 'GET' });
+  },
+
+  updateStatus: async (
+    id: number,
+    status: 'nouveau' | 'en_cours' | 'confirme' | 'traite' | 'annule'
+  ): Promise<ApiResponse<PropertyInquiryItem>> => {
+    return apiRequest(`/inquiries/${id}/statut`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    });
   },
 };

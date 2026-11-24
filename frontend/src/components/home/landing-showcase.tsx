@@ -1,8 +1,9 @@
 import { Image } from 'expo-image';
+import { router } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Dimensions,
+  ActivityIndicator,
   Platform,
   Pressable,
   ScrollView,
@@ -13,12 +14,18 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Spacing } from '@/constants/theme';
+import { PropertyCard } from '@/components/property-card';
+import { PropertyActionModal, PropertyActionTab } from '@/components/property/property-action-modal';
+import { BENIN_COMMUNES, FILTER_CATEGORIES } from '@/constants/locations';
+import { BottomTabInset } from '@/constants/theme';
 import { useThemeMode } from '@/context/theme-context';
 import { MOCK_PROPERTIES } from '@/data/mock-properties';
+import { useResponsive } from '@/hooks/use-responsive';
 import { useTheme } from '@/hooks/use-theme';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+import { getStorageBaseUrl, proprietesApi } from '@/services/api';
+import { favoritesStorage } from '@/services/local-store';
+import type { BackendProperty } from '@/types/api';
+import { mapBackendPropertyToItem, PropertyCategory, PropertyItem } from '@/types/property';
 
 interface LandingShowcaseProps {
   onOpenLogin: () => void;
@@ -29,471 +36,706 @@ export function LandingShowcase({ onOpenLogin, onOpenRegister }: LandingShowcase
   const theme = useTheme();
   const { isDark, toggleTheme } = useThemeMode();
   const insets = useSafeAreaInsets();
-  const scrollRef = useRef<any>(null);
+  const { isMobile, isTablet, isDesktop, gridColumns, contentMaxWidth, horizontalPadding } =
+    useResponsive();
+  const storageBaseUrl = useMemo(() => getStorageBaseUrl(), []);
 
+  const [quickQuery, setQuickQuery] = useState('');
+  const [quickTransaction, setQuickTransaction] = useState<'tous' | 'location' | 'vente'>('tous');
+  const [quickCommune, setQuickCommune] = useState('Toutes les communes');
+  const [selectedCategory, setSelectedCategory] = useState<PropertyCategory>('tous');
+
+  const [liveProperties, setLiveProperties] = useState<PropertyItem[]>([]);
+  const [loadingProps, setLoadingProps] = useState(true);
+
+  const [actionProperty, setActionProperty] = useState<PropertyItem | null>(null);
+  const [actionTab, setActionTab] = useState<PropertyActionTab>('demande_visite');
+
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      const [favs, res] = await Promise.all([
+        favoritesStorage.getAll(),
+        proprietesApi.getFeed({ per_page: 9 }),
+      ]);
+      if (!active) return;
+      if (res.success && res.data?.data && res.data.data.length > 0) {
+        setLiveProperties(
+          res.data.data.map((p: BackendProperty) =>
+            mapBackendPropertyToItem(p, storageBaseUrl, favs)
+          )
+        );
+      } else {
+        setLiveProperties(
+          MOCK_PROPERTIES.map((item) => ({ ...item, isFavorite: favs.has(item.id) }))
+        );
+      }
+      setLoadingProps(false);
+    };
+    void load();
+    return () => {
+      active = false;
+    };
+  }, [storageBaseUrl]);
+
+  const displayedProperties = useMemo(() => {
+    return liveProperties.filter((p) => {
+      if (selectedCategory !== 'tous' && p.type !== selectedCategory) return false;
+      if (quickTransaction !== 'tous' && p.transactionType !== quickTransaction) return false;
+      return true;
+    });
+  }, [liveProperties, selectedCategory, quickTransaction]);
+
+  const handleToggleFavorite = async (id: string) => {
+    const next = await favoritesStorage.toggle(id);
+    setLiveProperties((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, isFavorite: next.has(item.id) } : item))
+    );
+  };
+
+  const handleHeroSearch = () => {
+    const params = new URLSearchParams();
+    if (quickQuery.trim()) params.set('q', quickQuery.trim());
+    if (quickTransaction !== 'tous') params.set('tx', quickTransaction);
+    if (quickCommune !== 'Toutes les communes') params.set('commune', quickCommune);
+    if (selectedCategory !== 'tous') params.set('type', selectedCategory);
+    const qs = params.toString();
+    router.push((qs ? `/explore?${qs}` : '/explore') as any);
+  };
+
+  const handleOpenProperty = (property: PropertyItem) => {
+    router.push(`/property/${property.id}` as any);
+  };
+
+  const cardWidthPercent =
+    gridColumns === 3 ? '31.8%' : gridColumns === 2 ? '48.5%' : '100%';
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      {/* Top Header Navigation */}
+      {/* Sticky Modern Top Header */}
       <View
         style={[
           styles.topHeader,
           {
-            paddingTop: Math.max(insets.top, 14),
+            paddingTop: Math.max(insets.top, 12),
+            paddingHorizontal: horizontalPadding,
             backgroundColor: theme.navy,
             borderBottomColor: 'rgba(255, 255, 255, 0.08)',
           },
         ]}>
-        <View style={styles.brandRow}>
-          <View style={styles.logoIcon}>
-            <SymbolView
-              name={{ ios: 'building.2.crop.circle.fill', android: 'apartment', web: 'apartment' }}
-              size={22}
-              tintColor="#D4AF37"
-            />
-          </View>
-          <View style={styles.brandTextWrap}>
-            <View style={styles.brandTitleRow}>
-              <Text numberOfLines={1} style={styles.brandTitle}>
-                E-Mobilier
-              </Text>
-              <View style={styles.flagBadge}>
-                <Text style={styles.flagText}>🇧🇯</Text>
-              </View>
+        <View style={[styles.headerInner, { maxWidth: contentMaxWidth }]}>
+          <Pressable onPress={() => router.push('/' as any)} style={styles.brandRow}>
+            <View style={styles.logoIcon}>
+              <SymbolView
+                name={{ ios: 'building.2.crop.circle.fill', android: 'apartment', web: 'apartment' }}
+                size={22}
+                tintColor="#F59E0B"
+              />
             </View>
-            <Text numberOfLines={1} style={styles.brandSubtitle}>
-              Immobilier de Confiance
-            </Text>
+            <View style={styles.brandTextWrap}>
+              <View style={styles.brandTitleRow}>
+                <Text numberOfLines={1} style={styles.brandTitle}>
+                  E-Mobilier
+                </Text>
+                <View style={styles.flagBadge}>
+                  <Text style={styles.flagText}>🇧🇯 BÉNIN</Text>
+                </View>
+              </View>
+              {!isMobile && (
+                <Text numberOfLines={1} style={styles.brandSubtitle}>
+                  Portail Immobilier Certifié
+                </Text>
+              )}
+            </View>
+          </Pressable>
+
+          {/* Desktop Navigation Links */}
+          {isDesktop && (
+            <View style={styles.desktopNav}>
+              <Pressable onPress={() => router.push('/explore' as any)} style={styles.navLinkBtn}>
+                <Text style={styles.navLinkText}>Rechercher</Text>
+              </Pressable>
+              <Pressable onPress={() => router.push('/client' as any)} style={styles.navLinkBtn}>
+                <Text style={styles.navLinkText}>Espace Client</Text>
+              </Pressable>
+              <Pressable onPress={() => router.push('/agent' as any)} style={styles.navLinkBtn}>
+                <Text style={styles.navLinkText}>Espace Agent</Text>
+              </Pressable>
+              <Pressable onPress={() => router.push('/client-form' as any)} style={styles.navLinkBtn}>
+                <Text style={styles.navLinkText}>Formulaire Client</Text>
+              </Pressable>
+              <Pressable onPress={() => router.push('/publish' as any)} style={styles.navLinkBtn}>
+                <Text style={styles.navLinkText}>Publier</Text>
+              </Pressable>
+            </View>
+          )}
+
+          {/* Header Actions */}
+          <View style={styles.headerActions}>
+            <Pressable
+              onPress={() => {
+                void toggleTheme();
+              }}
+              style={({ pressed }) => [styles.themeHeaderBtn, pressed && { opacity: 0.75 }]}
+              hitSlop={6}>
+              <Text style={styles.themeHeaderIcon}>{isDark ? '🌙' : '☀️'}</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={onOpenLogin}
+              style={({ pressed }) => [styles.loginHeaderBtn, pressed && { opacity: 0.75 }]}
+              hitSlop={6}>
+              <Text numberOfLines={1} style={styles.loginHeaderText}>
+                Connexion
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={onOpenRegister}
+              style={({ pressed }) => [styles.registerHeaderBtn, pressed && { opacity: 0.85 }]}
+              hitSlop={6}>
+              <Text numberOfLines={1} style={styles.registerHeaderText}>
+                S'inscrire
+              </Text>
+            </Pressable>
           </View>
-        </View>
-
-        <View style={styles.headerActions}>
-          <Pressable
-            onPress={() => {
-              void toggleTheme();
-            }}
-            style={({ pressed }) => [styles.themeHeaderBtn, pressed && { opacity: 0.75 }]}
-            hitSlop={6}>
-            <Text style={styles.themeHeaderIcon}>{isDark ? '🌙' : '☀️'}</Text>
-          </Pressable>
-
-          <Pressable
-            onPress={onOpenLogin}
-            style={({ pressed }) => [styles.loginHeaderBtn, pressed && { opacity: 0.75 }]}
-            hitSlop={6}>
-            <Text numberOfLines={1} style={styles.loginHeaderText}>
-              Connexion
-            </Text>
-          </Pressable>
-
-          <Pressable
-            onPress={onOpenRegister}
-            style={({ pressed }) => [styles.registerHeaderBtn, pressed && { opacity: 0.85 }]}
-            hitSlop={6}>
-            <Text numberOfLines={1} style={styles.registerHeaderText}>
-              S'inscrire
-            </Text>
-          </Pressable>
         </View>
       </View>
 
       <ScrollView
-        ref={scrollRef}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 40 }]}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: BottomTabInset + insets.bottom + 88 },
+        ]}
         showsVerticalScrollIndicator={false}>
-        {/* HERO SECTION IMMERSIVE */}
-        <View style={styles.heroContainer}>
+        {/* HERO SECTION */}
+        <View style={[styles.heroContainer, { minHeight: isDesktop ? 520 : isTablet ? 470 : 460 }]}>
           <Image
             source={require('@/assets/images/hero_luxury_villa.jpg')}
             style={styles.heroImage}
             contentFit="cover"
             priority="high"
           />
-          {/* Subtle gradient dark overlay for maximum contrast and prestige */}
-          <View style={styles.heroOverlay}>
-            <View style={styles.heroTag}>
-              <Text style={styles.heroTagText}>✦ PORTAIL IMMOBILIER HAUT DE GAMME AU BÉNIN</Text>
-            </View>
+          <View style={[styles.heroOverlay, { paddingHorizontal: horizontalPadding }]}>
+            <View style={[styles.heroInner, { maxWidth: contentMaxWidth }]}>
+              <View style={styles.heroTag}>
+                <Text style={styles.heroTagText}>
+                  ✦ N°1 DE L'IMMOBILIER SÉCURISÉ AU BÉNIN
+                </Text>
+              </View>
 
-            <Text style={styles.heroMainTitle}>
-              L'immobilier d'exception et sécurisé à portée de main
-            </Text>
+              <Text
+                style={[
+                  styles.heroMainTitle,
+                  {
+                    fontSize: isDesktop ? 44 : isTablet ? 34 : 26,
+                    lineHeight: isDesktop ? 52 : isTablet ? 42 : 33,
+                  },
+                ]}>
+                Trouvez, louez ou publiez votre bien immobilier en toute sérénité
+              </Text>
 
-            <Text style={styles.heroDescription}>
-              Villas contemporaines, appartements meublés et parcelles titrées à Cotonou, Calavi et
-              dans tout le pays, vérifiés par nos experts agréés.
-            </Text>
+              <Text style={styles.heroDescription}>
+                Maisons, villas contemporaines, chambres sanitaires et parcelles avec titres vérifiés à
+                Cotonou, Abomey-Calavi, Porto-Novo et Ouidah.
+              </Text>
 
-            {/* Quick Hero Call To Actions */}
-            <View style={styles.heroCtaRow}>
-              <Pressable
-                onPress={onOpenRegister}
-                style={({ pressed }) => [styles.heroPrimaryBtn, pressed && { opacity: 0.9 }]}>
-                <Text style={styles.heroPrimaryBtnText}>Créer un compte</Text>
-                <SymbolView
-                  name={{ ios: 'arrow.right', android: 'arrow_forward', web: 'arrow_forward' }}
-                  size={16}
-                  tintColor="#0F172A"
-                />
-              </Pressable>
+              {/* Quick Search Box in Hero */}
+              <View
+                style={[
+                  styles.heroSearchCard,
+                  {
+                    backgroundColor: theme.cardBackground,
+                    borderColor: theme.cardBorder,
+                  },
+                ]}>
+                <View style={styles.heroSearchTabs}>
+                  {(['tous', 'location', 'vente'] as const).map((tx) => {
+                    const active = quickTransaction === tx;
+                    const label =
+                      tx === 'tous' ? 'Tout voir' : tx === 'location' ? 'Louer' : 'Acheter';
+                    return (
+                      <Pressable
+                        key={tx}
+                        onPress={() => setQuickTransaction(tx)}
+                        style={[
+                          styles.heroSearchTab,
+                          {
+                            backgroundColor: active ? theme.primary : theme.backgroundElement,
+                          },
+                        ]}>
+                        <Text
+                          style={{
+                            color: active ? '#FFFFFF' : theme.text,
+                            fontSize: 12,
+                            fontWeight: '800',
+                          }}>
+                          {label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
 
-              <Pressable
-                onPress={onOpenLogin}
-                style={({ pressed }) => [styles.heroSecondaryBtn, pressed && { opacity: 0.85 }]}>
-                <Text style={styles.heroSecondaryBtnText}>Se connecter</Text>
-              </Pressable>
+                <View style={[styles.heroSearchRow, isMobile && styles.heroSearchRowMobile]}>
+                  <View
+                    style={[
+                      styles.heroInputBox,
+                      {
+                        backgroundColor: theme.backgroundElement,
+                        borderColor: theme.cardBorder,
+                      },
+                    ]}>
+                    <SymbolView
+                      name={{ ios: 'magnifyingglass', android: 'search', web: 'search' }}
+                      size={18}
+                      tintColor={theme.textSecondary}
+                    />
+                    <TextInput
+                      style={[styles.heroInput, { color: theme.text }]}
+                      placeholder="Quartier, commune, villa, parcelle..."
+                      placeholderTextColor={theme.textSecondary}
+                      value={quickQuery}
+                      onChangeText={setQuickQuery}
+                      onSubmitEditing={handleHeroSearch}
+                      returnKeyType="search"
+                    />
+                  </View>
+
+                  <Pressable
+                    onPress={handleHeroSearch}
+                    style={({ pressed }) => [
+                      styles.heroSearchBtn,
+                      { backgroundColor: theme.primary },
+                      pressed && { opacity: 0.9 },
+                    ]}>
+                    <Text style={styles.heroSearchBtnText}>Rechercher</Text>
+                    <SymbolView
+                      name={{ ios: 'arrow.right', android: 'arrow_forward', web: 'arrow_forward' }}
+                      size={16}
+                      tintColor="#FFFFFF"
+                    />
+                  </Pressable>
+                </View>
+
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.quickCommunesRow}>
+                  {BENIN_COMMUNES.slice(0, 7).map((c) => {
+                    const active = quickCommune === c;
+                    return (
+                      <Pressable
+                        key={c}
+                        onPress={() => setQuickCommune(c)}
+                        style={[
+                          styles.communeChip,
+                          {
+                            backgroundColor: active ? theme.primaryLight : theme.backgroundElement,
+                            borderColor: active ? theme.primary : 'transparent',
+                          },
+                        ]}>
+                        <Text
+                          style={{
+                            color: active ? theme.primaryDark : theme.textSecondary,
+                            fontSize: 12,
+                            fontWeight: '700',
+                          }}>
+                          {c}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              </View>
             </View>
           </View>
         </View>
 
+        {/* TRUST KPI STRIP */}
+        <View style={[styles.sectionWrap, { maxWidth: contentMaxWidth, paddingHorizontal: horizontalPadding }]}>
+          <View
+            style={[
+              styles.trustGrid,
+              { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder },
+            ]}>
+            {[
+              { icon: '🛡️', value: '100%', label: 'Titres & pièces audités' },
+              { icon: '🏠', value: '500+', label: 'Biens vérifiés au Bénin' },
+              { icon: '🤝', value: '24h', label: 'Visite terrain planifiée' },
+              { icon: '💳', value: '50 F', label: 'Déblocage Mobile Money' },
+            ].map((stat) => (
+              <View
+                key={stat.label}
+                style={[styles.trustCell, { width: isMobile ? '47%' : '23%' }]}>
+                <Text style={styles.trustEmoji}>{stat.icon}</Text>
+                <Text style={[styles.trustValue, { color: theme.primary }]}>{stat.value}</Text>
+                <Text style={[styles.trustLabel, { color: theme.textSecondary }]}>
+                  {stat.label}
+                </Text>
+              </View>
+            ))}
+          </View>
+        </View>
 
-        {/* FEATURED PROPERTIES PREVIEW SECTION */}
-        <View style={styles.sectionContainer}>
-          <View style={styles.sectionHeader}>
+        {/* FEATURED PROPERTIES CATALOG */}
+        <View style={[styles.sectionWrap, { maxWidth: contentMaxWidth, paddingHorizontal: horizontalPadding }]}>
+          <View style={styles.sectionHeaderRow}>
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={styles.sectionBadge}>✦ EXCLUSIVITÉS</Text>
-              <Text numberOfLines={1} style={[styles.sectionTitle, { color: theme.text }]}>
-                Propriétés en Vedette
+              <Text style={[styles.sectionEyebrow, { color: theme.primary }]}>
+                ✦ CATALOGUE CERTIFIÉ
               </Text>
-              <Text numberOfLines={2} style={[styles.sectionSubtitle, { color: theme.textSecondary }]}>
-                Aperçu sélectionné de notre catalogue immobilier au Bénin
+              <Text style={[styles.sectionTitle, { color: theme.text }]}>
+                Biens immobiliers en vedette
+              </Text>
+              <Text style={[styles.sectionSubtitle, { color: theme.textSecondary }]}>
+                Explorez les propriétés disponibles et réservez une visite en un clic.
               </Text>
             </View>
             <Pressable
-              onPress={onOpenLogin}
-              style={({ pressed }) => [styles.seeAllBtn, pressed && { opacity: 0.7 }]}>
-              <Text style={styles.seeAllText}>Tout voir</Text>
-              <SymbolView
-                name={{ ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' }}
-                size={14}
-                tintColor="#0F766E"
-              />
+              onPress={() => router.push('/explore' as any)}
+              style={[styles.outlinePillBtn, { borderColor: theme.primary }]}>
+              <Text style={{ color: theme.primary, fontSize: 13, fontWeight: '800' }}>
+                Tout explorer →
+              </Text>
             </Pressable>
           </View>
 
-          {/* Property Cards Horizontal Scroll */}
+          {/* Category Filter Chips */}
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            nestedScrollEnabled={true}
-            directionalLockEnabled={true}
-            decelerationRate="fast"
-            style={styles.featuredHorizontalScroll}
-            contentContainerStyle={styles.featuredHorizontalContent}>
-            {MOCK_PROPERTIES.map((property) => (
-              <Pressable
-                key={property.id}
-                onPress={onOpenLogin}
-                style={({ pressed }) => [
-                  styles.propertyCard,
-                  { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder },
-                  pressed && { opacity: 0.95, transform: [{ scale: 0.99 }] },
-                ]}>
-                <View style={styles.cardImageWrapper}>
-                  <Image source={property.image} style={styles.cardImage} contentFit="cover" />
-                  <View
-                    style={[
-                      styles.cardBadge,
-                      {
-                        backgroundColor:
-                          property.transactionType === 'vente' ? '#B45309' : '#0F766E',
-                      },
-                    ]}>
-                    <Text style={styles.cardBadgeText}>
-                      {property.transactionType === 'vente' ? 'À VENDRE' : 'À LOUER'}
-                    </Text>
-                  </View>
-
-                  <View style={styles.lockBadge}>
-                    <SymbolView
-                      name={{ ios: 'lock.fill', android: 'lock', web: 'lock' }}
-                      size={12}
-                      tintColor="#FFFFFF"
-                    />
-                    <Text style={styles.lockBadgeText}>Connexion requise</Text>
-                  </View>
-                </View>
-
-                <View style={styles.cardContent}>
-                  <Text numberOfLines={1} style={[styles.cardTitle, { color: theme.text }]}>
-                    {property.title}
+            contentContainerStyle={styles.categoryBar}>
+            {FILTER_CATEGORIES.map((cat) => {
+              const active = selectedCategory === cat.id;
+              return (
+                <Pressable
+                  key={cat.id}
+                  onPress={() => setSelectedCategory(cat.id)}
+                  style={[
+                    styles.catChip,
+                    {
+                      backgroundColor: active ? theme.primary : theme.cardBackground,
+                      borderColor: active ? theme.primary : theme.cardBorder,
+                    },
+                  ]}>
+                  <Text
+                    style={{
+                      color: active ? '#FFFFFF' : theme.text,
+                      fontSize: 13,
+                      fontWeight: '700',
+                    }}>
+                    {cat.label}
                   </Text>
-
-                  <View style={styles.locationRow}>
-                    <SymbolView
-                      name={{ ios: 'mappin.and.ellipse', android: 'location_on', web: 'location_on' }}
-                      size={14}
-                      tintColor={theme.textSecondary}
-                    />
-                    <Text numberOfLines={1} style={[styles.locationText, { color: theme.textSecondary }]}>
-                      {property.location.commune} ({property.location.quartier})
-                    </Text>
-                  </View>
-
-                  <View style={styles.cardFooter}>
-                    <Text style={styles.priceValue}>{property.priceFormatted}</Text>
-                    <View style={styles.unlockPrompt}>
-                      <Text style={styles.unlockPromptText}>Débloquer</Text>
-                      <SymbolView
-                        name={{ ios: 'arrow.right.circle.fill', android: 'arrow_forward', web: 'arrow_forward' }}
-                        size={16}
-                        tintColor="#0F766E"
-                      />
-                    </View>
-                  </View>
-                </View>
-              </Pressable>
-            ))}
+                </Pressable>
+              );
+            })}
           </ScrollView>
+
+          {loadingProps ? (
+            <ActivityIndicator size="large" color={theme.primary} style={{ marginVertical: 32 }} />
+          ) : (
+            <View style={styles.cardsGrid}>
+              {displayedProperties.slice(0, 6).map((property) => (
+                <View key={property.id} style={{ width: cardWidthPercent as any }}>
+                  <PropertyCard
+                    property={property}
+                    onPressCard={handleOpenProperty}
+                    onPressDetails={handleOpenProperty}
+                    onToggleFavorite={handleToggleFavorite}
+                    onPressQuickAction={(prop, action) => {
+                      setActionProperty(prop);
+                      setActionTab(action);
+                    }}
+                  />
+                </View>
+              ))}
+            </View>
+          )}
         </View>
 
-        {/* SECTION À PROPOS */}
-        <View style={[styles.aboutSection, { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder }]}>
-          <Text style={styles.aboutBadge}>✦ NOTRE MISSION</Text>
-          <Text style={[styles.aboutTitle, { color: theme.text }]}>À Propos d'E-Mobilier</Text>
-          <Text style={[styles.aboutSubtitle, { color: theme.textSecondary }]}>
-            E-Mobilier est la plateforme digitale de référence dédiée à l'immobilier moderne et sécurisé en République du Bénin.
+        {/* DEDICATED SPACES : CLIENT & AGENT IMMOBILIER */}
+        <View style={[styles.sectionWrap, { maxWidth: contentMaxWidth, paddingHorizontal: horizontalPadding }]}>
+          <Text style={[styles.sectionEyebrow, { color: theme.gold }]}>✦ ESPACES DÉDIÉS</Text>
+          <Text style={[styles.sectionTitle, { color: theme.text, marginBottom: 14 }]}>
+            Un parcours taillé pour chaque profil
           </Text>
 
-          <View style={styles.aboutGrid}>
-            <View style={[styles.aboutCard, { backgroundColor: theme.backgroundElement, borderColor: theme.cardBorder }]}>
-              <View style={[styles.aboutIconBox, { backgroundColor: '#FEF3C7' }]}>
-                <SymbolView
-                  name={{ ios: 'checkmark.seal.fill', android: 'verified', web: 'verified' }}
-                  size={24}
-                  tintColor="#B45309"
-                />
+          <View style={[styles.spacesGrid, !isMobile && styles.spacesGridRow]}>
+            {/* Espace Client */}
+            <View
+              style={[
+                styles.spaceCard,
+                { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder },
+              ]}>
+              <View style={[styles.spaceBadge, { backgroundColor: theme.primaryLight }]}>
+                <Text style={[styles.spaceBadgeText, { color: theme.primaryDark }]}>
+                  CLIENT & PROPRIÉTAIRE
+                </Text>
               </View>
-              <Text style={[styles.aboutCardTitle, { color: theme.text }]}>Sécurité Foncière Garantie</Text>
-              <Text style={[styles.aboutCardDesc, { color: theme.textSecondary }]}>
-                Fini les litiges fonciers. Chaque parcelle et bien listé est soumis à un contrôle strict des titres et pièces d'identité cadastrales.
+              <Text style={[styles.spaceTitle, { color: theme.text }]}>
+                Achetez, louez ou publiez votre bien
               </Text>
+              <Text style={[styles.spaceDesc, { color: theme.textSecondary }]}>
+                Accédez à votre espace client, déposez votre recherche sur mesure, suivez vos visites
+                et publiez vos biens en toute sécurité.
+              </Text>
+              <View style={styles.spaceActions}>
+                <Pressable
+                  onPress={() => router.push('/client' as any)}
+                  style={[styles.spacePrimaryBtn, { backgroundColor: theme.primary }]}>
+                  <Text style={styles.spacePrimaryBtnText}>Ouvrir Espace Client</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => router.push('/client-form' as any)}
+                  style={[styles.spaceSecondaryBtn, { borderColor: theme.cardBorder }]}>
+                  <Text style={[styles.spaceSecondaryBtnText, { color: theme.text }]}>
+                    Formulaire Client
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => router.push('/publish-client' as any)}
+                  style={[styles.spaceSecondaryBtn, { borderColor: theme.primaryBorder }]}>
+                  <Text style={[styles.spaceSecondaryBtnText, { color: theme.primaryDark }]}>
+                    Publier (Client)
+                  </Text>
+                </Pressable>
+              </View>
             </View>
 
-            <View style={[styles.aboutCard, { backgroundColor: theme.backgroundElement, borderColor: theme.cardBorder }]}>
-              <View style={[styles.aboutIconBox, { backgroundColor: '#ECFDF5' }]}>
-                <SymbolView
-                  name={{ ios: 'briefcase.fill', android: 'work', web: 'work' }}
-                  size={24}
-                  tintColor="#047857"
-                />
+            {/* Espace Agent Immobilier */}
+            <View
+              style={[
+                styles.spaceCard,
+                { backgroundColor: theme.navy, borderColor: 'rgba(245, 158, 11, 0.35)' },
+              ]}>
+              <View style={[styles.spaceBadge, { backgroundColor: 'rgba(245, 158, 11, 0.18)' }]}>
+                <Text style={[styles.spaceBadgeText, { color: '#FDE68A' }]}>
+                  AGENT IMMOBILIER AGRÉÉ
+                </Text>
               </View>
-              <Text style={[styles.aboutCardTitle, { color: theme.text }]}>Professionnalisation des Agents</Text>
-              <Text style={[styles.aboutCardDesc, { color: theme.textSecondary }]}>
-                Les agents immobiliers enregistrés disposent d'un espace de publication dédié et reçoivent directement les demandes de visites vérifiées.
+              <Text style={[styles.spaceTitle, { color: '#FFFFFF' }]}>
+                Pilotez votre portefeuille & vos clients
               </Text>
-            </View>
-
-            <View style={[styles.aboutCard, { backgroundColor: theme.backgroundElement, borderColor: theme.cardBorder }]}>
-              <View style={[styles.aboutIconBox, { backgroundColor: '#EFF6FF' }]}>
-                <SymbolView
-                  name={{ ios: 'qrcode.viewfinder', android: 'qr_code', web: 'qr_code' }}
-                  size={24}
-                  tintColor="#1D4ED8"
-                />
+              <Text style={[styles.spaceDesc, { color: '#CBD5E1' }]}>
+                Tableau de bord professionnel, gestion des annonces au tarif préférentiel de 100 F CFA,
+                suivi des visites, demandes et prospects.
+              </Text>
+              <View style={styles.spaceActions}>
+                <Pressable
+                  onPress={() => router.push('/agent' as any)}
+                  style={[styles.spacePrimaryBtn, { backgroundColor: '#F59E0B' }]}>
+                  <Text style={[styles.spacePrimaryBtnText, { color: '#0F172A' }]}>
+                    Tableau de bord Agent
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => router.push('/publish-agent' as any)}
+                  style={[styles.spaceSecondaryBtn, { borderColor: 'rgba(255,255,255,0.28)' }]}>
+                  <Text style={[styles.spaceSecondaryBtnText, { color: '#FFFFFF' }]}>
+                    Publier (Agent 100 F)
+                  </Text>
+                </Pressable>
               </View>
-              <Text style={[styles.aboutCardTitle, { color: theme.text }]}>Écosystème Mobile Money</Text>
-              <Text style={[styles.aboutCardDesc, { color: theme.textSecondary }]}>
-                Une tarification transparente pour débloquer les coordonnées et planifier des visites sans mauvaises surprises avec MTN et Moov Bénin.
-              </Text>
             </View>
           </View>
         </View>
 
-        {/* SECTION CONTACT & SUPPORT */}
-        <View style={[styles.contactSection, { backgroundColor: theme.navy }]}>
-          <Text style={styles.contactBadge}>✦ CONTACTEZ-NOUS</Text>
-          <Text style={styles.contactTitle}>Besoin d'un accompagnement ?</Text>
-          <Text style={styles.contactSubtitle}>
-            Notre équipe et nos conseillers immobiliers à Cotonou sont à votre écoute pour vous guider.
-          </Text>
+        {/* HOW IT WORKS */}
+        <View style={[styles.sectionWrap, { maxWidth: contentMaxWidth, paddingHorizontal: horizontalPadding }]}>
+          <View
+            style={[
+              styles.aboutSection,
+              { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder },
+            ]}>
+            <Text style={[styles.sectionEyebrow, { color: theme.gold }]}>✦ COMMENT ÇA MARCHE</Text>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>
+              Votre projet immobilier en 3 étapes simples
+            </Text>
 
-          {/* Contact Details Cards */}
-          <View style={styles.contactCardsRow}>
-            <View style={styles.contactInfoCard}>
-              <View style={styles.contactInfoIcon}>
-                <SymbolView
-                  name={{ ios: 'mappin.circle.fill', android: 'location_on', web: 'location_on' }}
-                  size={22}
-                  tintColor="#D4AF37"
-                />
-              </View>
-              <Text style={styles.contactInfoLabel}>Notre Siège</Text>
-              <Text style={styles.contactInfoValue}>Cadjehoun, Cotonou, Bénin</Text>
-            </View>
-
-            <View style={styles.contactInfoCard}>
-              <View style={styles.contactInfoIcon}>
-                <SymbolView
-                  name={{ ios: 'phone.circle.fill', android: 'phone', web: 'phone' }}
-                  size={22}
-                  tintColor="#2DD4BF"
-                />
-              </View>
-              <Text style={styles.contactInfoLabel}>Téléphone & WhatsApp</Text>
-              <Text style={styles.contactInfoValue}>+229 01 97 00 11 22</Text>
-            </View>
-
-            <View style={styles.contactInfoCard}>
-              <View style={styles.contactInfoIcon}>
-                <SymbolView
-                  name={{ ios: 'envelope.circle.fill', android: 'email', web: 'email' }}
-                  size={22}
-                  tintColor="#60A5FA"
-                />
-              </View>
-              <Text style={styles.contactInfoLabel}>Email Support</Text>
-              <Text style={styles.contactInfoValue}>contact@e-mobilier.bj</Text>
+            <View style={[styles.stepsGrid, !isMobile && styles.stepsGridRow]}>
+              {[
+                {
+                  num: '01',
+                  title: 'Recherchez & Filtrez',
+                  desc: 'Affinez par commune, quartier, budget, surface, nombre de chambres et commodités.',
+                },
+                {
+                  num: '02',
+                  title: 'Contactez ou Planifiez',
+                  desc: 'Demandez une visite, prenez rendez-vous ou contactez le propriétaire / agent directement.',
+                },
+                {
+                  num: '03',
+                  title: 'Visitez en Sécurité',
+                  desc: 'Nos conseillers vérifient les titres fonciers et vous accompagnent jusqu’à la signature.',
+                },
+              ].map((step) => (
+                <View
+                  key={step.num}
+                  style={[
+                    styles.stepCard,
+                    { backgroundColor: theme.backgroundElement, borderColor: theme.cardBorder },
+                  ]}>
+                  <Text style={[styles.stepNum, { color: theme.primary }]}>{step.num}</Text>
+                  <Text style={[styles.stepTitle, { color: theme.text }]}>{step.title}</Text>
+                  <Text style={[styles.stepDesc, { color: theme.textSecondary }]}>{step.desc}</Text>
+                </View>
+              ))}
             </View>
           </View>
         </View>
 
-        {/* FINAL CONVERSION BANNER */}
-        <View style={styles.finalCtaContainer}>
-          <View style={styles.finalCtaCard}>
-            <Text style={styles.finalCtaBadge}>COMMENCER DÈS AUJOURD'HUI</Text>
-            <Text style={styles.finalCtaTitle}>
-              Prêt à concrétiser votre projet immobilier ?
-            </Text>
-            <Text style={styles.finalCtaDesc}>
-              Créez votre compte en moins d'une minute avec votre numéro béninois (01...) et accédez à l'ensemble
-              des biens disponibles.
-            </Text>
-
-            <View style={styles.finalBtnRow}>
-              <Pressable
-                onPress={onOpenRegister}
-                style={({ pressed }) => [styles.finalPrimaryBtn, pressed && { opacity: 0.9 }]}>
-                <Text style={styles.finalPrimaryBtnText}>Créer un compte gratuit</Text>
+        {/* CONTACT & FINAL CTA */}
+        <View style={[styles.sectionWrap, { maxWidth: contentMaxWidth, paddingHorizontal: horizontalPadding }]}>
+          <View style={[styles.ctaBanner, { backgroundColor: theme.navy }]}>
+            <View style={{ flex: 1, gap: 8 }}>
+              <Text style={styles.ctaEyebrow}>✦ ACCOMPAGNEMENT SUR MESURE</Text>
+              <Text style={styles.ctaTitle}>
+                Vous cherchez une maison ou souhaitez publier aujourd'hui ?
+              </Text>
+              <Text style={styles.ctaDesc}>
+                Créez votre compte gratuit en moins d'une minute ou remplissez notre formulaire client
+                pour être rappelé par un conseiller à Cotonou.
+              </Text>
+            </View>
+            <View style={styles.ctaBtns}>
+              <Pressable onPress={onOpenRegister} style={styles.ctaGoldBtn}>
+                <Text style={styles.ctaGoldBtnText}>Créer un compte gratuit</Text>
               </Pressable>
-
               <Pressable
-                onPress={onOpenLogin}
-                style={({ pressed }) => [styles.finalSecondaryBtn, pressed && { opacity: 0.8 }]}>
-                <Text style={styles.finalSecondaryBtnText}>J'ai déjà un compte</Text>
+                onPress={() => router.push('/client-form' as any)}
+                style={styles.ctaOutlineBtn}>
+                <Text style={styles.ctaOutlineBtnText}>Remplir le formulaire client</Text>
+              </Pressable>
+            </View>
+          </View>
+
+          {/* Compact Footer */}
+          <View style={[styles.footer, { borderTopColor: theme.cardBorder }]}>
+            <Text style={[styles.footerCopy, { color: theme.textSecondary }]}>
+              © 2026 E-Mobilier Bénin — Cadjehoun, Cotonou • +229 01 97 00 11 22 • contact@e-mobilier.bj
+            </Text>
+            <View style={styles.footerLinks}>
+              <Pressable onPress={() => router.push('/cgu' as any)}>
+                <Text style={[styles.footerLink, { color: theme.primary }]}>CGU & Charte</Text>
+              </Pressable>
+              <Pressable onPress={() => router.push('/explore' as any)}>
+                <Text style={[styles.footerLink, { color: theme.primary }]}>Recherche</Text>
+              </Pressable>
+              <Pressable onPress={() => router.push('/client-form' as any)}>
+                <Text style={[styles.footerLink, { color: theme.primary }]}>Contact</Text>
               </Pressable>
             </View>
           </View>
         </View>
       </ScrollView>
+
+      {/* Quick Property Action Modal */}
+      {actionProperty && (
+        <PropertyActionModal
+          visible={Boolean(actionProperty)}
+          initialAction={actionTab}
+          propertyId={actionProperty.backendId ?? null}
+          propertyTitle={actionProperty.title}
+          propertyLocation={actionProperty.location.fullAddress}
+          onClose={() => setActionProperty(null)}
+        />
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
   topHeader: {
-    paddingHorizontal: Spacing.three,
-    paddingBottom: Spacing.two + 4,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    zIndex: 20,
+    alignItems: 'center',
+  },
+  headerInner: {
+    width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 8,
-    borderBottomWidth: 1,
-    zIndex: 10,
+    gap: 10,
   },
   brandRow: {
-    flex: 1,
-    minWidth: 0,
-    flexShrink: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-  },
-  brandTextWrap: {
-    flex: 1,
+    flexShrink: 1,
     minWidth: 0,
   },
   logoIcon: {
-    width: 34,
-    height: 34,
+    width: 36,
+    height: 36,
     borderRadius: 10,
-    backgroundColor: 'rgba(212, 175, 55, 0.15)',
+    backgroundColor: 'rgba(245, 158, 11, 0.16)',
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
   },
-  brandTitleRow: {
+  brandTextWrap: { flexShrink: 1, minWidth: 0 },
+  brandTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  brandTitle: { color: '#FFFFFF', fontSize: 16, fontWeight: '900', letterSpacing: -0.2 },
+  flagBadge: {
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  flagText: { color: '#FDE68A', fontSize: 9, fontWeight: '800' },
+  brandSubtitle: { color: '#94A3B8', fontSize: 11, fontWeight: '500' },
+  desktopNav: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 4,
   },
-  brandTitle: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '800',
-    letterSpacing: 0.2,
-    flexShrink: 1,
+  navLinkBtn: {
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    borderRadius: 10,
   },
-  flagBadge: {
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: 5,
-    flexShrink: 0,
-  },
-  flagText: {
-    color: '#D4AF37',
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  brandSubtitle: {
-    color: '#94A3B8',
-    fontSize: 10,
-    fontWeight: '500',
-  },
+  navLinkText: { color: '#E2E8F0', fontSize: 13, fontWeight: '600' },
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 6,
     flexShrink: 0,
   },
   themeHeaderBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.1)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  themeHeaderIcon: {
-    fontSize: 14,
-  },
+  themeHeaderIcon: { fontSize: 15 },
   loginHeaderBtn: {
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-    borderRadius: 8,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    borderRadius: 9,
     borderWidth: 1,
     borderColor: 'rgba(226, 232, 240, 0.25)',
   },
-  loginHeaderText: {
-    color: '#E2E8F0',
-    fontSize: 12,
-    fontWeight: '600',
-  },
+  loginHeaderText: { color: '#F8FAFC', fontSize: 12, fontWeight: '700' },
   registerHeaderBtn: {
-    backgroundColor: '#D4AF37',
-    paddingVertical: 6,
-    paddingHorizontal: 9,
-    borderRadius: 8,
+    backgroundColor: '#F59E0B',
+    paddingVertical: 7,
+    paddingHorizontal: 11,
+    borderRadius: 9,
   },
-  registerHeaderText: {
-    color: '#0F172A',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  scrollContent: {
-    flexGrow: 1,
-  },
+  registerHeaderText: { color: '#0F172A', fontSize: 12, fontWeight: '800' },
+  scrollContent: { flexGrow: 1, gap: 28 },
 
   /* HERO */
   heroContainer: {
-    height: 460,
     width: '100%',
     position: 'relative',
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
   },
   heroImage: {
     position: 'absolute',
@@ -503,526 +745,283 @@ const styles = StyleSheet.create({
     bottom: 0,
   },
   heroOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(11, 15, 25, 0.65)',
-    paddingHorizontal: Spacing.four,
-    paddingBottom: Spacing.five,
-    justifyContent: 'flex-end',
+    flex: 1,
+    backgroundColor: 'rgba(11, 15, 25, 0.72)',
+    paddingVertical: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroInner: {
+    width: '100%',
+    gap: 14,
   },
   heroTag: {
     alignSelf: 'flex-start',
-    backgroundColor: 'rgba(212, 175, 55, 0.2)',
-    borderColor: 'rgba(212, 175, 55, 0.5)',
+    backgroundColor: 'rgba(245, 158, 11, 0.2)',
+    borderColor: 'rgba(245, 158, 11, 0.45)',
     borderWidth: 1,
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
     paddingVertical: 5,
     borderRadius: 20,
-    marginBottom: Spacing.two,
   },
   heroTagText: {
     color: '#FDE68A',
     fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.8,
+    fontWeight: '800',
+    letterSpacing: 0.7,
   },
   heroMainTitle: {
     color: '#FFFFFF',
-    fontSize: Platform.OS === 'web' && SCREEN_WIDTH > 768 ? 38 : 28,
-    fontWeight: '800',
-    lineHeight: Platform.OS === 'web' && SCREEN_WIDTH > 768 ? 46 : 34,
-    marginBottom: Spacing.two,
-    maxWidth: 620,
+    fontWeight: '900',
+    maxWidth: 740,
   },
   heroDescription: {
     color: '#CBD5E1',
-    fontSize: 14,
-    lineHeight: 22,
-    marginBottom: Spacing.four,
-    maxWidth: 540,
+    fontSize: 15,
+    lineHeight: 23,
+    maxWidth: 620,
   },
-  heroCtaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.three,
-    flexWrap: 'wrap',
+  heroSearchCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 14,
+    gap: 12,
+    marginTop: 6,
+    maxWidth: 820,
+    ...Platform.select({
+      web: { boxShadow: '0 14px 36px rgba(0,0,0,0.22)' },
+    }),
   },
-  heroPrimaryBtn: {
-    backgroundColor: '#D4AF37',
-    paddingVertical: 14,
-    paddingHorizontal: 22,
-    borderRadius: 12,
+  heroSearchTabs: {
     flexDirection: 'row',
-    alignItems: 'center',
     gap: 8,
-    shadowColor: '#D4AF37',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
   },
-  heroPrimaryBtnText: {
-    color: '#0F172A',
-    fontSize: 15,
-    fontWeight: '700',
+  heroSearchTab: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 10,
   },
-  heroSecondaryBtn: {
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-    borderWidth: 1,
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-  },
-  heroSecondaryBtnText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-
-  /* TRUST BANNER */
-  trustBanner: {
-    marginHorizontal: Spacing.four,
-    marginTop: -30,
-    borderRadius: 16,
-    borderWidth: 1,
-    paddingVertical: Spacing.three,
-    paddingHorizontal: Spacing.three,
+  heroSearchRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    gap: 10,
     alignItems: 'center',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 3,
   },
-  trustItem: {
+  heroSearchRowMobile: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+  },
+  heroInputBox: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 46,
     gap: 8,
-    paddingHorizontal: 4,
   },
-  trustIconCircle: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
+  heroInput: {
+    flex: 1,
+    fontSize: 14,
+    ...Platform.select({ web: { outlineStyle: 'none' } as any }),
+  },
+  heroSearchBtn: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 22,
+    height: 46,
+    borderRadius: 12,
   },
-  trustTextCol: {
-    flex: 1,
+  heroSearchBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
   },
-  trustTitle: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  trustSubtitle: {
-    fontSize: 10,
-    fontWeight: '500',
-  },
-  trustDivider: {
-    width: 1,
-    height: 32,
-    marginHorizontal: 4,
-  },
-
-  /* PROPERTIES HORIZONTAL CAROUSEL */
-  sectionContainer: {
-    marginTop: Spacing.five,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    paddingHorizontal: Spacing.three,
-    marginBottom: Spacing.three,
+  quickCommunesRow: {
     gap: 8,
   },
-  sectionBadge: {
-    color: '#0F766E',
+  communeChip: {
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+
+  /* SECTIONS */
+  sectionWrap: {
+    width: '100%',
+    alignSelf: 'center',
+  },
+  trustGrid: {
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 18,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  trustCell: {
+    alignItems: 'center',
+    paddingVertical: 6,
+    gap: 2,
+  },
+  trustEmoji: { fontSize: 22, marginBottom: 2 },
+  trustValue: { fontSize: 22, fontWeight: '900' },
+  trustLabel: { fontSize: 12, fontWeight: '600', textAlign: 'center' },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+    gap: 12,
+    marginBottom: 14,
+  },
+  sectionEyebrow: {
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: '800',
     letterSpacing: 0.8,
     marginBottom: 4,
   },
   sectionTitle: {
-    fontSize: 20,
-    fontWeight: '800',
+    fontSize: 23,
+    fontWeight: '900',
   },
   sectionSubtitle: {
-    fontSize: 12,
-    marginTop: 2,
+    fontSize: 14,
+    marginTop: 3,
   },
-  seeAllBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingVertical: 6,
-    paddingHorizontal: 6,
-    flexShrink: 0,
+  outlinePillBtn: {
+    borderWidth: 1.5,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 12,
   },
-  seeAllText: {
-    color: '#0F766E',
-    fontSize: 13,
-    fontWeight: '700',
+  categoryBar: {
+    gap: 8,
+    paddingBottom: 16,
   },
-  featuredHorizontalScroll: {
-    flexGrow: 0,
-  },
-  featuredHorizontalContent: {
-    paddingHorizontal: Spacing.three,
-    paddingBottom: Spacing.two,
-    gap: Spacing.three,
-    flexDirection: 'row',
-    alignItems: 'stretch',
-  },
-  propertyCard: {
-    width: Math.min(Math.round(SCREEN_WIDTH * 0.78), 296),
-    flexShrink: 0,
-    borderRadius: 16,
+  catChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: 20,
     borderWidth: 1,
-    overflow: 'hidden',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
   },
-  cardImageWrapper: {
-    height: 200,
-    width: '100%',
-    position: 'relative',
+  cardsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 16,
+    justifyContent: 'flex-start',
   },
-  cardImage: {
-    width: '100%',
-    height: '100%',
+
+  /* SPACES */
+  spacesGrid: {
+    gap: 16,
   },
-  cardBadge: {
-    position: 'absolute',
-    top: 12,
-    left: 12,
+  spacesGridRow: {
+    flexDirection: 'row',
+  },
+  spaceCard: {
+    flex: 1,
+    borderRadius: 22,
+    borderWidth: 1.5,
+    padding: 22,
+    gap: 10,
+    justifyContent: 'space-between',
+  },
+  spaceBadge: {
+    alignSelf: 'flex-start',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
   },
-  cardBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.6,
-  },
-  lockBadge: {
-    position: 'absolute',
-    bottom: 12,
-    right: 12,
-    backgroundColor: 'rgba(15, 23, 42, 0.8)',
+  spaceBadgeText: { fontSize: 11, fontWeight: '800', letterSpacing: 0.5 },
+  spaceTitle: { fontSize: 20, fontWeight: '900' },
+  spaceDesc: { fontSize: 14, lineHeight: 21 },
+  spaceActions: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
+  },
+  spacePrimaryBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  spacePrimaryBtnText: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
+  spaceSecondaryBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    borderRadius: 12,
+    borderWidth: 1.5,
+  },
+  spaceSecondaryBtnText: { fontSize: 13, fontWeight: '700' },
+
+  /* STEPS */
+  aboutSection: {
+    borderRadius: 22,
+    borderWidth: 1,
+    padding: 22,
+    gap: 14,
+  },
+  stepsGrid: { gap: 12 },
+  stepsGridRow: { flexDirection: 'row' },
+  stepCard: {
+    flex: 1,
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 16,
+    gap: 6,
+  },
+  stepNum: { fontSize: 24, fontWeight: '900' },
+  stepTitle: { fontSize: 16, fontWeight: '800' },
+  stepDesc: { fontSize: 13, lineHeight: 19 },
+
+  /* CTA BANNER */
+  ctaBanner: {
+    borderRadius: 24,
+    padding: 24,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 20,
+    justifyContent: 'space-between',
+    gap: 18,
   },
-  lockBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '600',
+  ctaEyebrow: { color: '#FDE68A', fontSize: 11, fontWeight: '800', letterSpacing: 0.8 },
+  ctaTitle: { color: '#FFFFFF', fontSize: 22, fontWeight: '900' },
+  ctaDesc: { color: '#CBD5E1', fontSize: 14, lineHeight: 21, maxWidth: 580 },
+  ctaBtns: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  ctaGoldBtn: {
+    backgroundColor: '#F59E0B',
+    paddingHorizontal: 18,
+    paddingVertical: 13,
+    borderRadius: 12,
   },
-  cardContent: {
-    padding: Spacing.three,
+  ctaGoldBtnText: { color: '#0F172A', fontSize: 14, fontWeight: '900' },
+  ctaOutlineBtn: {
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.35)',
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+    borderRadius: 12,
   },
-  cardTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 6,
-  },
-  locationRow: {
+  ctaOutlineBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
+
+  /* FOOTER */
+  footer: {
+    marginTop: 24,
+    paddingTop: 18,
+    borderTopWidth: 1,
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginBottom: Spacing.three,
-  },
-  locationText: {
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  cardFooter: {
-    flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingTop: Spacing.two,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(0, 0, 0, 0.05)',
+    gap: 10,
   },
-  priceValue: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#0F766E',
-  },
-  unlockPrompt: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  unlockPromptText: {
-    color: '#0F766E',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-
-  /* SECTION A PROPOS */
-  aboutSection: {
-    marginTop: 48,
-    marginHorizontal: Spacing.four,
-    borderRadius: 20,
-    borderWidth: 1,
-    padding: Spacing.five,
-  },
-  aboutBadge: {
-    color: '#B45309',
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.8,
-    marginBottom: 4,
-  },
-  aboutTitle: {
-    fontSize: 22,
-    fontWeight: '800',
-    marginBottom: 8,
-  },
-  aboutSubtitle: {
-    fontSize: 14,
-    lineHeight: 22,
-    marginBottom: Spacing.four,
-  },
-  aboutGrid: {
-    gap: Spacing.three,
-  },
-  aboutCard: {
-    borderRadius: 14,
-    borderWidth: 1,
-    padding: Spacing.four,
-  },
-  aboutIconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: Spacing.two,
-  },
-  aboutCardTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  aboutCardDesc: {
-    fontSize: 13,
-    lineHeight: 19,
-  },
-
-  /* SECTION CONTACT */
-  contactSection: {
-    marginTop: 48,
-    paddingHorizontal: Spacing.four,
-    paddingVertical: Spacing.six,
-  },
-  contactBadge: {
-    color: '#D4AF37',
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.8,
-    marginBottom: 6,
-    textAlign: 'center',
-  },
-  contactTitle: {
-    color: '#FFFFFF',
-    fontSize: 24,
-    fontWeight: '800',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  contactSubtitle: {
-    color: '#94A3B8',
-    fontSize: 13,
-    textAlign: 'center',
-    maxWidth: 520,
-    alignSelf: 'center',
-    lineHeight: 20,
-    marginBottom: Spacing.five,
-  },
-  contactCardsRow: {
-    flexDirection: 'row',
-    gap: Spacing.two,
-    flexWrap: 'wrap',
-    marginBottom: Spacing.five,
-  },
-  contactInfoCard: {
-    flex: 1,
-    minWidth: 140,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-    borderWidth: 1,
-    borderRadius: 14,
-    padding: Spacing.three,
-    alignItems: 'center',
-  },
-  contactInfoIcon: {
-    marginBottom: 6,
-  },
-  contactInfoLabel: {
-    color: '#94A3B8',
-    fontSize: 11,
-    fontWeight: '600',
-    marginBottom: 2,
-    textAlign: 'center',
-  },
-  contactInfoValue: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  contactFormCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    borderWidth: 1,
-    borderRadius: 18,
-    padding: Spacing.four,
-  },
-  formTitle: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: Spacing.three,
-  },
-  successMessageBanner: {
-    backgroundColor: '#ECFDF5',
-    borderColor: '#A7F3D0',
-    borderWidth: 1,
-    borderRadius: 10,
-    padding: Spacing.three,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: Spacing.three,
-  },
-  successMessageText: {
-    color: '#047857',
-    fontSize: 13,
-    fontWeight: '600',
-    flex: 1,
-  },
-  inputGroup: {
-    marginBottom: Spacing.three,
-  },
-  inputLabel: {
-    color: '#CBD5E1',
-    fontSize: 12,
-    fontWeight: '600',
-    marginBottom: 6,
-  },
-  formInput: {
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderColor: 'rgba(255, 255, 255, 0.15)',
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    color: '#FFFFFF',
-    fontSize: 14,
-  },
-  formTextArea: {
-    minHeight: 80,
-    textAlignVertical: 'top',
-  },
-  submitContactBtn: {
-    backgroundColor: '#D4AF37',
-    borderRadius: 12,
-    paddingVertical: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    marginTop: Spacing.two,
-  },
-  submitContactBtnText: {
-    color: '#0F172A',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-
-  /* FINAL CONVERSION */
-  finalCtaContainer: {
-    paddingHorizontal: Spacing.four,
-    marginTop: Spacing.six,
-  },
-  finalCtaCard: {
-    backgroundColor: '#0F766E',
-    borderRadius: 20,
-    padding: Spacing.five,
-    alignItems: 'center',
-    shadowColor: '#0F766E',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    elevation: 4,
-  },
-  finalCtaBadge: {
-    color: '#A7F3D0',
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 1,
-    marginBottom: 8,
-  },
-  finalCtaTitle: {
-    color: '#FFFFFF',
-    fontSize: 22,
-    fontWeight: '800',
-    textAlign: 'center',
-    marginBottom: 10,
-  },
-  finalCtaDesc: {
-    color: '#E6FFFA',
-    fontSize: 13,
-    textAlign: 'center',
-    lineHeight: 20,
-    maxWidth: 480,
-    marginBottom: Spacing.four,
-  },
-  finalBtnRow: {
-    flexDirection: 'row',
-    gap: Spacing.three,
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-  },
-  finalPrimaryBtn: {
-    backgroundColor: '#FFFFFF',
-    paddingVertical: 14,
-    paddingHorizontal: 22,
-    borderRadius: 12,
-  },
-  finalPrimaryBtnText: {
-    color: '#0F766E',
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  finalSecondaryBtn: {
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-    borderWidth: 1,
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-  },
-  finalSecondaryBtnText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
-  },
+  footerCopy: { fontSize: 12 },
+  footerLinks: { flexDirection: 'row', gap: 16 },
+  footerLink: { fontSize: 13, fontWeight: '700' },
 });

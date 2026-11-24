@@ -1,13 +1,14 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  FlatList,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -15,6 +16,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PropertyCard } from '@/components/property-card';
+import { PropertyActionModal, PropertyActionTab } from '@/components/property/property-action-modal';
 import { UnlockModal } from '@/components/unlock-modal';
 import {
   BENIN_COMMUNES,
@@ -23,8 +25,11 @@ import {
 } from '@/constants/locations';
 import { BottomTabInset, Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
+import { MOCK_PROPERTIES } from '@/data/mock-properties';
+import { useResponsive } from '@/hooks/use-responsive';
 import { useTheme } from '@/hooks/use-theme';
 import { getStorageBaseUrl, proprietesApi } from '@/services/api';
+import { favoritesStorage } from '@/services/local-store';
 import type { BackendProperty } from '@/types/api';
 import {
   mapBackendPropertyToItem,
@@ -32,26 +37,59 @@ import {
   PropertyItem,
 } from '@/types/property';
 
+type SortOption = 'recent' | 'prix_asc' | 'prix_desc' | 'surface_desc';
+
+const SORT_OPTIONS: Array<{ key: SortOption; label: string }> = [
+  { key: 'recent', label: 'Plus récents' },
+  { key: 'prix_asc', label: 'Prix croissant' },
+  { key: 'prix_desc', label: 'Prix décroissant' },
+  { key: 'surface_desc', label: 'Surface max' },
+];
+
 export default function ExploreScreen() {
+  const params = useLocalSearchParams<{
+    q?: string;
+    tx?: string;
+    commune?: string;
+    type?: string;
+  }>();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const { isMobile, twoColLayout, gridColumns, contentMaxWidth, horizontalPadding } = useResponsive();
   const { isAuthenticated, openAuthModal } = useAuth();
   const storageBaseUrl = useMemo(() => getStorageBaseUrl(), []);
 
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCommune, setSelectedCommune] = useState('Toutes les communes');
+  const [searchQuery, setSearchQuery] = useState(params.q || '');
+  const [selectedCommune, setSelectedCommune] = useState(params.commune || 'Toutes les communes');
   const [selectedQuartier, setSelectedQuartier] = useState('Tous');
-  const [selectedTransaction, setSelectedTransaction] = useState<'tous' | 'vente' | 'location'>('tous');
-  const [selectedCategory, setSelectedCategory] = useState<PropertyCategory>('tous');
+  const [arrondissement, setArrondissement] = useState('');
+  const [selectedTransaction, setSelectedTransaction] = useState<'tous' | 'vente' | 'location'>(
+    params.tx === 'vente' || params.tx === 'location' ? params.tx : 'tous'
+  );
+  const [selectedCategory, setSelectedCategory] = useState<PropertyCategory>(
+    params.type === 'maison' || params.type === 'parcelle' || params.type === 'chambre'
+      ? params.type
+      : 'tous'
+  );
+  const [minPrice, setMinPrice] = useState('');
   const [maxPrice, setMaxPrice] = useState('');
+  const [minSurface, setMinSurface] = useState('');
   const [minRooms, setMinRooms] = useState('');
+  const [accessFilter, setAccessFilter] = useState('');
+  const [utilitiesFilter, setUtilitiesFilter] = useState('');
+  const [negotiableOnly, setNegotiableOnly] = useState(false);
+  const [sortBy, setSortBy] = useState<SortOption>('recent');
+  const [showMoreFilters, setShowMoreFilters] = useState(!isMobile);
 
   const [properties, setProperties] = useState<PropertyItem[]>([]);
+  const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const [unlockModalVisible, setUnlockModalVisible] = useState(false);
   const [selectedProperty, setSelectedProperty] = useState<PropertyItem | null>(null);
+  const [actionProperty, setActionProperty] = useState<PropertyItem | null>(null);
+  const [actionTab, setActionTab] = useState<PropertyActionTab>('demande_visite');
 
   const availableQuartiers = useMemo(() => {
     if (selectedCommune === 'Toutes les communes') return [];
@@ -63,37 +101,117 @@ export default function ExploreScreen() {
     setSelectedQuartier('Tous');
   };
 
+  const applyClientSideFallbackFilter = useCallback(
+    (list: PropertyItem[]) => {
+      const pMin = Number(minPrice.replace(/\s+/g, '')) || 0;
+      const pMax = Number(maxPrice.replace(/\s+/g, '')) || 0;
+      const sMin = Number(minSurface.replace(/\s+/g, '')) || 0;
+      const rooms = Number(minRooms) || 0;
+      const q = searchQuery.trim().toLowerCase();
+
+      const filtered = list.filter((p) => {
+        if (selectedCategory !== 'tous' && p.type !== selectedCategory) return false;
+        if (selectedTransaction !== 'tous' && p.transactionType !== selectedTransaction) return false;
+        if (
+          selectedCommune !== 'Toutes les communes' &&
+          !p.location.commune.toLowerCase().includes(selectedCommune.toLowerCase())
+        ) {
+          return false;
+        }
+        if (
+          selectedQuartier !== 'Tous' &&
+          !p.location.quartier.toLowerCase().includes(selectedQuartier.toLowerCase())
+        ) {
+          return false;
+        }
+        if (pMin > 0 && p.price < pMin) return false;
+        if (pMax > 0 && p.price > pMax) return false;
+        if (sMin > 0 && (p.features.surface ?? 0) < sMin) return false;
+        if (rooms > 0 && (p.features.chambres ?? 0) < rooms) return false;
+        if (negotiableOnly && !p.features.isNegotiable) return false;
+        if (q) {
+          const hay = `${p.title} ${p.location.fullAddress} ${p.tags.join(' ')}`.toLowerCase();
+          if (!hay.includes(q)) return false;
+        }
+        return true;
+      });
+
+      if (sortBy === 'prix_asc') filtered.sort((a, b) => a.price - b.price);
+      else if (sortBy === 'prix_desc') filtered.sort((a, b) => b.price - a.price);
+      else if (sortBy === 'surface_desc') {
+        filtered.sort((a, b) => (b.features.surface ?? 0) - (a.features.surface ?? 0));
+      }
+      return filtered;
+    },
+    [
+      selectedCategory,
+      selectedTransaction,
+      selectedCommune,
+      selectedQuartier,
+      minPrice,
+      maxPrice,
+      minSurface,
+      minRooms,
+      negotiableOnly,
+      searchQuery,
+      sortBy,
+    ]
+  );
+
   const loadSearchResults = useCallback(async () => {
+    const favs = await favoritesStorage.getAll();
+    setFavoriteIds(favs);
+
+    const parsedMin = Number(minPrice.replace(/\s+/g, ''));
     const parsedMax = Number(maxPrice.replace(/\s+/g, ''));
+    const parsedSurf = Number(minSurface.replace(/\s+/g, ''));
     const parsedRooms = Number(minRooms);
 
     const res = await proprietesApi.getFeed({
       type: selectedCategory === 'tous' ? undefined : selectedCategory,
       transaction_type: selectedTransaction === 'tous' ? undefined : selectedTransaction,
       commune: selectedCommune === 'Toutes les communes' ? undefined : selectedCommune,
+      arrondissement: arrondissement.trim() || undefined,
       quartier: selectedQuartier === 'Tous' ? undefined : selectedQuartier,
+      prix_min: parsedMin > 0 ? parsedMin : undefined,
       prix_max: parsedMax > 0 ? parsedMax : undefined,
+      surface_min: parsedSurf > 0 ? parsedSurf : undefined,
       nombres_chambres: parsedRooms > 0 ? parsedRooms : undefined,
+      is_negotiable: negotiableOnly ? true : undefined,
+      accessibilite: accessFilter.trim() || undefined,
+      eau_courant: utilitiesFilter.trim() || undefined,
+      sort: sortBy,
       search: searchQuery.trim() || undefined,
-      per_page: 25,
+      per_page: 30,
     });
 
     if (res.success && res.data) {
       setProperties(
         (res.data.data || []).map((p: BackendProperty) =>
-          mapBackendPropertyToItem(p, storageBaseUrl)
+          mapBackendPropertyToItem(p, storageBaseUrl, favs)
         )
       );
+    } else {
+      const mockWithFav = MOCK_PROPERTIES.map((m) => ({ ...m, isFavorite: favs.has(m.id) }));
+      setProperties(applyClientSideFallbackFilter(mockWithFav));
     }
   }, [
     selectedCategory,
     selectedTransaction,
     selectedCommune,
+    arrondissement,
     selectedQuartier,
+    minPrice,
     maxPrice,
+    minSurface,
     minRooms,
+    negotiableOnly,
+    accessFilter,
+    utilitiesFilter,
+    sortBy,
     searchQuery,
     storageBaseUrl,
+    applyClientSideFallbackFilter,
   ]);
 
   useEffect(() => {
@@ -102,7 +220,7 @@ export default function ExploreScreen() {
       setLoading(true);
       await loadSearchResults();
       if (active) setLoading(false);
-    }, 300);
+    }, 280);
     return () => {
       active = false;
       clearTimeout(timer);
@@ -115,58 +233,114 @@ export default function ExploreScreen() {
     setRefreshing(false);
   };
 
+  const handleToggleFavorite = async (id: string) => {
+    const next = await favoritesStorage.toggle(id);
+    setFavoriteIds(next);
+    setProperties((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, isFavorite: next.has(id) } : item))
+    );
+  };
+
   const resetFilters = () => {
     setSearchQuery('');
     setSelectedCommune('Toutes les communes');
     setSelectedQuartier('Tous');
+    setArrondissement('');
     setSelectedTransaction('tous');
     setSelectedCategory('tous');
+    setMinPrice('');
     setMaxPrice('');
+    setMinSurface('');
     setMinRooms('');
+    setAccessFilter('');
+    setUtilitiesFilter('');
+    setNegotiableOnly(false);
+    setSortBy('recent');
   };
+
+  const activeFiltersCount = useMemo(() => {
+    let count = 0;
+    if (searchQuery.trim()) count++;
+    if (selectedCommune !== 'Toutes les communes') count++;
+    if (selectedQuartier !== 'Tous') count++;
+    if (arrondissement.trim()) count++;
+    if (selectedTransaction !== 'tous') count++;
+    if (selectedCategory !== 'tous') count++;
+    if (minPrice.trim()) count++;
+    if (maxPrice.trim()) count++;
+    if (minSurface.trim()) count++;
+    if (minRooms.trim()) count++;
+    if (accessFilter.trim()) count++;
+    if (utilitiesFilter.trim()) count++;
+    if (negotiableOnly) count++;
+    return count;
+  }, [
+    searchQuery,
+    selectedCommune,
+    selectedQuartier,
+    arrondissement,
+    selectedTransaction,
+    selectedCategory,
+    minPrice,
+    maxPrice,
+    minSurface,
+    minRooms,
+    accessFilter,
+    utilitiesFilter,
+    negotiableOnly,
+  ]);
 
   const handleOpenProperty = (property: PropertyItem) => {
     router.push(`/property/${property.id}` as any);
   };
 
+  const cardWidthPercent =
+    gridColumns === 3 ? '31.8%' : gridColumns === 2 ? '48.5%' : '100%';
+
   return (
     <SafeAreaView edges={['top']} style={[styles.container, { backgroundColor: theme.background }]}>
-      <FlatList
-        data={properties}
-        keyExtractor={(item) => item.id}
+      <ScrollView
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={theme.primary} />}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={theme.primary} />
+        }
         contentContainerStyle={[
-          styles.listContent,
-          { paddingBottom: BottomTabInset + Spacing.six + insets.bottom },
-        ]}
-        ListHeaderComponent={
-          <View style={styles.headerBlock}>
-            <View style={styles.topRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.pageTitle, { color: theme.text }]}>Recherche Avancée</Text>
-                <Text style={[styles.pageSub, { color: theme.textSecondary }]}>
-                  Filtres géographiques et budget en temps réel
-                </Text>
-              </View>
-              <Pressable
-                onPress={() => {
-                  if (!isAuthenticated) {
-                    openAuthModal('login');
-                  } else {
-                    router.push('/search-requests' as any);
-                  }
-                }}
-                style={[styles.requestShortcut, { backgroundColor: theme.navy }]}>
-                <Text style={styles.requestShortcutText}>Mes Demandes</Text>
-              </Pressable>
+          styles.scrollContent,
+          {
+            paddingHorizontal: horizontalPadding,
+            paddingBottom: BottomTabInset + insets.bottom + 84,
+          },
+        ]}>
+        <View style={[styles.innerWrap, { maxWidth: contentMaxWidth }]}>
+          {/* Header */}
+          <View style={styles.topRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.pageTitle, { color: theme.text }]}>Recherche de Maison & Biens</Text>
+              <Text style={[styles.pageSub, { color: theme.textSecondary }]}>
+                Filtres complets par localisation, budget, surface, chambres et commodités
+              </Text>
             </View>
+            <Pressable
+              onPress={() => {
+                if (!isAuthenticated) openAuthModal('login');
+                else router.push('/search-requests' as any);
+              }}
+              style={[styles.requestShortcut, { backgroundColor: theme.navy }]}>
+              <Text style={styles.requestShortcutText}>Mes Demandes</Text>
+            </Pressable>
+          </View>
 
-            {/* Search Input */}
+          {/* Complete Search Form Card */}
+          <View
+            style={[
+              styles.searchCard,
+              { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder },
+            ]}>
+            {/* Keyword search */}
             <View
               style={[
                 styles.searchBar,
-                { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder },
+                { backgroundColor: theme.backgroundElement, borderColor: theme.cardBorder },
               ]}>
               <SymbolView
                 name={{ ios: 'magnifyingglass', android: 'search', web: 'search' }}
@@ -175,7 +349,7 @@ export default function ExploreScreen() {
               />
               <TextInput
                 style={[styles.searchInput, { color: theme.text }]}
-                placeholder="Mot-clé, quartier, repère..."
+                placeholder="Mot-clé, quartier, villa, piscine, titre foncier..."
                 placeholderTextColor={theme.textSecondary}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
@@ -191,159 +365,383 @@ export default function ExploreScreen() {
               )}
             </View>
 
-            {/* Communes */}
-            <Text style={[styles.filterTitle, { color: theme.text }]}>Communes du Bénin</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsScroll}>
-              {BENIN_COMMUNES.map((c) => {
-                const active = selectedCommune === c;
-                return (
-                  <Pressable
-                    key={c}
-                    onPress={() => handleSelectCommune(c)}
-                    style={[
-                      styles.chip,
-                      {
-                        backgroundColor: active ? theme.primary : theme.cardBackground,
-                        borderColor: active ? theme.primary : theme.cardBorder,
-                      },
-                    ]}>
-                    <Text style={{ color: active ? '#FFFFFF' : theme.text, fontWeight: active ? '700' : '500', fontSize: 13 }}>
-                      {c}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
+            {/* Type & Transaction row */}
+            <View style={[styles.filtersPair, !twoColLayout && { flexDirection: 'column' }]}>
+              <View style={{ flex: 1, gap: 6 }}>
+                <Text style={[styles.filterLabel, { color: theme.text }]}>Type de bien</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsScroll}>
+                  {FILTER_CATEGORIES.map((cat) => {
+                    const active = selectedCategory === cat.id;
+                    return (
+                      <Pressable
+                        key={cat.id}
+                        onPress={() => setSelectedCategory(cat.id)}
+                        style={[
+                          styles.chip,
+                          {
+                            backgroundColor: active ? theme.primary : theme.backgroundElement,
+                            borderColor: active ? theme.primary : theme.cardBorder,
+                          },
+                        ]}>
+                        <Text
+                          style={{
+                            color: active ? '#FFFFFF' : theme.text,
+                            fontSize: 12,
+                            fontWeight: '700',
+                          }}>
+                          {cat.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              </View>
 
-            {/* Quartiers */}
-            {availableQuartiers.length > 0 && (
+              <View style={{ flex: 1, gap: 6 }}>
+                <Text style={[styles.filterLabel, { color: theme.text }]}>Opération</Text>
+                <View style={[styles.segmented, { backgroundColor: theme.backgroundElement }]}>
+                  {(['tous', 'location', 'vente'] as const).map((tr) => {
+                    const active = selectedTransaction === tr;
+                    const label = tr === 'tous' ? 'Tous' : tr === 'location' ? 'Location' : 'Vente';
+                    return (
+                      <Pressable
+                        key={tr}
+                        onPress={() => setSelectedTransaction(tr)}
+                        style={[styles.segBtn, active && { backgroundColor: theme.cardBackground }]}>
+                        <Text
+                          style={{
+                            color: active ? theme.primary : theme.textSecondary,
+                            fontWeight: '800',
+                            fontSize: 12,
+                          }}>
+                          {label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            </View>
+
+            {/* Communes & Quartiers */}
+            <View style={{ gap: 6 }}>
+              <Text style={[styles.filterLabel, { color: theme.text }]}>Commune du Bénin</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsScroll}>
-                {availableQuartiers.map((q) => {
-                  const active = selectedQuartier === q;
+                {BENIN_COMMUNES.map((c) => {
+                  const active = selectedCommune === c;
                   return (
                     <Pressable
-                      key={q}
-                      onPress={() => setSelectedQuartier(q)}
+                      key={c}
+                      onPress={() => handleSelectCommune(c)}
                       style={[
-                        styles.quartierChip,
+                        styles.chip,
                         {
-                          backgroundColor: active ? theme.navyLight : theme.backgroundElement,
-                          borderColor: active ? theme.gold : 'transparent',
+                          backgroundColor: active ? theme.navy : theme.backgroundElement,
+                          borderColor: active ? theme.navy : theme.cardBorder,
                         },
                       ]}>
-                      <Text style={{ color: active ? '#FFFFFF' : theme.textSecondary, fontSize: 12, fontWeight: '600' }}>
-                        {q}
+                      <Text
+                        style={{
+                          color: active ? '#FFFFFF' : theme.text,
+                          fontWeight: active ? '800' : '600',
+                          fontSize: 12,
+                        }}>
+                        {c}
                       </Text>
                     </Pressable>
                   );
                 })}
               </ScrollView>
+            </View>
+
+            {availableQuartiers.length > 0 && (
+              <View style={{ gap: 6 }}>
+                <Text style={[styles.filterLabel, { color: theme.text }]}>
+                  Quartiers de {selectedCommune}
+                </Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsScroll}>
+                  {availableQuartiers.map((q) => {
+                    const active = selectedQuartier === q;
+                    return (
+                      <Pressable
+                        key={q}
+                        onPress={() => setSelectedQuartier(q)}
+                        style={[
+                          styles.quartierChip,
+                          {
+                            backgroundColor: active ? theme.primaryLight : theme.backgroundElement,
+                            borderColor: active ? theme.primary : 'transparent',
+                          },
+                        ]}>
+                        <Text
+                          style={{
+                            color: active ? theme.primaryDark : theme.textSecondary,
+                            fontSize: 12,
+                            fontWeight: '700',
+                          }}>
+                          {q}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              </View>
             )}
 
-            {/* Category & Transaction */}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsScroll}>
-              {FILTER_CATEGORIES.map((cat) => {
-                const active = selectedCategory === cat.id;
-                return (
-                  <Pressable
-                    key={cat.id}
-                    onPress={() => setSelectedCategory(cat.id)}
-                    style={[
-                      styles.chip,
-                      {
-                        backgroundColor: active ? theme.navy : theme.cardBackground,
-                        borderColor: active ? theme.navy : theme.cardBorder,
-                      },
-                    ]}>
-                    <Text style={{ color: active ? '#FFFFFF' : theme.text, fontSize: 13, fontWeight: '600' }}>
-                      {cat.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-
-            <View style={[styles.segmented, { backgroundColor: theme.backgroundElement }]}>
-              {(['tous', 'vente', 'location'] as const).map((tr) => {
-                const active = selectedTransaction === tr;
-                const label = tr === 'tous' ? 'Tous' : tr === 'vente' ? 'Vente' : 'Location';
-                return (
-                  <Pressable
-                    key={tr}
-                    onPress={() => setSelectedTransaction(tr)}
-                    style={[styles.segBtn, active && { backgroundColor: theme.cardBackground }]}>
-                    <Text style={{ color: active ? theme.primary : theme.textSecondary, fontWeight: '700', fontSize: 13 }}>
-                      {label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            {/* Budget & Rooms */}
-            <View style={styles.numericRow}>
-              <TextInput
-                style={[styles.numInput, { color: theme.text, backgroundColor: theme.cardBackground, borderColor: theme.cardBorder }]}
-                placeholder="Budget max (FCFA)"
-                placeholderTextColor={theme.textSecondary}
-                keyboardType="numeric"
-                value={maxPrice}
-                onChangeText={setMaxPrice}
-              />
-              <TextInput
-                style={[styles.numInput, { color: theme.text, backgroundColor: theme.cardBackground, borderColor: theme.cardBorder }]}
-                placeholder="Min. chambres"
-                placeholderTextColor={theme.textSecondary}
-                keyboardType="numeric"
-                value={minRooms}
-                onChangeText={setMinRooms}
-              />
-            </View>
-
-            <View style={styles.summaryRow}>
-              <Text style={[styles.summaryText, { color: theme.textSecondary }]}>
-                {properties.length} résultat{properties.length > 1 ? 's' : ''}
+            {/* Toggle Advanced Criteria */}
+            <Pressable
+              onPress={() => setShowMoreFilters((v) => !v)}
+              style={[styles.advancedToggle, { borderColor: theme.cardBorder }]}>
+              <Text style={{ color: theme.primary, fontSize: 13, fontWeight: '800' }}>
+                {showMoreFilters
+                  ? '▲ Masquer les critères avancés'
+                  : `▼ Critères avancés (Budget, Surface, Chambres, Commodités)`}
               </Text>
-              <Pressable onPress={resetFilters}>
-                <Text style={[styles.resetText, { color: theme.primary }]}>Réinitialiser</Text>
-              </Pressable>
+              {activeFiltersCount > 0 && (
+                <View style={[styles.countPill, { backgroundColor: theme.primary }]}>
+                  <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '800' }}>
+                    {activeFiltersCount} actif{activeFiltersCount > 1 ? 's' : ''}
+                  </Text>
+                </View>
+              )}
+            </Pressable>
+
+            {showMoreFilters && (
+              <View style={{ gap: 12 }}>
+                {/* Budget Min / Max & Surface & Chambres */}
+                <View style={[styles.numericGrid, !twoColLayout && { flexDirection: 'column' }]}>
+                  <View style={styles.numericRow}>
+                    <TextInput
+                      style={[
+                        styles.numInput,
+                        { color: theme.text, backgroundColor: theme.backgroundElement, borderColor: theme.cardBorder },
+                      ]}
+                      placeholder="Budget min (FCFA)"
+                      placeholderTextColor={theme.textSecondary}
+                      keyboardType="numeric"
+                      value={minPrice}
+                      onChangeText={setMinPrice}
+                    />
+                    <TextInput
+                      style={[
+                        styles.numInput,
+                        { color: theme.text, backgroundColor: theme.backgroundElement, borderColor: theme.cardBorder },
+                      ]}
+                      placeholder="Budget max (FCFA)"
+                      placeholderTextColor={theme.textSecondary}
+                      keyboardType="numeric"
+                      value={maxPrice}
+                      onChangeText={setMaxPrice}
+                    />
+                  </View>
+
+                  <View style={styles.numericRow}>
+                    <TextInput
+                      style={[
+                        styles.numInput,
+                        { color: theme.text, backgroundColor: theme.backgroundElement, borderColor: theme.cardBorder },
+                      ]}
+                      placeholder="Surface min (m²)"
+                      placeholderTextColor={theme.textSecondary}
+                      keyboardType="numeric"
+                      value={minSurface}
+                      onChangeText={setMinSurface}
+                    />
+                    <TextInput
+                      style={[
+                        styles.numInput,
+                        { color: theme.text, backgroundColor: theme.backgroundElement, borderColor: theme.cardBorder },
+                      ]}
+                      placeholder="Min. chambres"
+                      placeholderTextColor={theme.textSecondary}
+                      keyboardType="numeric"
+                      value={minRooms}
+                      onChangeText={setMinRooms}
+                    />
+                  </View>
+                </View>
+
+                {/* Quick Rooms Pills */}
+                <View style={styles.quickRoomsRow}>
+                  <Text style={{ color: theme.textSecondary, fontSize: 12, fontWeight: '700' }}>
+                    Chambres :
+                  </Text>
+                  {['', '1', '2', '3', '4', '5'].map((n) => {
+                    const active = minRooms === n;
+                    return (
+                      <Pressable
+                        key={n || 'all'}
+                        onPress={() => setMinRooms(n)}
+                        style={[
+                          styles.roomPill,
+                          {
+                            backgroundColor: active ? theme.primary : theme.backgroundElement,
+                          },
+                        ]}>
+                        <Text
+                          style={{
+                            color: active ? '#FFFFFF' : theme.text,
+                            fontSize: 12,
+                            fontWeight: '700',
+                          }}>
+                          {n ? `${n}+` : 'Toutes'}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                {/* Arrondissement, Accessibilité, Eau/Électricité */}
+                <View style={[styles.numericGrid, !twoColLayout && { flexDirection: 'column' }]}>
+                  <TextInput
+                    style={[
+                      styles.numInput,
+                      { color: theme.text, backgroundColor: theme.backgroundElement, borderColor: theme.cardBorder },
+                    ]}
+                    placeholder="Arrondissement (ex: 12ème)"
+                    placeholderTextColor={theme.textSecondary}
+                    value={arrondissement}
+                    onChangeText={setArrondissement}
+                  />
+                  <TextInput
+                    style={[
+                      styles.numInput,
+                      { color: theme.text, backgroundColor: theme.backgroundElement, borderColor: theme.cardBorder },
+                    ]}
+                    placeholder="Accessibilité (ex: Pavé, Goudron)"
+                    placeholderTextColor={theme.textSecondary}
+                    value={accessFilter}
+                    onChangeText={setAccessFilter}
+                  />
+                  <TextInput
+                    style={[
+                      styles.numInput,
+                      { color: theme.text, backgroundColor: theme.backgroundElement, borderColor: theme.cardBorder },
+                    ]}
+                    placeholder="Eau / Élec (ex: SONEB, SBEE)"
+                    placeholderTextColor={theme.textSecondary}
+                    value={utilitiesFilter}
+                    onChangeText={setUtilitiesFilter}
+                  />
+                </View>
+
+                {/* Negotiable Switch & Sort */}
+                <View style={styles.bottomFilterRow}>
+                  <View style={styles.switchWrap}>
+                    <Switch
+                      value={negotiableOnly}
+                      onValueChange={setNegotiableOnly}
+                      trackColor={{ false: '#CBD5E1', true: theme.primary }}
+                      thumbColor="#FFFFFF"
+                    />
+                    <Text style={{ color: theme.text, fontSize: 13, fontWeight: '700' }}>
+                      Négociable uniquement
+                    </Text>
+                  </View>
+
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
+                    {SORT_OPTIONS.map((opt) => {
+                      const active = sortBy === opt.key;
+                      return (
+                        <Pressable
+                          key={opt.key}
+                          onPress={() => setSortBy(opt.key)}
+                          style={[
+                            styles.sortChip,
+                            {
+                              backgroundColor: active ? theme.navy : theme.backgroundElement,
+                            },
+                          ]}>
+                          <Text
+                            style={{
+                              color: active ? '#FFFFFF' : theme.text,
+                              fontSize: 11,
+                              fontWeight: '700',
+                            }}>
+                            {opt.label}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+              </View>
+            )}
+
+            {/* Footer actions of Search Form */}
+            <View style={styles.summaryRow}>
+              <Text style={[styles.summaryText, { color: theme.text }]}>
+                {properties.length} bien{properties.length > 1 ? 's' : ''} trouvé{properties.length > 1 ? 's' : ''}
+              </Text>
+              <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
+                {activeFiltersCount > 0 && (
+                  <Pressable onPress={resetFilters}>
+                    <Text style={[styles.resetText, { color: '#DC2626' }]}>Réinitialiser</Text>
+                  </Pressable>
+                )}
+                <Pressable
+                  onPress={() => router.push('/search-requests' as any)}
+                  style={[styles.saveSearchBtn, { backgroundColor: theme.primaryLight }]}>
+                  <Text style={{ color: theme.primaryDark, fontSize: 12, fontWeight: '800' }}>
+                    + Enregistrer mon alerte
+                  </Text>
+                </Pressable>
+              </View>
             </View>
           </View>
-        }
-        renderItem={({ item }) => (
-          <PropertyCard
-            property={item}
-            onPressCard={handleOpenProperty}
-            onPressDetails={(prop) => {
-              if (prop.isUnlocked) handleOpenProperty(prop);
-              else {
-                setSelectedProperty(prop);
-                setUnlockModalVisible(true);
-              }
-            }}
-          />
-        )}
-        ListEmptyComponent={
-          loading ? (
+
+          {/* Results Grid */}
+          {loading ? (
             <ActivityIndicator size="large" color={theme.primary} style={{ marginTop: 32 }} />
-          ) : (
-            <View style={styles.emptyBox}>
-              <Text style={[styles.emptyTitle, { color: theme.text }]}>Aucun bien ne correspond</Text>
-              <Text style={[styles.emptySub, { color: theme.textSecondary }]}>
-                Déposez une demande de recherche personnalisée pour être notifié dès qu'un bien correspond.
+          ) : properties.length === 0 ? (
+            <View
+              style={[
+                styles.emptyBox,
+                { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder },
+              ]}>
+              <Text style={[styles.emptyTitle, { color: theme.text }]}>
+                Aucun bien ne correspond exactement à ces filtres
               </Text>
-              <Pressable
-                onPress={() => {
-                  if (!isAuthenticated) openAuthModal('login');
-                  else router.push('/search-requests' as any);
-                }}
-                style={[styles.ctaBtn, { backgroundColor: theme.primary }]}>
-                <Text style={styles.ctaBtnText}>Créer une demande de recherche</Text>
-              </Pressable>
+              <Text style={[styles.emptySub, { color: theme.textSecondary }]}>
+                Élargissez vos critères ou publiez une demande de recherche personnalisée pour que nos
+                agents trouvent votre maison idéale.
+              </Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center' }}>
+                <Pressable
+                  onPress={resetFilters}
+                  style={[styles.ctaBtn, { backgroundColor: theme.navy }]}>
+                  <Text style={styles.ctaBtnText}>Réinitialiser les filtres</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => {
+                    if (!isAuthenticated) openAuthModal('login');
+                    else router.push('/search-requests' as any);
+                  }}
+                  style={[styles.ctaBtn, { backgroundColor: theme.primary }]}>
+                  <Text style={styles.ctaBtnText}>Créer une demande de recherche</Text>
+                </Pressable>
+              </View>
             </View>
-          )
-        }
-      />
+          ) : (
+            <View style={styles.cardsGrid}>
+              {properties.map((item) => (
+                <View key={item.id} style={{ width: cardWidthPercent as any }}>
+                  <PropertyCard
+                    property={item}
+                    onPressCard={handleOpenProperty}
+                    onPressDetails={handleOpenProperty}
+                    onToggleFavorite={handleToggleFavorite}
+                    onPressQuickAction={(prop, action) => {
+                      setActionProperty(prop);
+                      setActionTab(action);
+                    }}
+                  />
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+      </ScrollView>
 
       <UnlockModal
         visible={unlockModalVisible}
@@ -351,57 +749,111 @@ export default function ExploreScreen() {
         onClose={() => setUnlockModalVisible(false)}
         onConfirmUnlock={(prop, updatedBackend) => {
           const refreshed = updatedBackend
-            ? mapBackendPropertyToItem(updatedBackend, storageBaseUrl)
+            ? mapBackendPropertyToItem(updatedBackend, storageBaseUrl, favoriteIds)
             : { ...prop, isUnlocked: true };
           setProperties((prev) => prev.map((p) => (p.id === refreshed.id ? refreshed : p)));
           setSelectedProperty(refreshed);
         }}
         onOpenFullDetails={handleOpenProperty}
       />
+
+      {actionProperty && (
+        <PropertyActionModal
+          visible={Boolean(actionProperty)}
+          initialAction={actionTab}
+          propertyId={actionProperty.backendId ?? null}
+          propertyTitle={actionProperty.title}
+          propertyLocation={actionProperty.location.fullAddress}
+          onClose={() => setActionProperty(null)}
+        />
+      )}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  listContent: { paddingHorizontal: Spacing.three, paddingTop: Spacing.two },
-  headerBlock: { gap: Spacing.two, marginBottom: Spacing.three },
+  scrollContent: { paddingTop: Spacing.two },
+  innerWrap: { width: '100%', alignSelf: 'center', gap: 16 },
   topRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   pageTitle: { fontSize: 22, fontWeight: '900' },
-  pageSub: { fontSize: 13 },
-  requestShortcut: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12 },
+  pageSub: { fontSize: 13, marginTop: 2 },
+  requestShortcut: { paddingHorizontal: 13, paddingVertical: 9, borderRadius: 12 },
   requestShortcutText: { color: '#FFFFFF', fontSize: 12, fontWeight: '800' },
+  searchCard: { borderRadius: 20, borderWidth: 1, padding: 16, gap: 12 },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: 1,
-    paddingHorizontal: Spacing.three,
+    paddingHorizontal: 12,
     height: 46,
     gap: 8,
   },
-  searchInput: { flex: 1, fontSize: 14 },
-  filterTitle: { fontSize: 13, fontWeight: '800', marginTop: 4 },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    ...Platform.select({ web: { outlineStyle: 'none' } as any }),
+  },
+  filtersPair: { flexDirection: 'row', gap: 12 },
+  filterLabel: { fontSize: 12, fontWeight: '800' },
   chipsScroll: { gap: 8, paddingVertical: 2 },
-  chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 18, borderWidth: 1 },
-  quartierChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14, borderWidth: 1 },
+  chip: { paddingHorizontal: 13, paddingVertical: 8, borderRadius: 16, borderWidth: 1 },
+  quartierChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, borderWidth: 1 },
   segmented: { flexDirection: 'row', borderRadius: 12, padding: 4, gap: 4 },
   segBtn: { flex: 1, paddingVertical: 8, borderRadius: 9, alignItems: 'center' },
-  numericRow: { flexDirection: 'row', gap: 10 },
+  advancedToggle: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+  },
+  countPill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
+  numericGrid: { flexDirection: 'row', gap: 10 },
+  numericRow: { flex: 1, flexDirection: 'row', gap: 10 },
   numInput: {
     flex: 1,
     borderRadius: 12,
     borderWidth: 1,
-    paddingHorizontal: Spacing.three,
+    paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 13,
   },
-  summaryRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 },
-  summaryText: { fontSize: 13, fontWeight: '700' },
+  quickRoomsRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 },
+  roomPill: { paddingHorizontal: 11, paddingVertical: 6, borderRadius: 10 },
+  bottomFilterRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 10,
+  },
+  switchWrap: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  sortChip: { paddingHorizontal: 11, paddingVertical: 7, borderRadius: 10 },
+  summaryRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 4,
+  },
+  summaryText: { fontSize: 14, fontWeight: '800' },
   resetText: { fontSize: 13, fontWeight: '700' },
-  emptyBox: { alignItems: 'center', paddingVertical: Spacing.five, gap: 10 },
-  emptyTitle: { fontSize: 17, fontWeight: '800' },
-  emptySub: { fontSize: 13, textAlign: 'center', paddingHorizontal: Spacing.four },
-  ctaBtn: { paddingHorizontal: 16, paddingVertical: 12, borderRadius: 12, marginTop: 6 },
-  ctaBtnText: { color: '#FFFFFF', fontWeight: '800', fontSize: 14 },
+  saveSearchBtn: { paddingHorizontal: 11, paddingVertical: 7, borderRadius: 10 },
+  cardsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 16 },
+  emptyBox: {
+    borderRadius: 20,
+    borderWidth: 1,
+    alignItems: 'center',
+    paddingVertical: 36,
+    paddingHorizontal: 20,
+    gap: 12,
+  },
+  emptyTitle: { fontSize: 17, fontWeight: '800', textAlign: 'center' },
+  emptySub: { fontSize: 13, textAlign: 'center', maxWidth: 460 },
+  ctaBtn: { paddingHorizontal: 16, paddingVertical: 12, borderRadius: 12 },
+  ctaBtnText: { color: '#FFFFFF', fontWeight: '800', fontSize: 13 },
 });
