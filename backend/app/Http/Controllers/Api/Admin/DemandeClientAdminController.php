@@ -32,10 +32,11 @@ class DemandeClientAdminController extends Controller
             $userZone = $user->zone;
             $commune = $userZone?->commune;
 
-            $query->where(function ($q) use ($user, $commune) {
+            $like = \Illuminate\Support\Facades\DB::connection()->getDriverName() === 'pgsql' ? 'ILIKE' : 'LIKE';
+            $query->where(function ($q) use ($user, $commune, $like) {
                 $q->where('zone_id', $user->zone_id);
                 if ($commune) {
-                    $q->orWhere('target_commune', 'ILIKE', '%' . $commune . '%');
+                    $q->orWhere('target_commune', $like, '%' . $commune . '%');
                 }
             });
         }
@@ -54,7 +55,8 @@ class DemandeClientAdminController extends Controller
             $query->where('zone_id', $request->input('zone_id'));
         }
         if ($request->filled('commune')) {
-            $query->where('target_commune', 'ILIKE', '%' . $request->input('commune') . '%');
+            $like = \Illuminate\Support\Facades\DB::connection()->getDriverName() === 'pgsql' ? 'ILIKE' : 'LIKE';
+            $query->where('target_commune', $like, '%' . $request->input('commune') . '%');
         }
 
         $perPage = (int) $request->input('per_page', 20);

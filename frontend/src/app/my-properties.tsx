@@ -3,7 +3,6 @@ import { MapPin } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Modal,
   Pressable,
@@ -25,6 +24,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { proprietesApi } from '@/services/api';
 import type { BackendProperty } from '@/types/api';
 import { formatFcfa } from '@/types/property';
+import { confirmDialog } from '@/utils/dialog';
 import { getStatusDisplay } from '@/utils/validation';
 
 export default function MyPropertiesScreen() {
@@ -41,22 +41,41 @@ export default function MyPropertiesScreen() {
 
   const [editing, setEditing] = useState<BackendProperty | null>(null);
   const [editPrix, setEditPrix] = useState('');
+  const [editCommune, setEditCommune] = useState('');
+  const [editQuartier, setEditQuartier] = useState('');
+  const [editSurface, setEditSurface] = useState('');
+  const [editAccess, setEditAccess] = useState('');
+  const [editEau, setEditEau] = useState('');
   const [editDesc, setEditDesc] = useState('');
   const [editDetails, setEditDetails] = useState('');
   const [editNegotiable, setEditNegotiable] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const load = useCallback(async () => {
-    if (!isAuthenticated) {
-      setItems([]);
-      return;
-    }
-    const res = await proprietesApi.getMyProperties(1);
-    if (res.success && res.data) {
-      setItems(res.data.data || []);
-    }
-  }, [isAuthenticated]);
+  const [page, setPage] = useState(1);
+  const [lastPage, setLastPage] = useState(1);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const load = useCallback(
+    async (targetPage = 1, replace = true) => {
+      setLoadError(null);
+      if (!isAuthenticated) {
+        setItems([]);
+        return;
+      }
+      const res = await proprietesApi.getMyProperties(targetPage);
+      if (res.success && res.data) {
+        const list = res.data.data || [];
+        setItems((prev) => (replace ? list : [...prev, ...list]));
+        setPage(res.data.current_page || targetPage);
+        setLastPage(res.data.last_page || 1);
+      } else {
+        setLoadError(res.message || 'Impossible de charger vos annonces.');
+      }
+    },
+    [isAuthenticated]
+  );
 
   useEffect(() => {
     void load().finally(() => setLoading(false));
@@ -76,6 +95,11 @@ export default function MyPropertiesScreen() {
   const openEdit = (item: BackendProperty) => {
     setEditing(item);
     setEditPrix(String(item.prix ?? ''));
+    setEditCommune(item.commune || '');
+    setEditQuartier(item.quartier || '');
+    setEditSurface(item.surface ? String(item.surface) : '');
+    setEditAccess(item.accessibilite || '');
+    setEditEau(item.eau_courant || '');
     setEditDesc(item.description || '');
     setEditDetails(item.location_details || '');
     setEditNegotiable(Boolean(item.is_negotiable));
@@ -89,9 +113,19 @@ export default function MyPropertiesScreen() {
       setEditError('Veuillez saisir un prix valide supérieur à 0 F CFA.');
       return;
     }
+    const numericSurface = editSurface.trim() ? Number(editSurface.replace(/\s+/g, '')) : undefined;
+    if (numericSurface !== undefined && (Number.isNaN(numericSurface) || numericSurface <= 0)) {
+      setEditError('Veuillez saisir une surface valide en m².');
+      return;
+    }
     setSaving(true);
     const res = await proprietesApi.update(editing.id, {
       prix: numericPrice,
+      ...(editCommune.trim() ? { commune: editCommune.trim() } : {}),
+      ...(editQuartier.trim() ? { quartier: editQuartier.trim() } : {}),
+      ...(numericSurface ? { surface: numericSurface } : {}),
+      ...(editAccess.trim() ? { accessibilite: editAccess.trim() } : {}),
+      ...(editEau.trim() ? { eau_courant: editEau.trim() } : {}),
       description: editDesc.trim(),
       location_details: editDetails.trim(),
       is_negotiable: editNegotiable,
@@ -100,29 +134,27 @@ export default function MyPropertiesScreen() {
     if (res.success) {
       setEditing(null);
       setFeedback({ text: `Annonce #${editing.id} mise à jour avec succès.`, type: 'success' });
-      await load();
+      await load(1, true);
     } else {
       setEditError(res.message || 'Impossible de modifier.');
     }
   };
 
-  const handleDelete = (item: BackendProperty) => {
-    Alert.alert('Supprimer ce bien ?', `Annonce #${item.id} (${item.commune})`, [
-      { text: 'Annuler', style: 'cancel' },
-      {
-        text: 'Supprimer',
-        style: 'destructive',
-        onPress: async () => {
-          const res = await proprietesApi.delete(item.id);
-          if (res.success) {
-            setFeedback({ text: `Annonce #${item.id} supprimée.`, type: 'success' });
-            await load();
-          } else {
-            setFeedback({ text: res.message || 'Suppression impossible.', type: 'error' });
-          }
-        },
-      },
-    ]);
+  const handleDelete = async (item: BackendProperty) => {
+    const ok = await confirmDialog(
+      'Supprimer ce bien ?',
+      `Annonce #${item.id} (${item.commune})`,
+      'Supprimer'
+    );
+    if (!ok) return;
+
+    const res = await proprietesApi.delete(item.id);
+    if (res.success) {
+      setFeedback({ text: `Annonce #${item.id} supprimée.`, type: 'success' });
+      await load(1, true);
+    } else {
+      setFeedback({ text: res.message || 'Suppression impossible.', type: 'error' });
+    }
   };
 
   return (
@@ -166,6 +198,11 @@ export default function MyPropertiesScreen() {
           ]}
           ListHeaderComponent={
             <View style={{ gap: 10 }}>
+              {loadError ? (
+                <View style={[styles.feedbackBanner, { backgroundColor: '#FEF2F2', borderColor: '#FECACA' }]}>
+                  <Text style={{ color: '#B91C1C', fontSize: 13, fontWeight: '700' }}>{loadError}</Text>
+                </View>
+              ) : null}
               {feedback && (
                 <View
                   style={[
@@ -279,6 +316,22 @@ export default function MyPropertiesScreen() {
               </View>
             );
           }}
+          ListFooterComponent={
+            page < lastPage ? (
+              <Pressable
+                onPress={async () => {
+                  setLoadingMore(true);
+                  await load(page + 1, false);
+                  setLoadingMore(false);
+                }}
+                disabled={loadingMore}
+                style={[styles.saveBtn, { backgroundColor: theme.navy, marginTop: 6 }]}>
+                <Text style={styles.saveBtnText}>
+                  {loadingMore ? 'Chargement...' : 'Charger plus d’annonces'}
+                </Text>
+              </Pressable>
+            ) : undefined
+          }
           ListEmptyComponent={
             loading ? (
               <ActivityIndicator size="large" color={theme.primary} style={{ marginTop: 40 }} />
@@ -315,52 +368,105 @@ export default function MyPropertiesScreen() {
               Modifier l'annonce #{editing?.id}
             </Text>
             {editError ? <Text style={{ color: '#DC2626', fontSize: 12, fontWeight: '700' }}>{editError}</Text> : null}
-            <TextInput
-              style={[
-                styles.input,
-                { color: theme.text, borderColor: theme.cardBorder, backgroundColor: theme.backgroundElement },
-              ]}
-              placeholder="Prix (FCFA)"
-              placeholderTextColor={theme.textSecondary}
-              keyboardType="numeric"
-              value={editPrix}
-              onChangeText={setEditPrix}
-            />
-            <TextInput
-              style={[
-                styles.input,
-                { color: theme.text, borderColor: theme.cardBorder, backgroundColor: theme.backgroundElement },
-              ]}
-              placeholder="Repères d'accès"
-              placeholderTextColor={theme.textSecondary}
-              value={editDetails}
-              onChangeText={setEditDetails}
-            />
-            <TextInput
-              style={[
-                styles.input,
-                {
-                  color: theme.text,
-                  borderColor: theme.cardBorder,
-                  backgroundColor: theme.backgroundElement,
-                  minHeight: 84,
-                  textAlignVertical: 'top',
-                },
-              ]}
-              placeholder="Description"
-              placeholderTextColor={theme.textSecondary}
-              multiline
-              value={editDesc}
-              onChangeText={setEditDesc}
-            />
-            <View style={styles.switchRow}>
-              <Text style={{ color: theme.text, fontWeight: '700' }}>Prix négociable</Text>
-              <Switch
-                value={editNegotiable}
-                onValueChange={setEditNegotiable}
-                trackColor={{ true: theme.primary }}
+            <ScrollView style={{ maxHeight: 420 }} contentContainerStyle={{ gap: 10 }}>
+              <TextInput
+                style={[
+                  styles.input,
+                  { color: theme.text, borderColor: theme.cardBorder, backgroundColor: theme.backgroundElement },
+                ]}
+                placeholder="Prix (FCFA)"
+                placeholderTextColor={theme.textSecondary}
+                keyboardType="numeric"
+                value={editPrix}
+                onChangeText={setEditPrix}
               />
-            </View>
+              <TextInput
+                style={[
+                  styles.input,
+                  { color: theme.text, borderColor: theme.cardBorder, backgroundColor: theme.backgroundElement },
+                ]}
+                placeholder="Commune"
+                placeholderTextColor={theme.textSecondary}
+                value={editCommune}
+                onChangeText={setEditCommune}
+              />
+              <TextInput
+                style={[
+                  styles.input,
+                  { color: theme.text, borderColor: theme.cardBorder, backgroundColor: theme.backgroundElement },
+                ]}
+                placeholder="Quartier"
+                placeholderTextColor={theme.textSecondary}
+                value={editQuartier}
+                onChangeText={setEditQuartier}
+              />
+              <TextInput
+                style={[
+                  styles.input,
+                  { color: theme.text, borderColor: theme.cardBorder, backgroundColor: theme.backgroundElement },
+                ]}
+                placeholder="Surface (m²)"
+                placeholderTextColor={theme.textSecondary}
+                keyboardType="numeric"
+                value={editSurface}
+                onChangeText={setEditSurface}
+              />
+              <TextInput
+                style={[
+                  styles.input,
+                  { color: theme.text, borderColor: theme.cardBorder, backgroundColor: theme.backgroundElement },
+                ]}
+                placeholder="Accessibilité (voie pavée, bitumée...)"
+                placeholderTextColor={theme.textSecondary}
+                value={editAccess}
+                onChangeText={setEditAccess}
+              />
+              <TextInput
+                style={[
+                  styles.input,
+                  { color: theme.text, borderColor: theme.cardBorder, backgroundColor: theme.backgroundElement },
+                ]}
+                placeholder="Eau & électricité (SBEE / SONEB)"
+                placeholderTextColor={theme.textSecondary}
+                value={editEau}
+                onChangeText={setEditEau}
+              />
+              <TextInput
+                style={[
+                  styles.input,
+                  { color: theme.text, borderColor: theme.cardBorder, backgroundColor: theme.backgroundElement },
+                ]}
+                placeholder="Repères d'accès"
+                placeholderTextColor={theme.textSecondary}
+                value={editDetails}
+                onChangeText={setEditDetails}
+              />
+              <TextInput
+                style={[
+                  styles.input,
+                  {
+                    color: theme.text,
+                    borderColor: theme.cardBorder,
+                    backgroundColor: theme.backgroundElement,
+                    minHeight: 84,
+                    textAlignVertical: 'top',
+                  },
+                ]}
+                placeholder="Description"
+                placeholderTextColor={theme.textSecondary}
+                multiline
+                value={editDesc}
+                onChangeText={setEditDesc}
+              />
+              <View style={styles.switchRow}>
+                <Text style={{ color: theme.text, fontWeight: '700' }}>Prix négociable</Text>
+                <Switch
+                  value={editNegotiable}
+                  onValueChange={setEditNegotiable}
+                  trackColor={{ true: theme.primary }}
+                />
+              </View>
+            </ScrollView>
             <Pressable
               onPress={handleSaveEdit}
               disabled={saving}

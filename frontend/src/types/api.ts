@@ -462,12 +462,16 @@ export interface ZonePerformanceData {
 export interface GrandLivreEntry {
   id: number;
   reference_unique: string;
-  type_mouvement: 'CREDIT' | 'DEBIT' | string;
+  type_mouvement: 'credit' | 'debit' | string;
   categorie: string;
   montant_brut: number | string;
-  frais_passerelle: number | string;
+  frais_agregateur?: number | string;
+  frais_passerelle?: number | string;
   montant_net: number | string;
   solde_apres: number | string;
+  devise?: string;
+  gateway?: string;
+  gateway_transaction_id?: string | null;
   description: string;
   client?: { id: number; name: string; prenom?: string; email: string } | null;
   created_at: string;
@@ -477,10 +481,12 @@ export interface RetraitItem {
   id: number;
   reference_retrait: string;
   montant: number | string;
-  type_compte: string;
-  beneficiaire_nom?: string;
-  beneficiaire_numero?: string;
-  statut: 'en_attente_otp' | 'execute' | 'annule' | 'echec' | string;
+  devise?: string;
+  type_compte: 'mobile_money' | 'virement_bancaire' | string;
+  compte_beneficiaire?: string;
+  statut: 'en_attente_otp' | 'en_cours_agregateur' | 'execute' | 'annule' | 'rejete' | string;
+  motif_annulation_rejet?: string | null;
+  executed_at?: string | null;
   created_at: string;
 }
 
@@ -566,4 +572,48 @@ export interface AgentDashboardData {
   inquiries: PropertyInquiryItem[];
   visites: VisiteBackendItem[];
   clients: AgentClientLead[];
+}
+
+export interface PlatformTarifs {
+  deblocage_coordonnees: number;
+  visite: number;
+  post_client: number;
+  post_agent: number;
+}
+
+export interface PublicPlatformConfig {
+  platform_name: string;
+  platform_legal_name: string;
+  currency: string;
+  tarifs: PlatformTarifs;
+  contact: {
+    phone: string;
+    email: string;
+    office_address: string;
+  };
+}
+
+export interface PlatformSettingItem {
+  id: number;
+  cle: string;
+  valeur: string | number | boolean | null;
+  valeur_brute: string | null;
+  type: 'integer' | 'string' | 'boolean' | 'json' | string;
+  groupe: 'tarifs' | 'finance' | 'securite' | 'contact' | 'general' | string;
+  label: string;
+  description?: string | null;
+  is_public: boolean;
+  editable: boolean;
+  updated_at?: string | null;
+  updated_by?: {
+    id: number;
+    nom: string;
+    email: string;
+  } | null;
+}
+
+export interface AdminSettingsResponse {
+  can_edit_financial: boolean;
+  items: PlatformSettingItem[];
+  grouped: Record<string, PlatformSettingItem[]>;
 }

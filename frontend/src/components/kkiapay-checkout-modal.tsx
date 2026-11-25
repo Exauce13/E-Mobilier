@@ -85,6 +85,69 @@ export function KkiapayCheckoutModal({
     };
   }, [visible]);
 
+  const launchWebKkiapayWidget = (data: PaymentInitData): Promise<boolean> => {
+    return new Promise((resolve) => {
+      if (Platform.OS !== 'web' || typeof window === 'undefined' || typeof document === 'undefined') {
+        resolve(false);
+        return;
+      }
+
+      const openNow = () => {
+        const w = window as any;
+        if (typeof w.openKkiapayWidget !== 'function') {
+          resolve(false);
+          return;
+        }
+        try {
+          if (typeof w.addSuccessListener === 'function') {
+            w.addSuccessListener((resp: any) => {
+              const tx = resp?.transactionId || resp?.transaction_id;
+              if (tx) void completeWithTransactionId(String(tx), data);
+            });
+          }
+          if (typeof w.addFailedListener === 'function') {
+            w.addFailedListener(() => {
+              setErrorMsg('Paiement annulé ou refusé sur Kkiapay.');
+            });
+          }
+          w.openKkiapayWidget({
+            amount: data.widget_config.amount,
+            key: data.widget_config.public_key,
+            sandbox: data.widget_config.sandbox,
+            data: data.reference,
+            theme: data.widget_config.theme || '#008751',
+            name: user?.name || '',
+            email: user?.email || '',
+            phone: user?.phone || '',
+          });
+          resolve(true);
+        } catch {
+          resolve(false);
+        }
+      };
+
+      if (typeof (window as any).openKkiapayWidget === 'function') {
+        openNow();
+        return;
+      }
+
+      const existing = document.getElementById('kkiapay-web-sdk') as HTMLScriptElement | null;
+      if (existing) {
+        existing.addEventListener('load', () => openNow(), { once: true });
+        existing.addEventListener('error', () => resolve(false), { once: true });
+        return;
+      }
+
+      const script = document.createElement('script');
+      script.id = 'kkiapay-web-sdk';
+      script.src = 'https://cdn.kkiapay.me/k.js';
+      script.async = true;
+      script.onload = () => openNow();
+      script.onerror = () => resolve(false);
+      document.head.appendChild(script);
+    });
+  };
+
   const handleInitPayment = async () => {
     if (!cguAccepted) {
       setErrorMsg("Veuillez accepter les Conditions Générales d'Utilisation avant de payer.");
@@ -112,7 +175,10 @@ export function KkiapayCheckoutModal({
       }
 
       if (Platform.OS === 'web') {
-        setManualMode(true);
+        const opened = await launchWebKkiapayWidget(res.data);
+        if (!opened) {
+          setManualMode(true);
+        }
       } else {
         setShowWidget(true);
       }
@@ -121,7 +187,7 @@ export function KkiapayCheckoutModal({
     }
   };
 
-  const completeWithTransactionId = async (txId: string) => {
+  const completeWithTransactionId = async (txId: string, overrideInitData?: PaymentInitData | null) => {
     const cleanId = txId.trim();
     if (!cleanId) {
       setErrorMsg('Identifiant de transaction Kkiapay requis.');
@@ -130,13 +196,26 @@ export function KkiapayCheckoutModal({
     setErrorMsg(null);
     setVerifying(true);
     try {
+      let effectiveInit = overrideInitData ?? initData;
+      if (!effectiveInit) {
+        const initRes = await paiementsApi.initier({
+          type_operation: operationType,
+          entity_id: entityId ?? null,
+          cgu_acceptees: true,
+        });
+        if (initRes.success && initRes.data) {
+          effectiveInit = initRes.data;
+          setInitData(initRes.data);
+        }
+      }
+
       const ref = cleanId;
-      const amount = initData?.montant_officiel || 0;
+      const amount = effectiveInit?.montant_officiel || 0;
 
       // Reconcile/verify via backend ledger endpoint for all operation types
       const verifyRes = await paiementsApi.verifier({
         transactionId: cleanId,
-        reference: initData?.reference,
+        reference: effectiveInit?.reference,
         amount,
       });
 

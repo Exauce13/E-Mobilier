@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 
 import type {
   AdminDemandeClientItem,
+  AdminSettingsResponse,
   AdminUserItem,
   AdminVisiteItem,
   AgentDashboardData,
@@ -27,6 +28,7 @@ import type {
   PropertyDocumentItem,
   PropertyInquiryItem,
   PropertyInquiryPayload,
+  PublicPlatformConfig,
   RetraitItem,
   SystemHealthReport,
   TechNotificationLogItem,
@@ -338,6 +340,15 @@ export const authApi = {
 };
 
 /**
+ * Configuration publique dynamique de la plateforme (tarifs, contacts, identité).
+ */
+export const publicConfigApi = {
+  getConfig: async (): Promise<ApiResponse<PublicPlatformConfig>> => {
+    return apiRequest('/public/config', { method: 'GET' });
+  },
+};
+
+/**
  * Conformité légale : CGU & Charte de Non-Contournement.
  */
 export const cguApi = {
@@ -376,6 +387,7 @@ export const paiementsApi = {
         post_client: number;
         post_agent: number;
         unlock_details: number;
+        visit_fee?: number;
         current_user_post_fee: number;
       };
       user?: { name: string; phone?: string; email?: string } | null;
@@ -892,6 +904,17 @@ export const adminApi = {
   },
   getSecurityAlertes: async (page = 1): Promise<ApiResponse<AuditLogItem[]>> => {
     return apiRequest(`/admin/securite/alertes?page=${page}`, { method: 'GET' });
+  },
+  getSettings: async (): Promise<ApiResponse<AdminSettingsResponse>> => {
+    return apiRequest('/admin/settings', { method: 'GET' });
+  },
+  updateSettings: async (
+    settings: Array<{ cle: string; valeur: string | number | boolean }>
+  ): Promise<ApiResponse<{ updated: Array<{ cle: string; valeur: any; groupe: string }>; public_config: PublicPlatformConfig }>> => {
+    return apiRequest('/admin/settings', {
+      method: 'PATCH',
+      body: JSON.stringify({ settings }),
+    });
   },
 };
 

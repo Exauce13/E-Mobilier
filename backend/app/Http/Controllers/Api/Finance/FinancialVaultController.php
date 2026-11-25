@@ -8,6 +8,7 @@ use App\Models\Retrait;
 use App\Models\WebhookLog;
 use App\Services\FinancialLedgerService;
 use App\Services\PayoutService;
+use App\Services\PlatformSettingsService;
 use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -17,11 +18,16 @@ class FinancialVaultController extends Controller
 {
     protected FinancialLedgerService $ledgerService;
     protected PayoutService $payoutService;
+    protected PlatformSettingsService $settings;
 
-    public function __construct(FinancialLedgerService $ledgerService, PayoutService $payoutService)
-    {
+    public function __construct(
+        FinancialLedgerService $ledgerService,
+        PayoutService $payoutService,
+        PlatformSettingsService $settings
+    ) {
         $this->ledgerService = $ledgerService;
         $this->payoutService = $payoutService;
+        $this->settings = $settings;
     }
 
     /**
@@ -113,7 +119,8 @@ class FinancialVaultController extends Controller
             'success' => true,
             'message' => 'Historique des ordres de retrait récupéré.',
             'solde_disponible' => $this->ledgerService->getSoldeDisponible(),
-            'compte_officiel' => config('emobilier.beneficiaire_officiel'),
+            'compte_officiel' => $this->settings->getBeneficiaireOfficiel(),
+            'retrait_montant_minimum' => $this->settings->getMinPayoutAmount(),
             'data' => $retraits,
         ]);
     }
@@ -125,8 +132,9 @@ class FinancialVaultController extends Controller
     {
         $user = $request->user();
 
+        $minPayout = $this->settings->getMinPayoutAmount();
         $validated = $request->validate([
-            'montant' => ['required', 'numeric', 'min:1000'],
+            'montant' => ['required', 'numeric', "min:{$minPayout}"],
             'type_compte' => ['nullable', 'string', Rule::in(['mobile_money', 'virement_bancaire'])],
         ]);
 

@@ -30,14 +30,11 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { LandingShowcase } from '@/components/home/landing-showcase';
 import { PropertyCard } from '@/components/property-card';
-import { PropertyActionModal, PropertyActionTab } from '@/components/property/property-action-modal';
 import { SuperAdminPrincipalPortal } from '@/components/super-admin/super-admin-portal';
-import { UnlockModal } from '@/components/unlock-modal';
 import { FILTER_CATEGORIES } from '@/constants/locations';
 import { BottomTabInset, Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
 import { useThemeMode } from '@/context/theme-context';
-import { MOCK_PROPERTIES } from '@/data/mock-properties';
 import { useResponsive } from '@/hooks/use-responsive';
 import { useTheme } from '@/hooks/use-theme';
 import { getStorageBaseUrl, proprietesApi } from '@/services/api';
@@ -79,6 +76,8 @@ function AuthenticatedCatalog() {
     unreadNotificationsCount,
     refreshUnreadCount,
     isAdminStaff,
+    isAgentMobilier,
+    isClient,
   } = useAuth();
   const storageBaseUrl = useMemo(() => getStorageBaseUrl(), []);
 
@@ -87,7 +86,6 @@ function AuthenticatedCatalog() {
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [properties, setProperties] = useState<PropertyItem[]>([]);
-  const [usingFallback, setUsingFallback] = useState(false);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
   const [page, setPage] = useState(1);
   const [lastPage, setLastPage] = useState(1);
@@ -95,11 +93,6 @@ function AuthenticatedCatalog() {
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-
-  const [unlockModalVisible, setUnlockModalVisible] = useState(false);
-  const [selectedProperty, setSelectedProperty] = useState<PropertyItem | null>(null);
-  const [actionProperty, setActionProperty] = useState<PropertyItem | null>(null);
-  const [actionTab, setActionTab] = useState<PropertyActionTab>('demande_visite');
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(searchQuery.trim()), 320);
@@ -125,16 +118,13 @@ function AuthenticatedCatalog() {
       });
 
       if (!res.success || !res.data) {
-        if (replace && !debouncedSearch && selectedCategory === 'tous' && selectedTransaction === 'tous') {
-          setUsingFallback(true);
-          setProperties(MOCK_PROPERTIES.map((p) => ({ ...p, isFavorite: favs.has(p.id) })));
-        } else {
-          setErrorMsg(res.message || 'Impossible de charger les annonces.');
+        if (replace) {
+          setProperties([]);
         }
+        setErrorMsg(res.message || 'Impossible de charger les annonces.');
         return;
       }
 
-      setUsingFallback(false);
       const mapped = (res.data.data || []).map((p: BackendProperty) =>
         mapBackendPropertyToItem(p, storageBaseUrl, favs)
       );
@@ -167,7 +157,7 @@ function AuthenticatedCatalog() {
   };
 
   const handleLoadMore = async () => {
-    if (loadingMore || loading || page >= lastPage || usingFallback) return;
+    if (loadingMore || loading || page >= lastPage) return;
     setLoadingMore(true);
     await fetchFeed(page + 1, false);
     setLoadingMore(false);
@@ -183,15 +173,6 @@ function AuthenticatedCatalog() {
 
   const handleOpenProperty = (property: PropertyItem) => {
     router.push(`/property/${property.id}` as any);
-  };
-
-  const handleConfirmUnlock = (unlockedProp: PropertyItem, updatedBackend?: BackendProperty) => {
-    const refreshedItem = updatedBackend
-      ? mapBackendPropertyToItem(updatedBackend, storageBaseUrl, favoriteIds)
-      : { ...unlockedProp, isUnlocked: true };
-
-    setProperties((prev) => prev.map((p) => (p.id === refreshedItem.id ? refreshedItem : p)));
-    setSelectedProperty(refreshedItem);
   };
 
   const cardWidthPercent =
@@ -308,17 +289,46 @@ function AuthenticatedCatalog() {
                 <Search size={15} color="#FFFFFF" strokeWidth={2} />
                 <Text style={styles.quickActionText}>Recherche avancée</Text>
               </Pressable>
-              <Pressable
-                onPress={() => router.push('/my-properties' as any)}
-                style={[styles.quickActionBtn, styles.quickActionOutline]}>
-                <Building2 size={15} color="#FFFFFF" strokeWidth={2} />
-                <Text style={styles.quickActionText}>Mes annonces</Text>
-              </Pressable>
+              {isAgentMobilier ? (
+                <Pressable
+                  onPress={() => router.push('/agent' as any)}
+                  style={[styles.quickActionBtn, styles.quickActionOutline]}>
+                  <Building2 size={15} color="#FDE68A" strokeWidth={2} />
+                  <Text style={[styles.quickActionText, { color: '#FDE68A' }]}>Espace Agent</Text>
+                </Pressable>
+              ) : (
+                <Pressable
+                  onPress={() => router.push('/my-properties' as any)}
+                  style={[styles.quickActionBtn, styles.quickActionOutline]}>
+                  <Building2 size={15} color="#FFFFFF" strokeWidth={2} />
+                  <Text style={styles.quickActionText}>Mes annonces</Text>
+                </Pressable>
+              )}
+              {isClient && (
+                <Pressable
+                  onPress={() => router.push('/search-requests' as any)}
+                  style={[styles.quickActionBtn, styles.quickActionOutline]}>
+                  <ArrowRight size={15} color="#FFFFFF" strokeWidth={2} />
+                  <Text style={styles.quickActionText}>Mes recherches</Text>
+                </Pressable>
+              )}
               <Pressable
                 onPress={() => router.push('/visits' as any)}
                 style={[styles.quickActionBtn, styles.quickActionOutline]}>
                 <Calendar size={15} color="#FFFFFF" strokeWidth={2} />
                 <Text style={styles.quickActionText}>Mes visites</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => router.push('/transactions' as any)}
+                style={[styles.quickActionBtn, styles.quickActionOutline]}>
+                <Sparkles size={15} color="#FFFFFF" strokeWidth={2} />
+                <Text style={styles.quickActionText}>Paiements &amp; Reçus</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => router.push('/profile' as any)}
+                style={[styles.quickActionBtn, styles.quickActionOutline]}>
+                <Settings size={15} color="#FFFFFF" strokeWidth={2} />
+                <Text style={styles.quickActionText}>Mon Profil</Text>
               </Pressable>
               {isAdminStaff && (
                 <Pressable
@@ -522,16 +532,12 @@ function AuthenticatedCatalog() {
                       onPressCard={handleOpenProperty}
                       onPressDetails={handleOpenProperty}
                       onToggleFavorite={handleToggleFavorite}
-                      onPressQuickAction={(prop, action) => {
-                        setActionProperty(prop);
-                        setActionTab(action);
-                      }}
                     />
                   </View>
                 ))}
               </View>
 
-              {page < lastPage && !usingFallback && (
+              {page < lastPage && (
                 <Pressable
                   onPress={handleLoadMore}
                   disabled={loadingMore}
@@ -549,25 +555,6 @@ function AuthenticatedCatalog() {
           )}
         </View>
       </ScrollView>
-
-      <UnlockModal
-        visible={unlockModalVisible}
-        property={selectedProperty}
-        onClose={() => setUnlockModalVisible(false)}
-        onConfirmUnlock={handleConfirmUnlock}
-        onOpenFullDetails={handleOpenProperty}
-      />
-
-      {actionProperty && (
-        <PropertyActionModal
-          visible={Boolean(actionProperty)}
-          initialAction={actionTab}
-          propertyId={actionProperty.backendId ?? null}
-          propertyTitle={actionProperty.title}
-          propertyLocation={actionProperty.location.fullAddress}
-          onClose={() => setActionProperty(null)}
-        />
-      )}
     </SafeAreaView>
   );
 }

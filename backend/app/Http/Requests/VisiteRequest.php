@@ -80,7 +80,7 @@ class VisiteRequest extends FormRequest
             'scheduled_date.date' => 'La date de la visite doit être au format date/heure valide.',
             'scheduled_date.after' => 'La date de la visite doit être ultérieure à la date et heure actuelles.',
 
-            'kkiapay_transaction_id.required' => 'La référence du paiement Kkiapay (500 FCFA pour la visite) est obligatoire.',
+            'kkiapay_transaction_id.required' => 'La référence du paiement Kkiapay (' . app(\App\Services\PlatformSettingsService::class)->getTarifs()['visite'] . ' FCFA pour la visite) est obligatoire.',
             'kkiapay_transaction_id.string' => 'La référence de transaction Kkiapay doit être une chaîne de caractères valide.',
         ];
     }

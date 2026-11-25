@@ -1,8 +1,8 @@
+import { router } from 'expo-router';
 import { AlertTriangle } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Modal,
   Pressable,
@@ -24,17 +24,22 @@ import { useTheme } from '@/hooks/use-theme';
 import { demandesRechercheApi } from '@/services/api';
 import type { DemandeRechercheItem } from '@/types/api';
 import { formatFcfa } from '@/types/property';
+import { confirmDialog } from '@/utils/dialog';
 import { getStatusDisplay } from '@/utils/validation';
 
 export default function SearchRequestsScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { horizontalPadding } = useResponsive();
-  const { isAuthenticated, openAuthModal } = useAuth();
+  const { isAuthenticated, isAgentMobilier, isAdminStaff, openAuthModal } = useAuth();
 
   const [requests, setRequests] = useState<DemandeRechercheItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [page, setPage] = useState(1);
+  const [lastPage, setLastPage] = useState(1);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
   const [formOpen, setFormOpen] = useState(false);
@@ -49,19 +54,30 @@ export default function SearchRequestsScreen() {
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const load = useCallback(async () => {
-    if (!isAuthenticated) {
-      setRequests([]);
-      return;
-    }
-    const res = await demandesRechercheApi.getMyRequests();
-    if (res.success && res.data) {
-      setRequests(res.data.data || []);
-    }
-  }, [isAuthenticated]);
+  const isRestrictedRole = isAuthenticated && isAgentMobilier && !isAdminStaff;
+
+  const load = useCallback(
+    async (targetPage = 1, replace = true) => {
+      setLoadError(null);
+      if (!isAuthenticated || isRestrictedRole) {
+        setRequests([]);
+        return;
+      }
+      const res = await demandesRechercheApi.getMyRequests({ page: targetPage });
+      if (res.success && res.data) {
+        const list = res.data.data || [];
+        setRequests((prev) => (replace ? list : [...prev, ...list]));
+        setPage(res.data.current_page || targetPage);
+        setLastPage(res.data.last_page || 1);
+      } else {
+        setLoadError(res.message || 'Impossible de charger vos demandes de recherche.');
+      }
+    },
+    [isAuthenticated, isRestrictedRole]
+  );
 
   useEffect(() => {
-    void load().finally(() => setLoading(false));
+    void load(1, true).finally(() => setLoading(false));
   }, [load]);
 
   const handleSelectPropertyType = (nextType: 'parcelle' | 'maison' | 'chambre') => {
@@ -147,23 +163,21 @@ export default function SearchRequestsScreen() {
     }
   };
 
-  const handleDelete = (item: DemandeRechercheItem) => {
-    Alert.alert('Supprimer cette demande ?', `DEM-${String(item.id).padStart(5, '0')}`, [
-      { text: 'Non', style: 'cancel' },
-      {
-        text: 'Oui, supprimer',
-        style: 'destructive',
-        onPress: async () => {
-          const res = await demandesRechercheApi.delete(item.id);
-          if (res.success) {
-            setFeedback({ text: 'Demande supprimée.', type: 'success' });
-            await load();
-          } else {
-            setFeedback({ text: res.message || 'Suppression refusée.', type: 'error' });
-          }
-        },
-      },
-    ]);
+  const handleDelete = async (item: DemandeRechercheItem) => {
+    const ok = await confirmDialog(
+      'Supprimer cette demande ?',
+      `DEM-${String(item.id).padStart(5, '0')}`,
+      'Oui, supprimer',
+      'Non'
+    );
+    if (!ok) return;
+    const res = await demandesRechercheApi.delete(item.id);
+    if (res.success) {
+      setFeedback({ text: 'Demande supprimée.', type: 'success' });
+      await load();
+    } else {
+      setFeedback({ text: res.message || 'Suppression refusée.', type: 'error' });
+    }
   };
 
   const quartiersSuggestions = (QUARTIERS_BY_COMMUNE[commune] || []).filter((q) => q !== 'Tous');
@@ -174,9 +188,11 @@ export default function SearchRequestsScreen() {
         title="Mes Demandes de Recherche"
         subtitle="Trouvez votre bien sur mesure"
         rightAction={
-          <Pressable onPress={openCreate} style={[styles.addBtn, { backgroundColor: '#F59E0B' }]}>
-            <Text style={styles.addBtnText}>+ Nouvelle</Text>
-          </Pressable>
+          !isRestrictedRole ? (
+            <Pressable onPress={openCreate} style={[styles.addBtn, { backgroundColor: '#F59E0B' }]}>
+              <Text style={styles.addBtnText}>+ Nouvelle</Text>
+            </Pressable>
+          ) : undefined
         }
       />
 
@@ -192,6 +208,19 @@ export default function SearchRequestsScreen() {
             <Text style={styles.saveBtnText}>Se connecter</Text>
           </Pressable>
         </View>
+      ) : isRestrictedRole ? (
+        <View style={styles.gateBox}>
+          <Text style={[styles.emptyTitle, { color: theme.text }]}>Réservé aux Clients</Text>
+          <Text style={{ color: theme.textSecondary, textAlign: 'center', fontSize: 14 }}>
+            Les demandes de recherche personnalisées sont réservées aux comptes Clients. Gérez vos
+            biens et vos visites depuis votre Tableau Agent.
+          </Text>
+          <Pressable
+            onPress={() => router.replace('/agent' as any)}
+            style={[styles.saveBtn, { backgroundColor: theme.navy, paddingHorizontal: 24 }]}>
+            <Text style={styles.saveBtnText}>Ouvrir le Tableau Agent</Text>
+          </Pressable>
+        </View>
       ) : (
         <FlatList
           data={requests}
@@ -201,7 +230,7 @@ export default function SearchRequestsScreen() {
               refreshing={refreshing}
               onRefresh={async () => {
                 setRefreshing(true);
-                await load();
+                await load(1, true);
                 setRefreshing(false);
               }}
               tintColor={theme.primary}
@@ -212,23 +241,32 @@ export default function SearchRequestsScreen() {
             { paddingHorizontal: horizontalPadding, paddingBottom: insets.bottom + 28 },
           ]}
           ListHeaderComponent={
-            feedback ? (
-              <View
-                style={[
-                  styles.feedbackBanner,
-                  {
-                    backgroundColor: feedback.type === 'success' ? '#ECFDF5' : '#FEF2F2',
-                    borderColor: feedback.type === 'success' ? '#A7F3D0' : '#FECACA',
-                  },
-                ]}>
-                <Text
-                  style={{
-                    color: feedback.type === 'success' ? '#047857' : '#B91C1C',
-                    fontSize: 13,
-                    fontWeight: '700',
-                  }}>
-                  {feedback.text}
-                </Text>
+            loadError || feedback ? (
+              <View style={{ gap: 8 }}>
+                {loadError ? (
+                  <View style={[styles.feedbackBanner, { backgroundColor: '#FEF2F2', borderColor: '#FECACA' }]}>
+                    <Text style={{ color: '#B91C1C', fontSize: 13, fontWeight: '700' }}>{loadError}</Text>
+                  </View>
+                ) : null}
+                {feedback ? (
+                  <View
+                    style={[
+                      styles.feedbackBanner,
+                      {
+                        backgroundColor: feedback.type === 'success' ? '#ECFDF5' : '#FEF2F2',
+                        borderColor: feedback.type === 'success' ? '#A7F3D0' : '#FECACA',
+                      },
+                    ]}>
+                    <Text
+                      style={{
+                        color: feedback.type === 'success' ? '#047857' : '#B91C1C',
+                        fontSize: 13,
+                        fontWeight: '700',
+                      }}>
+                      {feedback.text}
+                    </Text>
+                  </View>
+                ) : null}
               </View>
             ) : undefined
           }
@@ -278,6 +316,22 @@ export default function SearchRequestsScreen() {
               </View>
             );
           }}
+          ListFooterComponent={
+            page < lastPage ? (
+              <Pressable
+                onPress={async () => {
+                  setLoadingMore(true);
+                  await load(page + 1, false);
+                  setLoadingMore(false);
+                }}
+                disabled={loadingMore}
+                style={[styles.saveBtn, { backgroundColor: theme.navy, marginTop: 6 }]}>
+                <Text style={styles.saveBtnText}>
+                  {loadingMore ? 'Chargement...' : 'Charger plus'}
+                </Text>
+              </Pressable>
+            ) : undefined
+          }
           ListEmptyComponent={
             loading ? (
               <ActivityIndicator size="large" color={theme.primary} style={{ marginTop: 40 }} />

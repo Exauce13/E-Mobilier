@@ -27,11 +27,10 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PropertyCard } from '@/components/property-card';
-import { PropertyActionModal, PropertyActionTab } from '@/components/property/property-action-modal';
 import { BENIN_COMMUNES, FILTER_CATEGORIES } from '@/constants/locations';
 import { BottomTabInset } from '@/constants/theme';
+import { usePlatformConfig } from '@/context/platform-config-context';
 import { useThemeMode } from '@/context/theme-context';
-import { MOCK_PROPERTIES } from '@/data/mock-properties';
 import { useResponsive } from '@/hooks/use-responsive';
 import { useTheme } from '@/hooks/use-theme';
 import { getStorageBaseUrl, proprietesApi } from '@/services/api';
@@ -47,6 +46,7 @@ interface LandingShowcaseProps {
 export function LandingShowcase({ onOpenLogin, onOpenRegister }: LandingShowcaseProps) {
   const theme = useTheme();
   const { isDark, toggleTheme } = useThemeMode();
+  const { config, tarifs } = usePlatformConfig();
   const insets = useSafeAreaInsets();
   const { isMobile, isTablet, isDesktop, gridColumns, contentMaxWidth, horizontalPadding } =
     useResponsive();
@@ -59,28 +59,26 @@ export function LandingShowcase({ onOpenLogin, onOpenRegister }: LandingShowcase
 
   const [liveProperties, setLiveProperties] = useState<PropertyItem[]>([]);
   const [loadingProps, setLoadingProps] = useState(true);
-
-  const [actionProperty, setActionProperty] = useState<PropertyItem | null>(null);
-  const [actionTab, setActionTab] = useState<PropertyActionTab>('demande_visite');
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
     const load = async () => {
+      setLoadError(null);
       const [favs, res] = await Promise.all([
         favoritesStorage.getAll(),
         proprietesApi.getFeed({ per_page: 9 }),
       ]);
       if (!active) return;
-      if (res.success && res.data?.data && res.data.data.length > 0) {
+      if (res.success && res.data?.data) {
         setLiveProperties(
           res.data.data.map((p: BackendProperty) =>
             mapBackendPropertyToItem(p, storageBaseUrl, favs)
           )
         );
       } else {
-        setLiveProperties(
-          MOCK_PROPERTIES.map((item) => ({ ...item, isFavorite: favs.has(item.id) }))
-        );
+        setLiveProperties([]);
+        setLoadError(res.message || 'Impossible de charger les annonces.');
       }
       setLoadingProps(false);
     };
@@ -362,7 +360,7 @@ export function LandingShowcase({ onOpenLogin, onOpenRegister }: LandingShowcase
               { Icon: ShieldCheck, value: '100%', label: 'Titres & pièces audités' },
               { Icon: Home, value: '500+', label: 'Biens vérifiés au Bénin' },
               { Icon: Handshake, value: '24h', label: 'Visite terrain planifiée' },
-              { Icon: CreditCard, value: '50 F', label: 'Déblocage Mobile Money' },
+              { Icon: CreditCard, value: tarifs ? `${tarifs.deblocage_coordonnees} F` : '—', label: 'Déblocage Mobile Money' },
             ].map(({ Icon, value, label }) => (
               <View
                 key={label}
@@ -439,6 +437,19 @@ export function LandingShowcase({ onOpenLogin, onOpenRegister }: LandingShowcase
 
           {loadingProps ? (
             <ActivityIndicator size="large" color={theme.primary} style={{ marginVertical: 32 }} />
+          ) : displayedProperties.length === 0 ? (
+            <View
+              style={[
+                styles.aboutSection,
+                { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder, alignItems: 'center' },
+              ]}>
+              <Text style={[styles.stepTitle, { color: theme.text }]}>
+                {loadError ? 'Catalogue momentanément indisponible' : 'Aucun bien disponible pour cette catégorie'}
+              </Text>
+              <Text style={[styles.stepDesc, { color: theme.textSecondary, textAlign: 'center' }]}>
+                {loadError || 'Consultez l’ensemble des offres ou revenez bientôt.'}
+              </Text>
+            </View>
           ) : (
             <View style={styles.cardsGrid}>
               {displayedProperties.slice(0, 6).map((property) => (
@@ -448,10 +459,6 @@ export function LandingShowcase({ onOpenLogin, onOpenRegister }: LandingShowcase
                     onPressCard={handleOpenProperty}
                     onPressDetails={handleOpenProperty}
                     onToggleFavorite={handleToggleFavorite}
-                    onPressQuickAction={(prop, action) => {
-                      setActionProperty(prop);
-                      setActionTab(action);
-                    }}
                   />
                 </View>
               ))}
@@ -485,8 +492,10 @@ export function LandingShowcase({ onOpenLogin, onOpenRegister }: LandingShowcase
                 {
                   Icon: CalendarCheck,
                   num: '02',
-                  title: 'Contactez ou Planifiez',
-                  desc: 'Demandez une visite, prenez rendez-vous ou contactez le propriétaire / agent directement.',
+                  title: 'Débloquez & Réservez',
+                  desc: tarifs
+                    ? `Débloquez la fiche complète (${tarifs.deblocage_coordonnees} F CFA) puis réservez votre visite physique encadrée (${tarifs.visite} F CFA).`
+                    : 'Débloquez la fiche complète puis réservez votre visite physique encadrée par E-Mobilier.',
                 },
                 {
                   Icon: ShieldCheck,
@@ -546,7 +555,9 @@ export function LandingShowcase({ onOpenLogin, onOpenRegister }: LandingShowcase
           {/* Footer */}
           <View style={[styles.footer, { borderTopColor: theme.cardBorder }]}>
             <Text style={[styles.footerCopy, { color: theme.textSecondary }]}>
-              © 2026 E-Mobilier Bénin — Cadjehoun, Cotonou • +229 01 97 00 11 22 • contact@e-mobilier.bj
+              {config
+                ? `© ${new Date().getFullYear()} ${config.platform_name} — ${config.contact.office_address} • ${config.contact.phone} • ${config.contact.email}`
+                : `© ${new Date().getFullYear()} E-Mobilier Bénin`}
             </Text>
             <View style={styles.footerLinks}>
               <Pressable onPress={() => router.push('/cgu' as any)}>
@@ -562,18 +573,6 @@ export function LandingShowcase({ onOpenLogin, onOpenRegister }: LandingShowcase
           </View>
         </View>
       </ScrollView>
-
-      {/* Quick Property Action Modal */}
-      {actionProperty && (
-        <PropertyActionModal
-          visible={Boolean(actionProperty)}
-          initialAction={actionTab}
-          propertyId={actionProperty.backendId ?? null}
-          propertyTitle={actionProperty.title}
-          propertyLocation={actionProperty.location.fullAddress}
-          onClose={() => setActionProperty(null)}
-        />
-      )}
     </View>
   );
 }

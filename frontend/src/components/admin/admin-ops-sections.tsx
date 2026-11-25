@@ -29,6 +29,7 @@ import type {
   ZoneSummary,
 } from '@/types/api';
 import { formatFcfa, resolveStorageUrl } from '@/types/property';
+import { confirmDialog, showMessage } from '@/utils/dialog';
 
 type CharteErrorHandler = (msg?: string) => void;
 
@@ -138,6 +139,13 @@ export function MetricsSection({ onCharteRequired }: { onCharteRequired: CharteE
 
 export function ModerationSection({ onCharteRequired }: { onCharteRequired: CharteErrorHandler }) {
   const theme = useTheme();
+  const { hasAnyRole } = useAuth();
+  const canModerateCatalog = hasAnyRole([
+    'Super Admin Principal',
+    'Super Admin Technique',
+    'Secrétaire',
+    'Admin',
+  ]);
   const storageBaseUrl = useMemo(() => getStorageBaseUrl(), []);
   const [items, setItems] = useState<BackendProperty[]>([]);
   const [loading, setLoading] = useState(true);
@@ -164,16 +172,16 @@ export function ModerationSection({ onCharteRequired }: { onCharteRequired: Char
   const handleValidate = async (id: number) => {
     const res = await adminApi.validerPropriete(id);
     if (res.success) {
-      Alert.alert('Validé', res.message || 'Bien publié.');
+      showMessage('Validé', res.message || 'Bien publié.');
       await load();
     } else {
-      Alert.alert('Erreur', res.message || 'Action impossible.');
+      showMessage('Erreur', res.message || 'Action impossible.');
     }
   };
 
   const handleReject = async () => {
     if (!rejectTargetId || rejectMotif.trim().length < 5) {
-      Alert.alert('Motif requis', 'Saisissez au moins 5 caractères.');
+      showMessage('Motif requis', 'Saisissez au moins 5 caractères.');
       return;
     }
     const res = await adminApi.rejeterPropriete(rejectTargetId, rejectMotif.trim());
@@ -182,7 +190,7 @@ export function ModerationSection({ onCharteRequired }: { onCharteRequired: Char
       setRejectMotif('');
       await load();
     } else {
-      Alert.alert('Erreur', res.message || 'Action impossible.');
+      showMessage('Erreur', res.message || 'Action impossible.');
     }
   };
 
@@ -191,7 +199,7 @@ export function ModerationSection({ onCharteRequired }: { onCharteRequired: Char
     if (res.success) {
       setDocsModalItems((res as any).documents || res.data || []);
     } else {
-      Alert.alert('Erreur', res.message || 'Impossible de consulter les documents.');
+      showMessage('Erreur', res.message || 'Impossible de consulter les documents.');
     }
   };
 
@@ -199,7 +207,7 @@ export function ModerationSection({ onCharteRequired }: { onCharteRequired: Char
     const propId = Number(concluIdInput);
     if (!propId) return;
     const res = await adminApi.marquerProprieteConclue(propId);
-    Alert.alert(res.success ? 'Conclu' : 'Erreur', res.message || '');
+    showMessage(res.success ? 'Conclu' : 'Erreur', res.message || '');
     if (res.success) setConcluIdInput('');
   };
 
@@ -240,17 +248,19 @@ export function ModerationSection({ onCharteRequired }: { onCharteRequired: Char
               Statut : {prop.status} • Par {prop.user?.name || `User #${prop.user_id}`}
             </Text>
 
-            <View style={styles.actionsRow}>
-              <Pressable onPress={() => handleViewDocs(prop.id)} style={[styles.actBtn, { backgroundColor: theme.backgroundElement }]}>
-                <Text style={{ color: theme.text, fontWeight: '700', fontSize: 12 }}>Documents</Text>
-              </Pressable>
-              <Pressable onPress={() => handleValidate(prop.id)} style={[styles.actBtn, { backgroundColor: theme.primary }]}>
-                <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 12 }}>Valider</Text>
-              </Pressable>
-              <Pressable onPress={() => setRejectTargetId(prop.id)} style={[styles.actBtn, { backgroundColor: '#EF4444' }]}>
-                <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 12 }}>Rejeter</Text>
-              </Pressable>
-            </View>
+            {canModerateCatalog && (
+              <View style={styles.actionsRow}>
+                <Pressable onPress={() => handleViewDocs(prop.id)} style={[styles.actBtn, { backgroundColor: theme.backgroundElement }]}>
+                  <Text style={{ color: theme.text, fontWeight: '700', fontSize: 12 }}>Documents</Text>
+                </Pressable>
+                <Pressable onPress={() => handleValidate(prop.id)} style={[styles.actBtn, { backgroundColor: theme.primary }]}>
+                  <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 12 }}>Valider</Text>
+                </Pressable>
+                <Pressable onPress={() => setRejectTargetId(prop.id)} style={[styles.actBtn, { backgroundColor: '#EF4444' }]}>
+                  <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 12 }}>Rejeter</Text>
+                </Pressable>
+              </View>
+            )}
           </View>
         ))
       )}
@@ -311,6 +321,13 @@ export function ModerationSection({ onCharteRequired }: { onCharteRequired: Char
 
 export function VisitesOpsSection({ onCharteRequired }: { onCharteRequired: CharteErrorHandler }) {
   const theme = useTheme();
+  const { hasAnyRole } = useAuth();
+  const canAssignZone = hasAnyRole([
+    'Super Admin Principal',
+    'Super Admin Technique',
+    'Secrétaire',
+    'Admin',
+  ]);
   const [visites, setVisites] = useState<AdminVisiteItem[]>([]);
   const [zones, setZones] = useState<ZoneSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -355,32 +372,35 @@ export function VisitesOpsSection({ onCharteRequired }: { onCharteRequired: Char
     if (res.success && res.data) {
       setUnmaskedInfo(res.data);
     } else if (res.demasquage_requis) {
-      Alert.alert(
+      const ok = await confirmDialog(
         'Démasquage requis (Anti-Contournement)',
-        res.message || 'Soumettre une demande de démasquage temporaire ?',
-        [
-          { text: 'Annuler', style: 'cancel' },
-          {
-            text: 'Demander accès',
-            onPress: async () => {
-              const reqRes = await adminApi.demanderDemasquage({
-                type_dossier: 'visite',
-                dossier_id: visitId,
-                motif: 'Coordination visite terrain',
-                justification: `Contacter le client pour organiser la visite VIS-${visitId}.`,
-              });
-              Alert.alert(reqRes.success ? 'Demande envoyée' : 'Info', reqRes.message || '');
-            },
-          },
-        ]
+        res.message || 'Soumettre une demande de démasquage temporaire au Super Admin Principal ?',
+        'Demander accès'
       );
+      if (!ok) return;
+      const reqRes = await adminApi.demanderDemasquage({
+        type_dossier: 'visite',
+        dossier_id: visitId,
+        motif: 'Coordination visite terrain',
+        justification: `Contacter le client pour organiser la visite VIS-${visitId}.`,
+      });
+      showMessage(reqRes.success ? 'Demande envoyée' : 'Info', reqRes.message || '');
     } else {
-      Alert.alert('Erreur', res.message || 'Accès refusé.');
+      showMessage('Erreur', res.message || 'Accès refusé.');
     }
   };
 
   const executeAction = async () => {
     if (!activeVisit || !actionMode) return;
+    if (actionMode === 'cr' && crInput.trim().length < 10) {
+      showMessage('Validation', 'Le compte-rendu doit contenir au moins 10 caractères.');
+      return;
+    }
+    if (actionMode === 'escalade' && escaladeNote.trim().length < 5) {
+      showMessage('Validation', 'Le commentaire d’escalade doit contenir au moins 5 caractères.');
+      return;
+    }
+
     let res: any;
     if (actionMode === 'planifier') {
       res = await adminApi.planifierVisite(activeVisit.id, {
@@ -388,13 +408,13 @@ export function VisitesOpsSection({ onCharteRequired }: { onCharteRequired: Char
         instructions_itineraire: instructions,
       });
     } else if (actionMode === 'cr') {
-      res = await adminApi.saisirCompteRendu(activeVisit.id, crInput);
+      res = await adminApi.saisirCompteRendu(activeVisit.id, crInput.trim());
     } else if (actionMode === 'cloturer') {
-      res = await adminApi.cloturerVisite(activeVisit.id, clotureIssue);
+      res = await adminApi.cloturerVisite(activeVisit.id, clotureIssue, statusMotif.trim() || undefined);
     } else if (actionMode === 'escalade') {
       res = await adminApi.escaladerOffreVisite(
         activeVisit.id,
-        escaladeNote,
+        escaladeNote.trim(),
         escaladeAmount ? Number(escaladeAmount) : undefined
       );
     } else if (actionMode === 'zone') {
@@ -403,7 +423,7 @@ export function VisitesOpsSection({ onCharteRequired }: { onCharteRequired: Char
       res = await adminApi.updateAdminVisiteStatut(activeVisit.id, statusChoice, statusMotif.trim() || undefined);
     }
 
-    Alert.alert(res?.success ? 'Succès' : 'Erreur', res?.message || '');
+    showMessage(res?.success ? 'Succès' : 'Erreur', res?.message || '');
     if (res?.success) {
       setActionMode(null);
       setActiveVisit(null);
@@ -447,14 +467,16 @@ export function VisitesOpsSection({ onCharteRequired }: { onCharteRequired: Char
                 style={[styles.chipBtn, { backgroundColor: '#0F766E' }]}>
                 <Text style={styles.chipBtnText}>Statut</Text>
               </Pressable>
-              <Pressable
-                onPress={() => {
-                  setActiveVisit(v);
-                  setActionMode('zone');
-                }}
-                style={[styles.chipBtn, { backgroundColor: theme.backgroundElement }]}>
-                <Text style={{ color: theme.text, fontSize: 11, fontWeight: '700' }}>Zone</Text>
-              </Pressable>
+              {canAssignZone && (
+                <Pressable
+                  onPress={() => {
+                    setActiveVisit(v);
+                    setActionMode('zone');
+                  }}
+                  style={[styles.chipBtn, { backgroundColor: theme.backgroundElement }]}>
+                  <Text style={{ color: theme.text, fontSize: 11, fontWeight: '700' }}>Zone</Text>
+                </Pressable>
+              )}
               <Pressable
                 onPress={() => {
                   setActiveVisit(v);
@@ -663,14 +685,14 @@ export function DemandesMatchingSection({ onCharteRequired }: { onCharteRequired
       setMatchingForId(demandeId);
       setSuggestions((res as any).biens_suggeres || res.data?.biens_suggeres || []);
     } else {
-      Alert.alert('Erreur', res.message || 'Matching impossible.');
+      showMessage('Erreur', res.message || 'Matching impossible.');
     }
   };
 
   const handleAssocier = async (propId: number) => {
     if (!matchingForId) return;
     const res = await adminApi.associerBienDemande(matchingForId, propId);
-    Alert.alert(res.success ? 'Associé !' : 'Erreur', res.message || '');
+    showMessage(res.success ? 'Associé !' : 'Erreur', res.message || '');
     if (res.success) {
       setMatchingForId(null);
       await load();
@@ -680,20 +702,26 @@ export function DemandesMatchingSection({ onCharteRequired }: { onCharteRequired
   const handleReadUnmasked = async (demandeId: number) => {
     const res = await adminApi.getDossierCoordonnees('demande_client', demandeId);
     if (res.success && res.data) {
-      Alert.alert(
+      showMessage(
         res.data.dossier_reference,
         `${res.data.nom_complet}\nTél : ${res.data.telephone}\nE-mail : ${res.data.email}\n${res.data.mode_acces}`
       );
     } else if (res.demasquage_requis) {
+      const ok = await confirmDialog(
+        'Démasquage requis',
+        res.message || 'Soumettre une demande de démasquage temporaire au Super Admin Principal ?',
+        'Demander accès'
+      );
+      if (!ok) return;
       const reqRes = await adminApi.demanderDemasquage({
         type_dossier: 'demande_client',
         dossier_id: demandeId,
         motif: 'Proposition de biens compatibilité',
         justification: `Contacter le demandeur pour la demande DEM-${demandeId}.`,
       });
-      Alert.alert(reqRes.success ? 'Demande envoyée' : 'Démasquage requis', reqRes.message || '');
+      showMessage(reqRes.success ? 'Demande envoyée' : 'Démasquage requis', reqRes.message || '');
     } else {
-      Alert.alert('Erreur', res.message || '');
+      showMessage('Erreur', res.message || '');
     }
   };
 
@@ -718,7 +746,8 @@ export function DemandesMatchingSection({ onCharteRequired }: { onCharteRequired
               <Pressable
                 onPress={async () => {
                   const res = await adminApi.prendreEnChargeDemande(d.id);
-                  Alert.alert(res.success ? 'Prise en charge' : 'Erreur', res.message || '');
+                  showMessage(res.success ? 'Prise en charge' : 'Erreur', res.message || '');
+                  if (res.success) await load();
                 }}
                 style={[styles.chipBtn, { backgroundColor: theme.navy }]}>
                 <Text style={styles.chipBtnText}>Prendre en charge</Text>
@@ -729,15 +758,24 @@ export function DemandesMatchingSection({ onCharteRequired }: { onCharteRequired
               <Pressable onPress={() => handleReadUnmasked(d.id)} style={[styles.chipBtn, { backgroundColor: theme.backgroundElement }]}>
                 <Text style={{ color: theme.text, fontSize: 11, fontWeight: '700' }}>Coordonnées</Text>
               </Pressable>
-              <Pressable
-                onPress={async () => {
-                  const res = await adminApi.cloturerDemande(d.id, 'satisfaite');
-                  Alert.alert(res.success ? 'Clôturée' : 'Erreur', res.message || '');
-                  if (res.success) await load();
-                }}
-                style={[styles.chipBtn, { backgroundColor: theme.badgeGreenBg }]}>
-                <Text style={{ color: theme.badgeGreenText, fontSize: 11, fontWeight: '700' }}>Satisfaite</Text>
-              </Pressable>
+              {(
+                [
+                  { k: 'satisfaite', l: 'Satisfaite', bg: theme.badgeGreenBg, tc: theme.badgeGreenText },
+                  { k: 'abandonnee_client', l: 'Abandonnée', bg: '#FEF3C7', tc: '#92400E' },
+                  { k: 'delai_depasse', l: 'Expirée', bg: '#FEE2E2', tc: '#B91C1C' },
+                ] as const
+              ).map((cl) => (
+                <Pressable
+                  key={cl.k}
+                  onPress={async () => {
+                    const res = await adminApi.cloturerDemande(d.id, cl.k);
+                    showMessage(res.success ? 'Clôturée' : 'Erreur', res.message || '');
+                    if (res.success) await load();
+                  }}
+                  style={[styles.chipBtn, { backgroundColor: cl.bg }]}>
+                  <Text style={{ color: cl.tc, fontSize: 11, fontWeight: '700' }}>{cl.l}</Text>
+                </Pressable>
+              ))}
             </View>
           </View>
         ))

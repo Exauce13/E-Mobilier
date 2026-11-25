@@ -19,8 +19,10 @@ class DemandeClientResource extends JsonResource
         // Déterminer si l'utilisateur a le droit de voir les données en clair
         $canViewClear = false;
 
+        // RÈGLE DE CONFIDENTIALITÉ STRICTE :
+        // Seuls les Super Admins Principaux voient en permanence les coordonnées clients en clair.
         if ($user) {
-            if ($user->isSuperAdminPrincipal() || $user->isSuperAdminTechnique()) {
+            if ($user->isSuperAdminPrincipal()) {
                 $canViewClear = true;
             } elseif ($user->isSecretaire() || $user->isResponsableZone()) {
                 // Vérifier s'il dispose d'un démasquage temporaire actif (TTL)

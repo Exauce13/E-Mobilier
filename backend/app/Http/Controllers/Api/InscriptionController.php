@@ -42,11 +42,10 @@ class InscriptionController extends Controller
                     'is_verifed' => false,
                 ]);
 
-                // Attribution du rôle selon le choix du frontend
+                // Attribution du rôle selon le choix du frontend (jamais Admin sur inscription publique)
                 $roleInput = $request->input('role', 'Client');
                 $roleName = match ($roleInput) {
                     'agent_immobilier', 'Agent mobilier' => 'Agent mobilier',
-                    'Admin', 'admin' => 'Admin',
                     default => 'Client',
                 };
 

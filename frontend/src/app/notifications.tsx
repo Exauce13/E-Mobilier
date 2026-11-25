@@ -2,7 +2,6 @@ import Constants from 'expo-constants';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Platform,
   Pressable,
@@ -21,6 +20,7 @@ import { useResponsive } from '@/hooks/use-responsive';
 import { useTheme } from '@/hooks/use-theme';
 import { notificationsApi } from '@/services/api';
 import type { NotificationInterneItem } from '@/types/api';
+import { showMessage } from '@/utils/dialog';
 
 export default function NotificationsScreen() {
   const theme = useTheme();
@@ -31,37 +31,50 @@ export default function NotificationsScreen() {
   const [items, setItems] = useState<NotificationInterneItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [page, setPage] = useState(1);
+  const [lastPage, setLastPage] = useState(1);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [pushTokenInput, setPushTokenInput] = useState('');
 
-  const load = useCallback(async () => {
-    if (!isAuthenticated) {
-      setItems([]);
-      return;
-    }
-    const res = await notificationsApi.list(1, 30);
-    if (res.success && Array.isArray(res.data)) {
-      setItems(res.data);
-    }
-    await refreshUnreadCount();
-  }, [isAuthenticated, refreshUnreadCount]);
+  const load = useCallback(
+    async (targetPage = 1, replace = true) => {
+      setLoadError(null);
+      if (!isAuthenticated) {
+        setItems([]);
+        return;
+      }
+      const res = await notificationsApi.list(targetPage, 25);
+      if (res.success && Array.isArray(res.data)) {
+        setItems((prev) => (replace ? res.data! : [...prev, ...res.data!]));
+        const meta = res.meta as { current_page?: number; last_page?: number } | undefined;
+        setPage(meta?.current_page ?? targetPage);
+        setLastPage(meta?.last_page ?? targetPage);
+      } else {
+        setLoadError(res.message || 'Impossible de charger vos notifications.');
+      }
+      await refreshUnreadCount();
+    },
+    [isAuthenticated, refreshUnreadCount]
+  );
 
   useEffect(() => {
-    void load().finally(() => setLoading(false));
+    void load(1, true).finally(() => setLoading(false));
   }, [load]);
 
   const handleMarkRead = async (id: number) => {
     const res = await notificationsApi.markRead(id);
-    if (res.success) await load();
+    if (res.success) await load(1, true);
   };
 
   const handleMarkAllRead = async () => {
     const res = await notificationsApi.markAllRead();
-    if (res.success) await load();
+    if (res.success) await load(1, true);
   };
 
   const handleRegisterToken = async () => {
     if (!pushTokenInput.trim()) {
-      Alert.alert('Jeton requis', 'Collez un token FCM / Expo Push valide.');
+      showMessage('Jeton requis', 'Collez un token FCM / Expo Push valide.');
       return;
     }
     const platform = Platform.OS === 'ios' ? 'ios' : Platform.OS === 'android' ? 'android' : 'web';
@@ -71,10 +84,20 @@ export default function NotificationsScreen() {
       device_name: Constants.deviceName || Platform.OS,
     });
     if (res.success) {
-      Alert.alert('Enregistré', res.message || 'Jeton push associé à votre compte.');
+      showMessage('Enregistré', res.message || 'Jeton push associé à votre compte.');
       setPushTokenInput('');
     } else {
-      Alert.alert('Erreur', res.message || "Impossible d'enregistrer le jeton.");
+      showMessage('Erreur', res.message || "Impossible d'enregistrer le jeton.");
+    }
+  };
+
+  const handleRevokeToken = async () => {
+    const res = await notificationsApi.deleteDeviceToken(pushTokenInput.trim() || undefined);
+    if (res.success) {
+      showMessage('Désactivé', res.message || 'Jeton(s) push révoqué(s) pour cet appareil.');
+      setPushTokenInput('');
+    } else {
+      showMessage('Erreur', res.message || 'Impossible de révoquer le jeton.');
     }
   };
 
@@ -124,22 +147,32 @@ export default function NotificationsScreen() {
             { paddingHorizontal: horizontalPadding, paddingBottom: insets.bottom + 24 },
           ]}
           ListHeaderComponent={
-            <View style={[styles.tokenCard, { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder }]}>
-              <Text style={[styles.tokenTitle, { color: theme.text }]}>Jeton Push Appareil</Text>
-              <View style={styles.tokenRow}>
-                <TextInput
-                  style={[
-                    styles.tokenInput,
-                    { color: theme.text, borderColor: theme.cardBorder, backgroundColor: theme.backgroundElement },
-                  ]}
-                  placeholder="ExponentPushToken[...] ou FCM"
-                  placeholderTextColor={theme.textSecondary}
-                  value={pushTokenInput}
-                  onChangeText={setPushTokenInput}
-                />
-                <Pressable onPress={handleRegisterToken} style={[styles.tokenBtn, { backgroundColor: theme.navy }]}>
-                  <Text style={styles.tokenBtnText}>Activer</Text>
-                </Pressable>
+            <View style={{ gap: 8 }}>
+              {loadError ? (
+                <View style={[styles.tokenCard, { backgroundColor: '#FEF2F2', borderColor: '#FECACA' }]}>
+                  <Text style={{ color: '#B91C1C', fontWeight: '700', fontSize: 13 }}>{loadError}</Text>
+                </View>
+              ) : null}
+              <View style={[styles.tokenCard, { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder }]}>
+                <Text style={[styles.tokenTitle, { color: theme.text }]}>Jeton Push Appareil</Text>
+                <View style={styles.tokenRow}>
+                  <TextInput
+                    style={[
+                      styles.tokenInput,
+                      { color: theme.text, borderColor: theme.cardBorder, backgroundColor: theme.backgroundElement },
+                    ]}
+                    placeholder="ExponentPushToken[...] ou FCM"
+                    placeholderTextColor={theme.textSecondary}
+                    value={pushTokenInput}
+                    onChangeText={setPushTokenInput}
+                  />
+                  <Pressable onPress={handleRegisterToken} style={[styles.tokenBtn, { backgroundColor: theme.navy }]}>
+                    <Text style={styles.tokenBtnText}>Activer</Text>
+                  </Pressable>
+                  <Pressable onPress={handleRevokeToken} style={[styles.tokenBtn, { backgroundColor: '#FEE2E2' }]}>
+                    <Text style={[styles.tokenBtnText, { color: '#B91C1C' }]}>Révoquer</Text>
+                  </Pressable>
+                </View>
               </View>
             </View>
           }
@@ -163,6 +196,22 @@ export default function NotificationsScreen() {
               </Text>
             </Pressable>
           )}
+          ListFooterComponent={
+            page < lastPage ? (
+              <Pressable
+                onPress={async () => {
+                  setLoadingMore(true);
+                  await load(page + 1, false);
+                  setLoadingMore(false);
+                }}
+                disabled={loadingMore}
+                style={[styles.primaryBtn, { backgroundColor: theme.navy, alignSelf: 'center', marginTop: 8 }]}>
+                <Text style={styles.primaryBtnText}>
+                  {loadingMore ? 'Chargement...' : 'Charger plus'}
+                </Text>
+              </Pressable>
+            ) : undefined
+          }
           ListEmptyComponent={
             loading ? (
               <ActivityIndicator size="large" color={theme.primary} style={{ marginTop: 40 }} />

@@ -36,6 +36,7 @@ import { KkiapayCheckoutModal } from '@/components/kkiapay-checkout-modal';
 import { BENIN_COMMUNES, QUARTIERS_BY_COMMUNE } from '@/constants/locations';
 import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
+import { usePlatformConfig } from '@/context/platform-config-context';
 import { useResponsive } from '@/hooks/use-responsive';
 import { useTheme } from '@/hooks/use-theme';
 import { proprietesApi } from '@/services/api';
@@ -62,6 +63,8 @@ type PickedAsset = {
 
 export type SaleDocumentCategory =
   | 'titre_foncier'
+  | 'convention_vente'
+  | 'attestation_recasement'
   | 'permis_habiter'
   | 'plan_cadastral'
   | 'autre';
@@ -98,6 +101,8 @@ interface PublishPropertyFormProps {
 
 const SALE_DOCUMENT_OPTIONS: { key: SaleDocumentCategory; label: string }[] = [
   { key: 'titre_foncier', label: 'Titre foncier' },
+  { key: 'convention_vente', label: 'Convention de vente' },
+  { key: 'attestation_recasement', label: 'Attestation de recasement' },
   { key: 'permis_habiter', label: "Permis d'habiter" },
   { key: 'plan_cadastral', label: 'Plan cadastral' },
   { key: 'autre', label: 'Autres documents justificatifs' },
@@ -147,14 +152,15 @@ export function PublishPropertyForm({ mode, bottomPadding = 40 }: PublishPropert
   const theme = useTheme();
   const { twoColLayout, horizontalPadding } = useResponsive();
   const { isAuthenticated, openAuthModal, isAgentMobilier, isAdminStaff } = useAuth();
+  const { tarifs } = usePlatformConfig();
 
   const isAgentView = mode === 'agent';
 
   const publicationFee = useMemo(() => {
     if (isAdminStaff) return 0;
-    if (isAgentMobilier) return 100;
-    return 500;
-  }, [isAdminStaff, isAgentMobilier]);
+    if (isAgentMobilier) return tarifs?.post_agent ?? null;
+    return tarifs?.post_client ?? null;
+  }, [isAdminStaff, isAgentMobilier, tarifs]);
 
   const paymentOperationType: PaymentOperationType = isAgentMobilier
     ? 'publication_agent'
@@ -466,7 +472,7 @@ export function PublishPropertyForm({ mode, bottomPadding = 40 }: PublishPropert
       setGlobalError('Veuillez corriger les champs signalés en rouge.');
       return;
     }
-    if (publicationFee > 0) {
+    if (publicationFee === null || publicationFee > 0) {
       setCheckoutVisible(true);
     } else {
       void submitPropertyToBackend();
@@ -537,7 +543,11 @@ export function PublishPropertyForm({ mode, bottomPadding = 40 }: PublishPropert
               <Text style={styles.feeSub}>
                 Tarif appliqué ({isAdminStaff ? 'Admin' : isAgentMobilier ? 'Agent mobilier' : 'Client'}) :{' '}
                 <Text style={{ color: '#FDE68A', fontWeight: '900' }}>
-                  {publicationFee === 0 ? 'Gratuit' : `${publicationFee} F CFA via Kkiapay`}
+                  {publicationFee === 0
+                    ? 'Gratuit'
+                    : publicationFee !== null
+                    ? `${publicationFee} F CFA via Kkiapay`
+                    : 'Tarif officiel via Kkiapay'}
                 </Text>
               </Text>
             </View>
@@ -805,7 +815,9 @@ export function PublishPropertyForm({ mode, bottomPadding = 40 }: PublishPropert
 
             <View style={styles.fieldGroup}>
               <Text style={[styles.label, { color: theme.text }]}>
-                Repères précis (protégés avant déblocage 50 F)
+                {tarifs
+                  ? `Repères précis (protégés avant déblocage ${tarifs.deblocage_coordonnees} F)`
+                  : 'Repères précis (protégés avant déblocage)'}
               </Text>
               <TextInput
                 style={[
@@ -1246,9 +1258,11 @@ export function PublishPropertyForm({ mode, bottomPadding = 40 }: PublishPropert
               <ActivityIndicator color="#FFFFFF" />
             ) : (
               <Text style={styles.primaryBtnText}>
-                {publicationFee > 0
+                {publicationFee === 0
+                  ? 'Publier le bien maintenant'
+                  : publicationFee !== null
                   ? `Payer ${publicationFee} F CFA & Publier`
-                  : 'Publier le bien maintenant'}
+                  : 'Payer via Kkiapay & Publier'}
               </Text>
             )}
           </Pressable>
@@ -1259,7 +1273,11 @@ export function PublishPropertyForm({ mode, bottomPadding = 40 }: PublishPropert
         visible={checkoutVisible}
         operationType={paymentOperationType}
         title="Frais de publication E-Mobilier"
-        description={`Règlement officiel de ${publicationFee} F CFA pour publier votre annonce immobilière.`}
+        description={
+          publicationFee !== null
+            ? `Règlement officiel de ${publicationFee} F CFA pour publier votre annonce immobilière.`
+            : 'Règlement officiel pour publier votre annonce immobilière.'
+        }
         onClose={() => setCheckoutVisible(false)}
         onSuccess={async ({ transactionId }) => {
           setCheckoutVisible(false);

@@ -6,6 +6,7 @@ import React from 'react';
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { AuthModal } from '@/components/auth/auth-modal';
 import { AuthProvider } from '@/context/auth-context';
+import { PlatformConfigProvider } from '@/context/platform-config-context';
 import { ThemeModeProvider, useThemeMode } from '@/context/theme-context';
 
 SplashScreen.preventAutoHideAsync();
@@ -31,6 +32,7 @@ function RootNavigationShell() {
         <Stack.Screen name="my-properties" />
         <Stack.Screen name="search-requests" />
         <Stack.Screen name="transactions" />
+        <Stack.Screen name="profile" />
         <Stack.Screen name="cgu" />
         <Stack.Screen name="admin/index" />
         <Stack.Screen name="finance/index" />
@@ -43,9 +45,11 @@ function RootNavigationShell() {
 export default function RootLayout() {
   return (
     <ThemeModeProvider>
-      <AuthProvider>
-        <RootNavigationShell />
-      </AuthProvider>
+      <PlatformConfigProvider>
+        <AuthProvider>
+          <RootNavigationShell />
+        </AuthProvider>
+      </PlatformConfigProvider>
     </ThemeModeProvider>
   );
 }

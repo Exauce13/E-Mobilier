@@ -8,6 +8,7 @@ use App\Models\Paiement;
 use App\Models\Proprietes;
 use App\Models\Visite_client;
 use App\Services\KkiapayService;
+use App\Services\PlatformSettingsService;
 use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -16,31 +17,34 @@ use Illuminate\Support\Facades\Log;
 class KkiapayController extends Controller
 {
     protected KkiapayService $kkiapayService;
+    protected PlatformSettingsService $settings;
 
-    public function __construct(KkiapayService $kkiapayService)
+    public function __construct(KkiapayService $kkiapayService, PlatformSettingsService $settings)
     {
         $this->kkiapayService = $kkiapayService;
+        $this->settings = $settings;
     }
 
     /**
      * Retourne la configuration Kkiapay pour le frontend (widget de paiement).
-     * Inclut les tarifs de la plateforme selon le rôle de l'utilisateur connecté.
+     * Inclut les tarifs dynamiques de la plateforme selon le rôle de l'utilisateur connecté.
      */
     public function config(Request $request): JsonResponse
     {
         $user = $request->user();
+        $tarifs = $this->settings->getTarifs();
 
-        // Tarifs officiels E-Mobilier
-        $montantPoste = 500; // Par défaut : tarif Client (500 FCFA)
+        // Tarifs officiels dynamiques (depuis platform_settings)
+        $montantPoste = $tarifs['post_client'];
         if ($user && $user->hasRole('Agent mobilier')) {
-            $montantPoste = 100; // Tarif Agent (100 FCFA)
+            $montantPoste = $tarifs['post_agent'];
         } elseif ($user && $user->hasRole('Admin')) {
             $montantPoste = 0; // Dispensé
         }
 
         $widgetConfig = $this->kkiapayService->getWidgetConfig(
             $montantPoste,
-            "Frais de publication ({$montantPoste} FCFA) - E-Mobilier"
+            "Frais de publication ({$montantPoste} FCFA) - " . $this->settings->getString('platform_name', 'E-Mobilier')
         );
 
         return response()->json([
@@ -48,9 +52,10 @@ class KkiapayController extends Controller
             'data' => [
                 'widget' => $widgetConfig,
                 'pricing' => [
-                    'post_client' => 500,
-                    'post_agent' => 100,
-                    'unlock_details' => 50,
+                    'post_client' => $tarifs['post_client'],
+                    'post_agent' => $tarifs['post_agent'],
+                    'unlock_details' => $tarifs['deblocage_coordonnees'],
+                    'visit_fee' => $tarifs['visite'],
                     'current_user_post_fee' => $montantPoste,
                 ],
                 'user' => $user ? [

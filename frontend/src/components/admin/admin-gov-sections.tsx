@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -16,6 +16,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { adminApi, cguApi } from '@/services/api';
 import type {
   AdminUserItem,
+  AgentKycDossier,
   AgentKycItem,
   AuditLogItem,
   DemandeDemasquageItem,
@@ -24,26 +25,38 @@ import type {
   WebhookHealthReport,
   ZoneSummary,
 } from '@/types/api';
+import { confirmDialog, showMessage } from '@/utils/dialog';
 
-export function DemasquagesSection() {
+export function DemasquagesSection({
+  onCharteRequired,
+}: {
+  onCharteRequired?: (msg?: string) => void;
+} = {}) {
   const theme = useTheme();
-  const { isSuperAdmin } = useAuth();
+  const { isSuperAdminPrincipal, isSuperAdmin } = useAuth();
   const [queue, setQueue] = useState<DemandeDemasquageItem[]>([]);
   const [mine, setMine] = useState<DemandeDemasquageItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refusMotif, setRefusMotif] = useState('');
+  const [refusMotifs, setRefusMotifs] = useState<Record<number, string>>({});
+  const [ttlInputs, setTtlInputs] = useState<Record<number, string>>({});
+  const [revokeIdInput, setRevokeIdInput] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
-    if (isSuperAdmin) {
+    if (isSuperAdminPrincipal) {
       const qRes = await adminApi.enAttenteDemasquage();
       if (qRes.success && qRes.data) setQueue((qRes.data as any).data || []);
-    } else {
+    } else if (!isSuperAdmin) {
       const mRes = await adminApi.mesDemandesDemasquage();
+      if (mRes.statusCode === 403 && mRes.message?.toLowerCase().includes('charte')) {
+        onCharteRequired?.(mRes.message);
+        setLoading(false);
+        return;
+      }
       if (mRes.success && mRes.data) setMine((mRes.data as any).data || []);
     }
     setLoading(false);
-  }, [isSuperAdmin]);
+  }, [isSuperAdminPrincipal, isSuperAdmin, onCharteRequired]);
 
   useEffect(() => {
     void load();
@@ -54,63 +67,128 @@ export function DemasquagesSection() {
       {isSuperAdmin && (
         <Pressable
           onPress={async () => {
-            const res = await adminApi.revoquerTousDemasquages("Révocation d'urgence mobile");
-            Alert.alert(res.success ? 'Révoqués' : 'Erreur', res.message || '');
+            const ok = await confirmDialog(
+              'Révocation d’urgence',
+              'Révoquer immédiatement TOUTES les autorisations de démasquage actives ?',
+              'Révoquer tout'
+            );
+            if (!ok) return;
+            const res = await adminApi.revoquerTousDemasquages("Révocation d'urgence administration");
+            showMessage(res.success ? 'Révoqués' : 'Erreur', res.message || '');
+            await load();
           }}
           style={[styles.dangerBtn]}>
           <Text style={styles.dangerBtnText}>Coupe-circuit : Révoquer TOUS les démasquages actifs</Text>
         </Pressable>
       )}
 
+      {isSuperAdminPrincipal && (
+        <View style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder }]}>
+          <Text style={[styles.cardTitle, { color: theme.text }]}>Révoquer une autorisation spécifique</Text>
+          <View style={styles.row}>
+            <TextInput
+              style={[styles.input, { flex: 1, color: theme.text, borderColor: theme.cardBorder }]}
+              placeholder="ID de la demande approuvée..."
+              keyboardType="numeric"
+              value={revokeIdInput}
+              onChangeText={setRevokeIdInput}
+            />
+            <Pressable
+              onPress={async () => {
+                const idNum = Number(revokeIdInput.trim());
+                if (!idNum) return;
+                const res = await adminApi.revoquerDemasquage(idNum);
+                showMessage(res.success ? 'Autorisation révoquée' : 'Erreur', res.message || '');
+                if (res.success) {
+                  setRevokeIdInput('');
+                  await load();
+                }
+              }}
+              style={[styles.actBtn, { backgroundColor: '#EF4444' }]}>
+              <Text style={styles.actBtnText}>Révoquer</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
+
       {loading ? (
         <ActivityIndicator color={theme.primary} style={{ marginTop: 20 }} />
-      ) : isSuperAdmin ? (
+      ) : isSuperAdminPrincipal ? (
         queue.length === 0 ? (
           <Text style={{ color: theme.textSecondary, textAlign: 'center', marginTop: 16 }}>
             Aucune demande de démasquage en attente.
           </Text>
         ) : (
-          queue.map((item) => (
-            <View key={item.id} style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder }]}>
-              <Text style={[styles.cardTitle, { color: theme.text }]}>
-                Demande #{item.id} ({item.type_dossier} #{item.dossier_id})
-              </Text>
-              <Text style={[styles.line, { color: theme.text }]}>
-                Par : {item.user?.name} ({item.user?.email})
-              </Text>
-              <Text style={[styles.line, { color: theme.textSecondary }]}>Motif : {item.motif}</Text>
-              <Text style={[styles.line, { color: theme.textSecondary }]}>{item.justification}</Text>
+          queue.map((item) => {
+            const ttlVal = ttlInputs[item.id] ?? '120';
+            const motifVal = refusMotifs[item.id] ?? '';
+            return (
+              <View key={item.id} style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder }]}>
+                <Text style={[styles.cardTitle, { color: theme.text }]}>
+                  Demande #{item.id} ({item.type_dossier} #{item.dossier_id})
+                </Text>
+                <Text style={[styles.line, { color: theme.text }]}>
+                  Par : {item.user?.name} ({item.user?.email})
+                </Text>
+                <Text style={[styles.line, { color: theme.textSecondary }]}>Motif : {item.motif}</Text>
+                <Text style={[styles.line, { color: theme.textSecondary }]}>{item.justification}</Text>
 
-              <TextInput
-                style={[styles.input, { color: theme.text, borderColor: theme.cardBorder }]}
-                placeholder="Motif si refus..."
-                value={refusMotif}
-                onChangeText={setRefusMotif}
-              />
+                <View style={styles.row}>
+                  <TextInput
+                    style={[styles.input, { width: 110, color: theme.text, borderColor: theme.cardBorder }]}
+                    placeholder="TTL (min)"
+                    keyboardType="numeric"
+                    value={ttlVal}
+                    onChangeText={(v) => setTtlInputs((p) => ({ ...p, [item.id]: v }))}
+                  />
+                  <TextInput
+                    style={[styles.input, { flex: 1, color: theme.text, borderColor: theme.cardBorder }]}
+                    placeholder="Motif si refus (min 5 car.)..."
+                    value={motifVal}
+                    onChangeText={(v) => setRefusMotifs((p) => ({ ...p, [item.id]: v }))}
+                  />
+                </View>
 
-              <View style={styles.row}>
-                <Pressable
-                  onPress={async () => {
-                    const res = await adminApi.approuverDemasquage(item.id, 120);
-                    Alert.alert(res.success ? 'Approuvé (120m)' : 'Erreur', res.message || '');
-                    await load();
-                  }}
-                  style={[styles.actBtn, { backgroundColor: theme.primary }]}>
-                  <Text style={styles.actBtnText}>Approuver (2h)</Text>
-                </Pressable>
-                <Pressable
-                  onPress={async () => {
-                    const res = await adminApi.refuserDemasquage(item.id, refusMotif || 'Justification insuffisante');
-                    Alert.alert(res.success ? 'Refusé' : 'Erreur', res.message || '');
-                    await load();
-                  }}
-                  style={[styles.actBtn, { backgroundColor: '#EF4444' }]}>
-                  <Text style={styles.actBtnText}>Refuser</Text>
-                </Pressable>
+                <View style={styles.row}>
+                  <Pressable
+                    onPress={async () => {
+                      const mins = Math.max(15, Number(ttlVal) || 120);
+                      const res = await adminApi.approuverDemasquage(item.id, mins);
+                      showMessage(res.success ? `Approuvé (${mins} min)` : 'Erreur', res.message || '');
+                      await load();
+                    }}
+                    style={[styles.actBtn, { backgroundColor: theme.primary }]}>
+                    <Text style={styles.actBtnText}>Approuver ({Number(ttlVal) || 120}m)</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={async () => {
+                      const res = await adminApi.refuserDemasquage(
+                        item.id,
+                        motifVal.trim().length >= 5 ? motifVal.trim() : 'Justification insuffisante'
+                      );
+                      showMessage(res.success ? 'Refusé' : 'Erreur', res.message || '');
+                      await load();
+                    }}
+                    style={[styles.actBtn, { backgroundColor: '#EF4444' }]}>
+                    <Text style={styles.actBtnText}>Refuser</Text>
+                  </Pressable>
+                </View>
               </View>
-            </View>
-          ))
+            );
+          })
         )
+      ) : isSuperAdmin ? (
+        <View style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder }]}>
+          <Text style={[styles.cardTitle, { color: theme.text }]}>Confidentialité coordonnées clients</Text>
+          <Text style={[styles.line, { color: theme.textSecondary }]}>
+            L'arbitrage des demandes de démasquage de coordonnées clients est strictement réservé aux
+            Super Admins Principaux. Vous conservez le coupe-circuit de révocation globale ci-dessus.
+          </Text>
+        </View>
+      ) : mine.length === 0 ? (
+        <Text style={{ color: theme.textSecondary, textAlign: 'center', marginTop: 16 }}>
+          Vous n'avez soumis aucune demande de démasquage.
+        </Text>
       ) : (
         mine.map((item) => (
           <View key={item.id} style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder }]}>
@@ -130,19 +208,29 @@ export function DemasquagesSection() {
   );
 }
 
-export function AgentsKycSection() {
+export function AgentsKycSection({
+  onCharteRequired,
+}: {
+  onCharteRequired?: (msg?: string) => void;
+} = {}) {
   const theme = useTheme();
   const [agents, setAgents] = useState<AgentKycItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [dossierModal, setDossierModal] = useState<AgentKycDossier | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     const res = await adminApi.getAgents();
+    if (res.statusCode === 403 && res.message?.toLowerCase().includes('charte')) {
+      onCharteRequired?.(res.message);
+      setLoading(false);
+      return;
+    }
     if (res.success && Array.isArray(res.data)) {
       setAgents(res.data);
     }
     setLoading(false);
-  }, []);
+  }, [onCharteRequired]);
 
   useEffect(() => {
     void load();
@@ -152,50 +240,93 @@ export function AgentsKycSection() {
 
   return (
     <View style={styles.sectionWrap}>
-      {agents.map((ag) => (
-        <View key={ag.id} style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder }]}>
-          <Text style={[styles.cardTitle, { color: theme.text }]}>
-            {ag.prenom} {ag.name}
-          </Text>
-          <Text style={[styles.line, { color: theme.textSecondary }]}>
-            {ag.email} • {ag.telephone}
-          </Text>
-          <Text style={[styles.line, { color: ag.is_verifed ? theme.primaryDark : '#B45309', fontWeight: '700' }]}>
-            KYC : {ag.is_verifed ? 'Agrément validé' : 'En attente'} • Statut : {ag.statut}
-          </Text>
-          <View style={styles.row}>
+      {agents.length === 0 ? (
+        <Text style={{ color: theme.textSecondary, textAlign: 'center', marginTop: 16 }}>
+          Aucun agent mobilier enregistré.
+        </Text>
+      ) : (
+        agents.map((ag) => (
+          <View key={ag.id} style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder }]}>
+            <Text style={[styles.cardTitle, { color: theme.text }]}>
+              {ag.prenom} {ag.name}
+            </Text>
+            <Text style={[styles.line, { color: theme.textSecondary }]}>
+              {ag.email} • {ag.telephone}
+            </Text>
+            <Text style={[styles.line, { color: ag.is_verifed ? theme.primaryDark : '#B45309', fontWeight: '700' }]}>
+              KYC : {ag.is_verifed ? 'Agrément validé' : 'En attente'} • Statut : {ag.statut}
+            </Text>
+            <View style={styles.row}>
+              <Pressable
+                onPress={async () => {
+                  const d: any = await adminApi.getAgentDossier(ag.id);
+                  if (d.success && d.agent) {
+                    setDossierModal({
+                      agent: d.agent,
+                      statistiques_activite: d.statistiques_activite || {
+                        total_annonces: 0,
+                        annonces_en_ligne: 0,
+                        annonces_conclues: 0,
+                      },
+                    });
+                  } else {
+                    showMessage('Erreur', d.message || 'Impossible de charger le dossier agent.');
+                  }
+                }}
+                style={[styles.actBtn, { backgroundColor: theme.navy }]}>
+                <Text style={styles.actBtnText}>Dossier</Text>
+              </Pressable>
+              <Pressable
+                onPress={async () => {
+                  const res = await adminApi.approuverAgent(ag.id);
+                  showMessage(res.success ? 'Approuvé' : 'Erreur', res.message || '');
+                  await load();
+                }}
+                style={[styles.actBtn, { backgroundColor: theme.primary }]}>
+                <Text style={styles.actBtnText}>Approuver</Text>
+              </Pressable>
+              <Pressable
+                onPress={async () => {
+                  const res = await adminApi.suspendreAgent(ag.id);
+                  showMessage(res.success ? 'Suspendu' : 'Erreur', res.message || '');
+                  await load();
+                }}
+                style={[styles.actBtn, { backgroundColor: '#EF4444' }]}>
+                <Text style={styles.actBtnText}>Suspendre</Text>
+              </Pressable>
+            </View>
+          </View>
+        ))
+      )}
+
+      <Modal visible={Boolean(dossierModal)} transparent animationType="fade" onRequestClose={() => setDossierModal(null)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(15,23,42,0.65)', justifyContent: 'center', padding: 20 }}>
+          <View style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder }]}>
+            <Text style={[styles.cardTitle, { color: theme.text }]}>
+              Dossier KYC — {dossierModal?.agent.nom_complet}
+            </Text>
+            <Text style={[styles.line, { color: theme.textSecondary }]}>
+              E-mail : {dossierModal?.agent.email}
+            </Text>
+            <Text style={[styles.line, { color: theme.textSecondary }]}>
+              Téléphone : {dossierModal?.agent.telephone || '-'}
+            </Text>
+            <Text style={[styles.line, { color: theme.textSecondary }]}>
+              Zone : {dossierModal?.agent.zone || 'Non assignée'} • Statut : {dossierModal?.agent.statut}
+            </Text>
+            <Text style={[styles.line, { color: theme.text, fontWeight: '700' }]}>
+              Annonces : {dossierModal?.statistiques_activite.total_annonces} • En ligne :{' '}
+              {dossierModal?.statistiques_activite.annonces_en_ligne} • Conclues :{' '}
+              {dossierModal?.statistiques_activite.annonces_conclues}
+            </Text>
             <Pressable
-              onPress={async () => {
-                const d = await adminApi.getAgentDossier(ag.id);
-                if (d.success && (d as any).statistiques_activite) {
-                  const st = (d as any).statistiques_activite;
-                  Alert.alert('Dossier Agent', `Annonces: ${st.total_annonces}\nEn ligne: ${st.annonces_en_ligne}\nConclues: ${st.annonces_conclues}`);
-                }
-              }}
+              onPress={() => setDossierModal(null)}
               style={[styles.actBtn, { backgroundColor: theme.navy }]}>
-              <Text style={styles.actBtnText}>Dossier</Text>
-            </Pressable>
-            <Pressable
-              onPress={async () => {
-                const res = await adminApi.approuverAgent(ag.id);
-                Alert.alert(res.success ? 'Approuvé' : 'Erreur', res.message || '');
-                await load();
-              }}
-              style={[styles.actBtn, { backgroundColor: theme.primary }]}>
-              <Text style={styles.actBtnText}>Approuver</Text>
-            </Pressable>
-            <Pressable
-              onPress={async () => {
-                const res = await adminApi.suspendreAgent(ag.id);
-                Alert.alert(res.success ? 'Suspendu' : 'Erreur', res.message || '');
-                await load();
-              }}
-              style={[styles.actBtn, { backgroundColor: '#EF4444' }]}>
-              <Text style={styles.actBtnText}>Suspendre</Text>
+              <Text style={styles.actBtnText}>Fermer</Text>
             </Pressable>
           </View>
         </View>
-      ))}
+      </Modal>
     </View>
   );
 }
@@ -258,20 +389,22 @@ export function GovernanceSection() {
         <View style={styles.row}>
           <TextInput style={[styles.input, { flex: 1, color: theme.text, borderColor: theme.cardBorder }]} placeholder="Code (ZON-...)" value={zoneCode} onChangeText={setZoneCode} />
           <TextInput style={[styles.input, { flex: 1, color: theme.text, borderColor: theme.cardBorder }]} placeholder="Commune" value={zoneCommune} onChangeText={setZoneCommune} />
+          <TextInput style={[styles.input, { flex: 1, color: theme.text, borderColor: theme.cardBorder }]} placeholder="Département" value={zoneDept} onChangeText={setZoneDept} />
         </View>
         <Pressable
           onPress={async () => {
             const res = await adminApi.createZone({
-              nom: zoneNom,
-              code: zoneCode,
-              commune: zoneCommune,
-              departement: zoneDept,
+              nom: zoneNom.trim(),
+              code: zoneCode.trim(),
+              commune: zoneCommune.trim(),
+              departement: zoneDept.trim() || 'Littoral',
               is_active: true,
             });
-            Alert.alert(res.success ? 'Zone créée' : 'Erreur', res.message || '');
+            showMessage(res.success ? 'Zone créée' : 'Erreur', res.message || '');
             if (res.success) {
               setZoneNom('');
               setZoneCode('');
+              setZoneCommune('');
               await load();
             }
           }}
@@ -359,7 +492,7 @@ export function GovernanceSection() {
                   role: newRole,
                   zone_id: newZoneId,
                 });
-                Alert.alert(res.success ? 'Administrateur créé' : 'Erreur', res.message || '');
+                showMessage(res.success ? 'Administrateur créé' : 'Erreur', res.message || '');
                 if (res.success) {
                   setNewPrenom('');
                   setNewName('');
@@ -410,7 +543,7 @@ export function GovernanceSection() {
                   onPress={async () => {
                     const next = u.statut === 'actif' ? 'suspendu' : 'actif';
                     const res = await adminApi.updateUserStatut(u.id, { statut: next });
-                    Alert.alert(res.success ? 'Mis à jour' : 'Protégé', res.message || '');
+                    showMessage(res.success ? 'Mis à jour' : 'Protégé', res.message || '');
                     await load();
                   }}
                   style={{ justifyContent: 'center' }}>
@@ -453,7 +586,7 @@ export function GovernanceSection() {
                         role: editRole,
                         zone_id: editZoneId,
                       });
-                      Alert.alert(res.success ? 'Affectation mise à jour' : 'Erreur', res.message || '');
+                      showMessage(res.success ? 'Affectation mise à jour' : 'Erreur', res.message || '');
                       if (res.success) {
                         setEditingUserId(null);
                         await load();
@@ -500,7 +633,7 @@ export function GovernanceSection() {
         <Pressable
           onPress={async () => {
             const res = await cguApi.publierDocument({ type: docType, titre: cguTitre, version: cguVersion, contenu: cguContenu });
-            Alert.alert(res.success ? 'Publié' : 'Erreur', res.message || '');
+            showMessage(res.success ? 'Publié' : 'Erreur', res.message || '');
           }}
           style={[styles.actBtn, { backgroundColor: theme.navy }]}>
           <Text style={styles.actBtnText}>
@@ -600,7 +733,7 @@ export function TechHealthSection() {
               <Pressable
                 onPress={async () => {
                   const res = await adminApi.relancerTechNotification(n.id);
-                  Alert.alert(res.success ? 'Relancé' : 'Erreur', res.message || '');
+                  showMessage(res.success ? 'Relancé' : 'Erreur', res.message || '');
                   await load();
                 }}
                 style={[styles.smallBtn, { backgroundColor: theme.primary }]}>

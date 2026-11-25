@@ -12,6 +12,7 @@ use App\Models\Proprietes_document;
 use App\Models\Proprietes_media;
 use App\Models\User;
 use App\Services\KkiapayService;
+use App\Services\PlatformSettingsService;
 use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -22,10 +23,12 @@ use Illuminate\Support\Facades\Storage;
 class PosteController extends Controller
 {
     protected KkiapayService $kkiapayService;
+    protected PlatformSettingsService $settings;
 
-    public function __construct(KkiapayService $kkiapayService)
+    public function __construct(KkiapayService $kkiapayService, PlatformSettingsService $settings)
     {
         $this->kkiapayService = $kkiapayService;
+        $this->settings = $settings;
     }
 
     /**
@@ -88,15 +91,17 @@ class PosteController extends Controller
             $query->where('transaction_type', $request->input('transaction_type'));
         }
 
+        $like = DB::connection()->getDriverName() === 'pgsql' ? 'ILIKE' : 'LIKE';
+
         // Filtres géographiques
         if ($request->filled('commune')) {
-            $query->where('commune', 'ILIKE', '%' . $request->input('commune') . '%');
+            $query->where('commune', $like, '%' . $request->input('commune') . '%');
         }
         if ($request->filled('arrondissement')) {
-            $query->where('arrondissement', 'ILIKE', '%' . $request->input('arrondissement') . '%');
+            $query->where('arrondissement', $like, '%' . $request->input('arrondissement') . '%');
         }
         if ($request->filled('quartier')) {
-            $query->where('quartier', 'ILIKE', '%' . $request->input('quartier') . '%');
+            $query->where('quartier', $like, '%' . $request->input('quartier') . '%');
         }
 
         // Filtres de budget
@@ -127,22 +132,22 @@ class PosteController extends Controller
 
         // Filtres commodités & accessibilité
         if ($request->filled('eau_courant')) {
-            $query->where('eau_courant', 'ILIKE', '%' . $request->input('eau_courant') . '%');
+            $query->where('eau_courant', $like, '%' . $request->input('eau_courant') . '%');
         }
         if ($request->filled('accessibilite')) {
-            $query->where('accessibilite', 'ILIKE', '%' . $request->input('accessibilite') . '%');
+            $query->where('accessibilite', $like, '%' . $request->input('accessibilite') . '%');
         }
 
         // Recherche multi-critères globale
         if ($request->filled('search')) {
             $search = $request->input('search');
-            $query->where(function ($q) use ($search) {
-                $q->where('commune', 'ILIKE', "%{$search}%")
-                    ->orWhere('arrondissement', 'ILIKE', "%{$search}%")
-                    ->orWhere('quartier', 'ILIKE', "%{$search}%")
-                    ->orWhere('description', 'ILIKE', "%{$search}%")
-                    ->orWhere('accessibilite', 'ILIKE', "%{$search}%")
-                    ->orWhere('eau_courant', 'ILIKE', "%{$search}%");
+            $query->where(function ($q) use ($search, $like) {
+                $q->where('commune', $like, "%{$search}%")
+                    ->orWhere('arrondissement', $like, "%{$search}%")
+                    ->orWhere('quartier', $like, "%{$search}%")
+                    ->orWhere('description', $like, "%{$search}%")
+                    ->orWhere('accessibilite', $like, "%{$search}%")
+                    ->orWhere('eau_courant', $like, "%{$search}%");
             });
         }
 
@@ -197,7 +202,7 @@ class PosteController extends Controller
         }
 
         // Vérifier l'autorisation si la propriété n'est pas encore publiée
-        if ($propriete->status !== 'published' && (! $user || ($propriete->user_id !== $user->id && ! $user->hasRole('Admin')))) {
+        if ($propriete->status !== 'published' && (! $user || ($propriete->user_id !== $user->id && ! $user->isAnyAdmin()))) {
             return response()->json([
                 'success' => false,
                 'message' => "Vous n'avez pas l'autorisation d'accéder à cette annonce.",
@@ -235,7 +240,7 @@ class PosteController extends Controller
         }
 
         // Le propriétaire et l'administrateur ont déjà un accès complet gratuit
-        if ($propriete->user_id === $user->id || $user->hasRole('Admin')) {
+        if ($propriete->user_id === $user->id || $user->isAnyAdmin()) {
             return response()->json([
                 'success' => true,
                 'message' => 'Vous disposez d\'un accès complet à cette annonce.',
@@ -258,14 +263,14 @@ class PosteController extends Controller
             ], 200);
         }
 
-        // Montant du déblocage de vue : 50 FCFA
-        $fraisDeblocage = 50;
+        // Montant dynamique du déblocage de vue (centralisé en BDD)
+        $fraisDeblocage = $this->settings->getTarifs()['deblocage_coordonnees'];
         $transactionId = $request->input('kkiapay_transaction_id', $request->input('transaction_id'));
 
         if (empty($transactionId)) {
             return response()->json([
                 'success' => false,
-                'message' => 'La référence de transaction Kkiapay pour le paiement des frais de 50 FCFA est obligatoire.',
+                'message' => "La référence de transaction Kkiapay pour le paiement des frais de {$fraisDeblocage} FCFA est obligatoire.",
             ], 422);
         }
 
@@ -274,7 +279,7 @@ class PosteController extends Controller
         if (! $verification['success']) {
             return response()->json([
                 'success' => false,
-                'message' => 'Échec de validation du paiement de 50 FCFA via Kkiapay : ' . $verification['message'],
+                'message' => "Échec de validation du paiement de {$fraisDeblocage} FCFA via Kkiapay : " . $verification['message'],
             ], 422);
         }
 
@@ -320,7 +325,7 @@ class PosteController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Coordonnées et détails complets du bien débloqués avec succès pour 50 FCFA.',
+                'message' => "Coordonnées et détails complets du bien débloqués avec succès pour {$fraisDeblocage} FCFA.",
                 'already_unlocked' => false,
                 'data' => $this->formatPropertyForUser($propriete->fresh(['media', 'documents', 'user']), $user),
             ], 200);
@@ -339,40 +344,48 @@ class PosteController extends Controller
     }
 
     /**
-     * Formate une propriété pour l'utilisateur en masquant les détails sensibles
-     * si l'utilisateur n'a pas encore payé les frais de déblocage de 50 FCFA.
+     * Formate une propriété pour l'utilisateur en appliquant strictement :
+     * 1. Verrou 50 F : avant paiement, seul l'aperçu public minimal est exposé.
+     * 2. Monopole E-Mobilier : même après paiement des 50 F, les coordonnées directes
+     *    du propriétaire/agent ne sont JAMAIS exposées aux clients (visite encadrée 500 F obligatoire).
      */
     protected function formatPropertyForUser(Proprietes $propriete, ?User $user): array
     {
         $isOwner = $user && $propriete->user_id === $user->id;
-        $isAdmin = $user && $user->hasRole('Admin');
+        $isAdmin = $user && $user->isAnyAdmin();
+        $canSeeOwnerContact = $isOwner || ($user && $user->isSuperAdminPrincipal());
         $hasPaidView = $user ? Paiement_vue::where('client_id', $user->id)
             ->where('property_id', $propriete->id)
             ->exists() : false;
 
         $isUnlocked = $isOwner || $isAdmin || $hasPaidView;
 
+        $tarifs = $this->settings->getTarifs();
+        $unlockFee = $tarifs['deblocage_coordonnees'];
+        $visitFee = $tarifs['visite'];
+
         $data = $propriete->toArray();
         $data['is_unlocked'] = $isUnlocked;
-        $data['unlock_fee'] = 50; // Frais pour débloquer les coordonnées
-        $data['visit_fee'] = 500; // Frais pour planifier une visite physique
+        $data['unlock_fee'] = $unlockFee;
+        $data['visit_fee'] = $visitFee;
 
         if (! $isUnlocked) {
-            // Masquer les détails précis de localisation
-            $data['location_details'] = 'Coordonnées et repères précis masqués. Débloquez les détails complets pour 50 FCFA.';
-            // Masquer les documents légaux
+            // Verrouillage strict avant paiement des frais de déblocage (50 FCFA)
+            $data['location_details'] = "Informations détaillées et repères masqués. Débloquez la fiche complète pour {$unlockFee} FCFA.";
+            $data['description'] = null;
+            $data['accessibilite'] = null;
+            $data['eau_courant'] = null;
             $data['documents'] = [];
-            // Masquer les coordonnées de l'auteur (propriétaire/agent)
-            if (isset($data['user'])) {
-                $tel = $data['user']['telephone'] ?? '';
-                $data['user']['telephone'] = ! empty($tel) ? substr($tel, 0, 6) . '****' . substr($tel, -2) : null;
-                $email = $data['user']['email'] ?? '';
-                if (! empty($email)) {
-                    $parts = explode('@', $email);
-                    $namePart = substr($parts[0], 0, 2) . '***';
-                    $data['user']['email'] = $namePart . '@' . ($parts[1] ?? '***');
-                }
+            $data['user'] = null;
+
+            // Ne conserver que la première photo de couverture pour l'aperçu catalogue
+            if (! empty($data['media']) && is_array($data['media'])) {
+                $coverPhoto = collect($data['media'])->first(fn ($m) => ($m['media_type'] ?? '') !== 'video');
+                $data['media'] = $coverPhoto ? [$coverPhoto] : [];
             }
+        } elseif (! $canSeeOwnerContact) {
+            // Monopole strict E-Mobilier : même après déblocage 50 F, zéro contact direct propriétaire/agent
+            $data['user'] = null;
         }
 
         return $data;
@@ -400,7 +413,7 @@ class PosteController extends Controller
             ], 401);
         }
 
-        if (! $user->hasAnyRole(['Agent mobilier', 'Client', 'Admin'])) {
+        if (! $user->hasAnyRole(['Agent mobilier', 'Client']) && ! $user->isAnyAdmin()) {
             return response()->json([
                 'success' => false,
                 'message' => "Vous n'êtes pas autorisé à faire de postes.",
@@ -424,12 +437,13 @@ class PosteController extends Controller
         // Règle 3 : Nombre de chambres (0 pour une parcelle)
         $nombresChambres = ($type === 'parcelle') ? 0 : (int) $postrequest->input('nombres_chambres', 0);
 
-        // Règle 4 : Calcul des frais de souscription selon le rôle de l'utilisateur
+        // Règle 4 : Calcul dynamique des frais de souscription selon le rôle (centralisés en BDD)
+        $tarifs = $this->settings->getTarifs();
         if ($user->hasRole('Agent mobilier')) {
-            $fraisSouscription = 100;
+            $fraisSouscription = $tarifs['post_agent'];
             $paymentType = 'agent_post';
         } elseif ($user->hasRole('Client')) {
-            $fraisSouscription = 500;
+            $fraisSouscription = $tarifs['post_client'];
             $paymentType = 'owner_post_submission';
         } else {
             // Admin ou dispensé
@@ -604,7 +618,7 @@ class PosteController extends Controller
         }
 
         // Seul l'auteur de l'annonce ou un administrateur peut modifier
-        if ($propriete->user_id !== $user->id && ! $user->hasRole('Admin')) {
+        if ($propriete->user_id !== $user->id && ! $user->isAnyAdmin()) {
             return response()->json([
                 'success' => false,
                 'message' => "Vous n'êtes pas autorisé à modifier cette annonce.",
@@ -637,8 +651,12 @@ class PosteController extends Controller
                 'surface',
                 'prix',
                 'description',
-                'status',
             ];
+
+            // Seul un administrateur peut changer directement le statut de publication (anti-contournement modération)
+            if ($user->isAnyAdmin()) {
+                $fields[] = 'status';
+            }
 
             foreach ($fields as $field) {
                 if ($request->has($field)) {
@@ -756,7 +774,7 @@ class PosteController extends Controller
         }
 
         // Seul l'auteur de l'annonce ou un administrateur peut supprimer
-        if ($propriete->user_id !== $user->id && ! $user->hasRole('Admin')) {
+        if ($propriete->user_id !== $user->id && ! $user->isAnyAdmin()) {
             return response()->json([
                 'success' => false,
                 'message' => "Vous n'êtes pas autorisé à supprimer cette annonce.",

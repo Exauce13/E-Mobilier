@@ -12,11 +12,16 @@ class PayoutService
 {
     protected FinancialLedgerService $ledgerService;
     protected PaymentGatewayManager $gatewayManager;
+    protected PlatformSettingsService $settings;
 
-    public function __construct(FinancialLedgerService $ledgerService, PaymentGatewayManager $gatewayManager)
-    {
+    public function __construct(
+        FinancialLedgerService $ledgerService,
+        PaymentGatewayManager $gatewayManager,
+        PlatformSettingsService $settings
+    ) {
         $this->ledgerService = $ledgerService;
         $this->gatewayManager = $gatewayManager;
+        $this->settings = $settings;
     }
 
     /**
@@ -34,8 +39,9 @@ class PayoutService
             throw new Exception("Solde disponible insuffisant ({$soldeDispo} FCFA) pour un retrait de {$montant} FCFA.");
         }
 
-        if ($montant < 1000) {
-            throw new Exception("Le montant minimum d'un retrait est de 1 000 FCFA.");
+        $minPayout = $this->settings->getMinPayoutAmount();
+        if ($montant < $minPayout) {
+            throw new Exception("Le montant minimum d'un retrait est de " . number_format($minPayout, 0, ',', ' ') . " FCFA.");
         }
 
         // Vérification du Coupe-Circuit d'Urgence (Kill-Switch)
@@ -43,8 +49,8 @@ class PayoutService
             throw new Exception("Opérations de retrait suspendues : Le coupe-circuit d'urgence (Kill-Switch) est actuellement activé.");
         }
 
-        // Récupération obligatoire du compte bénéficiaire en liste blanche (Hardcoded Whitelist)
-        $beneficiaireConfig = config('emobilier.beneficiaire_officiel');
+        // Récupération obligatoire du compte bénéficiaire officiel (centralisé en BDD, éditable uniquement par M. Justin MAGNIDE)
+        $beneficiaireConfig = $this->settings->getBeneficiaireOfficiel();
         $compteBeneficiaire = $typeCompte === 'virement_bancaire'
             ? $beneficiaireConfig['rib_bancaire']
             : $beneficiaireConfig['mobile_money'];

@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\Admin\DemandeClientAdminController;
 use App\Http\Controllers\Api\Admin\DemasquageController;
 use App\Http\Controllers\Api\Admin\LegalDocumentController;
 use App\Http\Controllers\Api\Admin\OperationalMetricsController;
+use App\Http\Controllers\Api\Admin\PlatformSettingController;
 use App\Http\Controllers\Api\Admin\SearchRequestMatchingController;
 use App\Http\Controllers\Api\Admin\SecurityAlertController;
 use App\Http\Controllers\Api\Admin\SystemHealthController;
@@ -60,6 +61,9 @@ Route::post('/proprietes/{propertyIdParam}/inquiries', [PropertyInquiryControlle
 // Conformité légale publique : consultation de la version active des CGU
 Route::get('/cgu/courante', [LegalDocumentController::class, 'cguCourante']);
 
+// Configuration publique dynamique (tarifs officiels, contacts, identité)
+Route::get('/public/config', [PlatformSettingController::class, 'publicConfig']);
+
 // Routes protégées par token Sanctum et compte actif
 Route::middleware(['auth:sanctum', 'active'])->group(function () {
     // Profil et compte utilisateur commun
@@ -91,9 +95,17 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::post('/proprietes/{id}/debloquer', [PosteController::class, 'debloquerDetails']);
         Route::post('/proprietes/{id}/payer-vue', [PosteController::class, 'debloquerDetails']);
 
-        // Suivi des demandes de contact / rendez-vous / tableau de bord agent
+        // Suivi des demandes sortantes (Client/Agent/Admin)
         Route::get('/mes-inquiries', [PropertyInquiryController::class, 'mesDemandes']);
+    });
+
+    // Tableau de bord Agent mobilier (strictement interdit aux Clients propriétaires)
+    Route::middleware('role:Agent mobilier|Admin|Super Admin Principal')->group(function () {
         Route::get('/agent/dashboard', [PropertyInquiryController::class, 'agentDashboard']);
+    });
+
+    // Mise à jour statut d'une inquiry (Admin / Agent / Demandeur)
+    Route::middleware('role:Client|Agent mobilier|Admin|Super Admin Principal|Super Admin Technique|Secrétaire')->group(function () {
         Route::patch('/inquiries/{id}/statut', [PropertyInquiryController::class, 'updateStatut']);
     });
 
@@ -147,8 +159,8 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::get('/admin/demasquages/mes-demandes', [DemasquageController::class, 'mesDemandes']);
     });
 
-    // Arbitrage des démasquages (Super Administrateurs : Principal et Technique)
-    Route::middleware('super_admin')->group(function () {
+    // Arbitrage des démasquages de coordonnées clients (Super Admin Principal uniquement)
+    Route::middleware('super_admin_principal')->group(function () {
         Route::get('/admin/demasquages/en-attente', [DemasquageController::class, 'enAttente']);
         Route::post('/admin/demasquages/{id}/approuver', [DemasquageController::class, 'approuver']);
         Route::post('/admin/demasquages/{id}/refuser', [DemasquageController::class, 'refuser']);
@@ -231,6 +243,10 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
 
         // Publication de nouvelles versions de documents légaux
         Route::post('/admin/cgu', [LegalDocumentController::class, 'publierDocument']);
+
+        // Paramètres administrables de la plateforme (tarifs/finance verrouillés sur isFinancialOwner)
+        Route::get('/admin/settings', [PlatformSettingController::class, 'index']);
+        Route::patch('/admin/settings', [PlatformSettingController::class, 'update']);
 
         // Journal d'audit de sécurité (Filtrage automatique hors finance pour Tech)
         Route::get('/admin/audit-logs', [AuditLogController::class, 'index']);

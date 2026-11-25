@@ -23,20 +23,27 @@ import {
   VisitesOpsSection,
 } from '@/components/admin/admin-ops-sections';
 import { SuperAdminPrincipalPortal } from '@/components/super-admin/super-admin-portal';
+import {
+  SuperAdminPostsSection,
+  SuperAdminSettingsSection,
+} from '@/components/super-admin/super-admin-sections';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
 import { useTheme } from '@/hooks/use-theme';
 import { cguApi } from '@/services/api';
+import { showMessage } from '@/utils/dialog';
 
 type AdminTabKey =
   | 'metrics'
   | 'moderation'
+  | 'catalogue'
   | 'visites'
   | 'demandes'
   | 'demasquages'
   | 'kyc'
   | 'governance'
+  | 'parametres'
   | 'tech';
 
 export default function AdminDashboardScreen() {
@@ -65,7 +72,9 @@ function StandardAdminDashboard() {
     ];
     if (canKyc) list.push({ key: 'kyc', label: 'Agents KYC' });
     if (isSuperAdmin) {
+      list.push({ key: 'catalogue', label: 'Tous les posts' });
       list.push({ key: 'governance', label: 'Gouvernance' });
+      list.push({ key: 'parametres', label: 'Paramètres' });
       list.push({ key: 'tech', label: 'Tech & Sécurité' });
     }
     return list;
@@ -92,9 +101,9 @@ function StandardAdminDashboard() {
     if (res.success) {
       setCharteModalVisible(false);
       setRefreshTick((t) => t + 1);
-      Alert.alert('Charte signée', res.message || 'Accès administration débloqué.');
+      showMessage('Charte signée', res.message || 'Accès administration débloqué.');
     } else {
-      Alert.alert('Erreur', res.message || 'Impossible de signer la charte.');
+      showMessage('Erreur', res.message || 'Impossible de signer la charte.');
     }
   };
 
@@ -155,11 +164,13 @@ function StandardAdminDashboard() {
         contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 28 }]}>
         {activeTab === 'metrics' && <MetricsSection onCharteRequired={handleCharteRequired} />}
         {activeTab === 'moderation' && <ModerationSection onCharteRequired={handleCharteRequired} />}
+        {activeTab === 'catalogue' && <SuperAdminPostsSection />}
         {activeTab === 'visites' && <VisitesOpsSection onCharteRequired={handleCharteRequired} />}
         {activeTab === 'demandes' && <DemandesMatchingSection onCharteRequired={handleCharteRequired} />}
-        {activeTab === 'demasquages' && <DemasquagesSection />}
-        {activeTab === 'kyc' && <AgentsKycSection />}
+        {activeTab === 'demasquages' && <DemasquagesSection onCharteRequired={handleCharteRequired} />}
+        {activeTab === 'kyc' && <AgentsKycSection onCharteRequired={handleCharteRequired} />}
         {activeTab === 'governance' && <GovernanceSection />}
+        {activeTab === 'parametres' && <SuperAdminSettingsSection />}
         {activeTab === 'tech' && <TechHealthSection />}
       </ScrollView>
 

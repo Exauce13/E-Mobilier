@@ -43,8 +43,8 @@ class KkiapayService
             ];
         }
 
-        // Mode test / mock pour les tests automatisés ou références de simulation
-        if (app()->environment('testing') || str_starts_with($transactionId, 'TEST_') || str_starts_with($transactionId, 'MOCK_') || str_starts_with($transactionId, 'PAY-POST-')) {
+        // Mode test / mock STRICTEMENT limité aux environnements local & testing (jamais en production)
+        if (app()->environment('testing') || (app()->environment('local') && (str_starts_with($transactionId, 'TEST_') || str_starts_with($transactionId, 'MOCK_') || str_starts_with($transactionId, 'PAY-POST-')))) {
             return [
                 'success' => true,
                 'message' => 'Transaction simulée avec succès (Environnement de test).',

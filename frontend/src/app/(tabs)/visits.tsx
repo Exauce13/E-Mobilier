@@ -13,7 +13,6 @@ import {
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -25,12 +24,13 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { BottomTabInset, Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
+import { usePlatformConfig } from '@/context/platform-config-context';
 import { useResponsive } from '@/hooks/use-responsive';
 import { useTheme } from '@/hooks/use-theme';
 import { inquiriesApi, visitesApi } from '@/services/api';
-import { localInquiriesStorage } from '@/services/local-store';
 import type { PropertyInquiryItem, VisiteBackendItem } from '@/types/api';
 import { formatFcfa } from '@/types/property';
+import { confirmDialog, showMessage } from '@/utils/dialog';
 import { getInquiryTypeLabel, getStatusDisplay } from '@/utils/validation';
 
 const STATUS_TABS = [
@@ -46,6 +46,8 @@ export default function VisitsScreen() {
   const insets = useSafeAreaInsets();
   const { horizontalPadding } = useResponsive();
   const { isAuthenticated, openAuthModal, isAgentMobilier, isAdminStaff } = useAuth();
+  const { tarifs } = usePlatformConfig();
+  const visitFeeLabel = tarifs ? formatFcfa(tarifs.visite) : '...';
 
   const [section, setSection] = useState<'visites' | 'rdv'>('visites');
   const [statusFilter, setStatusFilter] = useState<string>('tous');
@@ -53,13 +55,13 @@ export default function VisitsScreen() {
   const [inquiries, setInquiries] = useState<PropertyInquiryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadVisits = useCallback(async () => {
-    const localInqs = await localInquiriesStorage.list();
-
+    setLoadError(null);
     if (!isAuthenticated) {
       setVisits([]);
-      setInquiries(localInqs);
+      setInquiries([]);
       return;
     }
 
@@ -70,15 +72,13 @@ export default function VisitsScreen() {
 
     if (visRes.success && visRes.data) {
       setVisits(visRes.data.data || []);
+    } else {
+      setLoadError(visRes.message || 'Impossible de charger vos visites.');
     }
     if (inqRes.success && inqRes.data?.data) {
-      const merged = [...inqRes.data.data];
-      localInqs.forEach((loc) => {
-        if (!merged.some((m) => m.id === loc.id)) merged.push(loc);
-      });
-      setInquiries(merged);
+      setInquiries(inqRes.data.data);
     } else {
-      setInquiries(localInqs);
+      setInquiries([]);
     }
   }, [isAuthenticated, statusFilter]);
 
@@ -101,36 +101,31 @@ export default function VisitsScreen() {
     setRefreshing(false);
   };
 
-  const handleCancel = (visitId: number) => {
-    Alert.alert(
+  const handleCancel = async (visitId: number) => {
+    const ok = await confirmDialog(
       'Annuler cette visite ?',
       'Cette action marquera la demande de visite comme annulée.',
-      [
-        { text: 'Non', style: 'cancel' },
-        {
-          text: 'Oui, annuler',
-          style: 'destructive',
-          onPress: async () => {
-            const res = await visitesApi.cancelVisit(visitId);
-            if (res.success) {
-              await loadVisits();
-            } else {
-              Alert.alert('Erreur', res.message || "Impossible d'annuler.");
-            }
-          },
-        },
-      ]
+      'Oui, annuler',
+      'Non'
     );
+    if (!ok) return;
+    const res = await visitesApi.cancelVisit(visitId);
+    if (res.success) {
+      await loadVisits();
+    } else {
+      showMessage('Erreur', res.message || "Impossible d'annuler.");
+    }
   };
 
   if (!isAuthenticated) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
         <View style={styles.authGate}>
-          <Text style={[styles.gateTitle, { color: theme.text }]}>Mes Visites & Rendez-vous</Text>
+          <Text style={[styles.gateTitle, { color: theme.text }]}>Mes Visites Physiques</Text>
           <Text style={[styles.gateDesc, { color: theme.textSecondary }]}>
-            Connectez-vous pour consulter vos visites physiques (500 F CFA), rendez-vous et prises de
-            contact.
+            {tarifs
+              ? `Connectez-vous pour consulter vos visites physiques encadrées (${formatFcfa(tarifs.visite)}) et leur suivi terrain.`
+              : 'Connectez-vous pour consulter vos visites physiques encadrées E-Mobilier.'}
           </Text>
           <Pressable
             onPress={() => openAuthModal('login')}
@@ -160,13 +155,13 @@ export default function VisitsScreen() {
           {/* Header */}
           <View style={styles.headerRow}>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.pageTitle, { color: theme.text }]}>Suivi des Visites & RDV</Text>
+              <Text style={[styles.pageTitle, { color: theme.text }]}>Mes Visites Physiques</Text>
               <Text style={[styles.pageSub, { color: theme.textSecondary }]}>
                 {isAdminStaff
-                  ? 'Vue globale administrateur'
+                  ? 'Vos demandes personnelles — ouvrez le Back-Office pour gérer toutes les visites'
                   : isAgentMobilier
-                  ? 'Visites reçues, demandées et rendez-vous clients'
-                  : 'Vos visites physiques, rendez-vous et prises de contact'}
+                  ? 'Vos visites demandées — consultez le Tableau Agent pour les visites reçues sur vos biens'
+                  : 'Suivi de vos visites physiques encadrées par E-Mobilier'}
               </Text>
             </View>
             {isAdminStaff ? (
@@ -184,6 +179,21 @@ export default function VisitsScreen() {
             ) : null}
           </View>
 
+          {loadError ? (
+            <View
+              style={[
+                styles.emptyBox,
+                { backgroundColor: '#FEF2F2', borderColor: '#FECACA', paddingVertical: 14 },
+              ]}>
+              <Text style={{ color: '#B91C1C', fontWeight: '700', fontSize: 13 }}>{loadError}</Text>
+              <Pressable
+                onPress={() => void handleRefresh()}
+                style={[styles.adminBtn, { backgroundColor: '#B91C1C' }]}>
+                <Text style={styles.adminBtnText}>Réessayer</Text>
+              </Pressable>
+            </View>
+          ) : null}
+
           {/* Section switcher */}
           <View style={[styles.sectionSwitch, { backgroundColor: theme.backgroundElement }]}>
             <Pressable
@@ -198,7 +208,7 @@ export default function VisitsScreen() {
                   fontWeight: '800',
                   fontSize: 13,
                 }}>
-                Visites encadrées ({visits.length})
+                Visites physiques ({visits.length})
               </Text>
             </Pressable>
             <Pressable
@@ -213,7 +223,7 @@ export default function VisitsScreen() {
                   fontWeight: '800',
                   fontSize: 13,
                 }}>
-                RDV & Contacts ({inquiries.length})
+                Historique demandes ({inquiries.length})
               </Text>
             </Pressable>
           </View>
@@ -329,7 +339,7 @@ export default function VisitsScreen() {
                           <Clock size={14} color={theme.gold} strokeWidth={2.2} />
                         )}
                         <Text style={[styles.infoText, { color: theme.primary }]}>
-                          {item.is_fee_paid ? 'Frais 500 F acquittés' : 'Paiement requis'}
+                          {item.is_fee_paid ? `Frais ${visitFeeLabel} acquittés` : 'Paiement requis'}
                         </Text>
                       </View>
                     </View>
@@ -366,9 +376,9 @@ export default function VisitsScreen() {
                       </View>
                     ) : null}
 
-                    {item.status === 'pending' && (
+                    {(item.status === 'pending' || item.status === 'confirmed') && (
                       <Pressable
-                        onPress={() => handleCancel(item.id)}
+                        onPress={() => void handleCancel(item.id)}
                         style={[styles.cancelBtn, { borderColor: '#FCA5A5' }]}>
                         <Text style={styles.cancelBtnText}>Annuler la visite</Text>
                       </Pressable>
@@ -387,8 +397,8 @@ export default function VisitsScreen() {
                 Aucun rendez-vous ni contact enregistré
               </Text>
               <Text style={[styles.emptyDesc, { color: theme.textSecondary }]}>
-                Depuis la fiche de n'importe quel bien, cliquez sur « Demander une visite », « Prendre
-                RDV » ou « Contacter ».
+                Pour visiter un bien, ouvrez sa fiche détaillée et réservez une visite physique encadrée
+                par E-Mobilier.
               </Text>
             </View>
           ) : (

@@ -24,12 +24,14 @@ class ZoneController extends Controller
             $query->where('is_active', $request->boolean('is_active'));
         }
 
+        $like = \Illuminate\Support\Facades\DB::connection()->getDriverName() === 'pgsql' ? 'ILIKE' : 'LIKE';
+
         // Filtre par commune ou département
         if ($request->filled('commune')) {
-            $query->where('commune', 'ILIKE', '%' . $request->input('commune') . '%');
+            $query->where('commune', $like, '%' . $request->input('commune') . '%');
         }
         if ($request->filled('departement')) {
-            $query->where('departement', 'ILIKE', '%' . $request->input('departement') . '%');
+            $query->where('departement', $like, '%' . $request->input('departement') . '%');
         }
 
         $zones = $query->withCount(['users', 'proprietes'])

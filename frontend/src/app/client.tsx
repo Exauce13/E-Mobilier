@@ -35,7 +35,7 @@ import {
   proprietesApi,
   visitesApi,
 } from '@/services/api';
-import { favoritesStorage, localInquiriesStorage } from '@/services/local-store';
+import { favoritesStorage } from '@/services/local-store';
 import type {
   BackendProperty,
   DemandeRechercheItem,
@@ -64,14 +64,11 @@ export default function ClientSpaceScreen() {
   const [favoritesCount, setFavoritesCount] = useState(0);
 
   const loadClientData = useCallback(async () => {
-    const [favs, localInqs] = await Promise.all([
-      favoritesStorage.getAll(),
-      localInquiriesStorage.list(),
-    ]);
+    const favs = await favoritesStorage.getAll();
     setFavoritesCount(favs.size);
 
     if (!isAuthenticated) {
-      setMyInquiries(localInqs);
+      setMyInquiries([]);
       setMyProperties([]);
       setMyRequests([]);
       setMyVisits([]);
@@ -95,14 +92,9 @@ export default function ClientSpaceScreen() {
       setMyVisits(visRes.data.data || []);
     }
     if (inqRes.success && inqRes.data?.data) {
-      const apiItems = inqRes.data.data;
-      const merged = [...apiItems];
-      localInqs.forEach((loc) => {
-        if (!merged.some((m) => m.id === loc.id)) merged.push(loc);
-      });
-      setMyInquiries(merged);
+      setMyInquiries(inqRes.data.data);
     } else {
-      setMyInquiries(localInqs);
+      setMyInquiries([]);
     }
   }, [isAuthenticated]);
 

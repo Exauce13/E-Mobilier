@@ -8,6 +8,7 @@ use App\Models\Paiement;
 use App\Models\Proprietes;
 use App\Models\Visite_client;
 use App\Services\KkiapayService;
+use App\Services\PlatformSettingsService;
 use App\Services\PushNotificationService;
 use Exception;
 use Illuminate\Http\JsonResponse;
@@ -19,7 +20,8 @@ class VisitController extends Controller
 {
     public function __construct(
         protected KkiapayService $kkiapayService,
-        protected PushNotificationService $pushNotificationService
+        protected PushNotificationService $pushNotificationService,
+        protected PlatformSettingsService $settings
     ) {
     }
 
@@ -61,8 +63,8 @@ class VisitController extends Controller
             ], 422);
         }
 
-        // Frais obligatoires de visite physique : 500 FCFA
-        $fraisVisite = 500;
+        // Frais obligatoires de visite physique (centralisés en BDD)
+        $fraisVisite = $this->settings->getTarifs()['visite'];
         $transactionId = $request->input('kkiapay_transaction_id');
 
         // Vérification de la transaction Kkiapay de 500 FCFA
@@ -144,7 +146,7 @@ class VisitController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Votre demande de visite a été enregistrée avec succès suite à la confirmation de vos frais de visite (500 FCFA).',
+                'message' => "Votre demande de visite a été enregistrée avec succès suite à la confirmation de vos frais de visite ({$fraisVisite} FCFA).",
                 'data' => [
                     'visite' => $visite->load(['propriete.media']),
                     'paiement' => $paiement,
@@ -190,7 +192,7 @@ class VisitController extends Controller
             ], 401);
         }
 
-        $isAdmin = $user->hasRole('Admin');
+        $isAdmin = $user->isAnyAdmin();
         $isAgent = $user->hasRole('Agent mobilier');
 
         $query = Visite_client::with(['propriete.media', 'propriete.user', 'agent:id,name,prenom,telephone,email', 'client:id,name,prenom,telephone,email'])
@@ -261,7 +263,7 @@ class VisitController extends Controller
             ], 404);
         }
 
-        $isAdmin = $user->hasRole('Admin');
+        $isAdmin = $user->isAnyAdmin();
         $isAgent = $user->hasRole('Agent mobilier') && $visite->target_agent_id === $user->id;
         $isRequesterClient = $visite->client_id === $user->id;
 
@@ -307,7 +309,7 @@ class VisitController extends Controller
             ], 404);
         }
 
-        if ($visite->client_id !== $user->id && ! $user->hasRole('Admin')) {
+        if ($visite->client_id !== $user->id && ! $user->isAnyAdmin()) {
             return response()->json([
                 'success' => false,
                 'message' => 'Vous n\'êtes pas autorisé à modifier cette visite.',

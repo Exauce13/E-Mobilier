@@ -29,6 +29,7 @@ import {
   SuperAdminPageKey,
   SuperAdminPostsSection,
   SuperAdminProfileSection,
+  SuperAdminSettingsSection,
 } from '@/components/super-admin/super-admin-sections';
 import { useAuth } from '@/context/auth-context';
 
@@ -40,6 +41,7 @@ const PAGE_META: Record<SuperAdminPageKey, { title: string; subtitle: string }> 
   demasquages: { title: 'Démasquages TTL', subtitle: 'Arbitrage anti-contournement des accès aux coordonnées' },
   equipe: { title: 'Équipe, KYC & Zones', subtitle: 'Gestion des rôles RBAC, agrément agents et zones du Bénin' },
   logs: { title: 'Journalisation Globale', subtitle: 'Audit chronologique complet de toute la plateforme E-Mobilier' },
+  parametres: { title: 'Paramètres & Tarifs', subtitle: 'Tarifs officiels, contacts publics, TTL sécurité et bénéficiaire' },
   securite: { title: 'CGU & Santé Système', subtitle: 'Documents légaux, webhooks et santé infrastructure' },
   profil: { title: 'Mon Profil Super Admin', subtitle: 'Photo de profil, informations personnelles et sécurité 2FA' },
 };
@@ -68,6 +70,7 @@ const NAV_GROUPS: Array<{
     items: [
       { key: 'equipe', label: 'Équipe, KYC & Zones' },
       { key: 'logs', label: 'Journalisation Globale' },
+      { key: 'parametres', label: 'Paramètres & Tarifs' },
       { key: 'securite', label: 'CGU & Santé Système' },
     ],
   },
@@ -226,6 +229,7 @@ export function SuperAdminPrincipalPortal({
                   { key: 'demasquages', label: 'TTL' },
                   { key: 'equipe', label: 'Équipe & KYC' },
                   { key: 'logs', label: 'Journalisation' },
+                  { key: 'parametres', label: 'Paramètres' },
                   { key: 'securite', label: 'Système' },
                   { key: 'profil', label: 'Profil' },
                 ].map((tab) => {
@@ -308,6 +312,7 @@ export function SuperAdminPrincipalPortal({
             )}
 
             {activePage === 'logs' && <SuperAdminLogsSection />}
+            {activePage === 'parametres' && <SuperAdminSettingsSection />}
             {activePage === 'securite' && <TechHealthSection />}
             {activePage === 'profil' && <SuperAdminProfileSection />}
           </ScrollView>

@@ -51,10 +51,12 @@ class VueDemandeClient extends Controller
             $query->where('transaction_type', $request->input('transaction_type'));
         }
 
+        $like = \Illuminate\Support\Facades\DB::connection()->getDriverName() === 'pgsql' ? 'ILIKE' : 'LIKE';
+
         // Filtre optionnel par commune
         if ($request->filled('target_commune') || $request->filled('commune')) {
             $commune = $request->input('target_commune', $request->input('commune'));
-            $query->where('target_commune', 'ILIKE', '%' . $commune . '%');
+            $query->where('target_commune', $like, '%' . $commune . '%');
         }
 
         // Filtre optionnel par identifiant du client
@@ -70,16 +72,16 @@ class VueDemandeClient extends Controller
         // Recherche par mot-clé global (commune, quartier, détails ou informations client)
         if ($request->filled('search')) {
             $search = $request->input('search');
-            $query->where(function ($q) use ($search) {
-                $q->where('target_commune', 'ILIKE', "%{$search}%")
-                    ->orWhere('target_arrondissement', 'ILIKE', "%{$search}%")
-                    ->orWhere('target_quartier', 'ILIKE', "%{$search}%")
-                    ->orWhere('criteria_details', 'ILIKE', "%{$search}%")
-                    ->orWhereHas('client', function ($clientQ) use ($search) {
-                        $clientQ->where('name', 'ILIKE', "%{$search}%")
-                            ->orWhere('prenom', 'ILIKE', "%{$search}%")
-                            ->orWhere('email', 'ILIKE', "%{$search}%")
-                            ->orWhere('telephone', 'ILIKE', "%{$search}%");
+            $query->where(function ($q) use ($search, $like) {
+                $q->where('target_commune', $like, "%{$search}%")
+                    ->orWhere('target_arrondissement', $like, "%{$search}%")
+                    ->orWhere('target_quartier', $like, "%{$search}%")
+                    ->orWhere('criteria_details', $like, "%{$search}%")
+                    ->orWhereHas('client', function ($clientQ) use ($search, $like) {
+                        $clientQ->where('name', $like, "%{$search}%")
+                            ->orWhere('prenom', $like, "%{$search}%")
+                            ->orWhere('email', $like, "%{$search}%")
+                            ->orWhere('telephone', $like, "%{$search}%");
                     });
             });
         }

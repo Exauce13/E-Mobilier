@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\Finance;
 
+use App\Contracts\PaymentGatewayInterface;
 use App\Http\Controllers\Controller;
 use App\Models\Paiement;
 use App\Models\Proprietes;
@@ -10,6 +11,7 @@ use App\Models\WebhookLog;
 use App\Services\AuditService;
 use App\Services\FinancialLedgerService;
 use App\Services\Gateways\PaymentGatewayManager;
+use App\Services\PlatformSettingsService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -20,11 +22,16 @@ class PaymentController extends Controller
 {
     protected PaymentGatewayManager $gatewayManager;
     protected FinancialLedgerService $ledgerService;
+    protected PlatformSettingsService $settings;
 
-    public function __construct(PaymentGatewayManager $gatewayManager, FinancialLedgerService $ledgerService)
-    {
+    public function __construct(
+        PaymentGatewayManager $gatewayManager,
+        FinancialLedgerService $ledgerService,
+        PlatformSettingsService $settings
+    ) {
         $this->gatewayManager = $gatewayManager;
         $this->ledgerService = $ledgerService;
+        $this->settings = $settings;
     }
 
     /**
@@ -47,13 +54,21 @@ class PaymentController extends Controller
             'cgu_acceptees' => ['required', 'accepted'],
         ]);
 
-        // Détermination du tarif officiel côté serveur (Server-Side Price Authority)
-        $tarifs = config('emobilier.tarifs_officiels');
+        // Sécurité tarifaire : un compte Client ne peut pas initier une publication au tarif Agent (100 F)
+        if ($validated['type_operation'] === 'publication_agent' && ! $user->hasRole('Agent mobilier') && ! $user->isAnyAdmin()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Le tarif préférentiel Agent mobilier est réservé aux comptes agents agréés.',
+            ], 403);
+        }
+
+        // Détermination du tarif officiel côté serveur (Server-Side Price Authority depuis BDD)
+        $tarifs = $this->settings->getTarifs();
         $montant = match ($validated['type_operation']) {
-            'visite' => (int) $tarifs['visite'], // 500 FCFA
-            'deblocage_coordonnees' => (int) $tarifs['deblocage_coordonnees'], // 50 FCFA
-            'publication_agent' => (int) $tarifs['post_agent'], // 100 FCFA
-            'publication_client' => (int) $tarifs['post_client'], // 500 FCFA
+            'visite' => (int) $tarifs['visite'],
+            'deblocage_coordonnees' => (int) $tarifs['deblocage_coordonnees'],
+            'publication_agent' => (int) $tarifs['post_agent'],
+            'publication_client' => (int) $tarifs['post_client'],
         };
 
         // Création de la référence interne unique
@@ -162,7 +177,7 @@ class PaymentController extends Controller
     /**
      * Réconciliation atomique et mise à jour du Grand Livre.
      */
-    protected function traiterReconciliationPaiement($gateway, string $transactionId, array $rawPayload, ?string $ip): array
+    protected function traiterReconciliationPaiement(PaymentGatewayInterface $gateway, string $transactionId, array $rawPayload, ?string $ip): array
     {
         // 1. Double vérification serveur-à-serveur
         $verif = $gateway->verifyTransaction($transactionId);
@@ -325,7 +340,7 @@ class PaymentController extends Controller
 
         $paiement = Paiement::where('transaction_reference', $ref)->first();
         if (! $paiement) {
-            $ecriture = \App\Models\GrandLivre::where('reference_paiement_passerelle', $ref)
+            $ecriture = \App\Models\GrandLivre::where('gateway_transaction_id', $ref)
                 ->orWhere('description', 'LIKE', "%{$ref}%")
                 ->first();
             $paiement = $ecriture?->paiement;
@@ -346,7 +361,7 @@ class PaymentController extends Controller
             'data' => [
                 'quittance_numero' => 'REC-' . strtoupper(substr(md5($paiement->transaction_reference), 0, 8)),
                 'reference_transaction' => $paiement->transaction_reference,
-                'emetteur' => 'E-MOBILIER SARL (Bénin)',
+                'emetteur' => $this->settings->getString('platform_legal_name', 'E-MOBILIER SARL (Bénin)'),
                 'payeur' => [
                     'id' => $paiement->user_id,
                     'nom' => $paiement->user?->full_name,

@@ -16,11 +16,14 @@ class VisiteClientResource extends JsonResource
         $user = $request->user();
         $client = $this->client;
 
-        // Déterminer les droits de lecture en clair
+        // Règle de confidentialité E-Mobilier :
+        // Seuls les Super Admins Principaux voient en permanence les coordonnées clients en clair.
+        // Secrétaire & Responsable de zone : uniquement via démasquage temporaire (TTL) approuvé.
+        // Super Admin Technique : coordonnées clients toujours masquées.
         $canViewClear = false;
 
         if ($user) {
-            if ($user->isSuperAdminPrincipal() || $user->isSuperAdminTechnique()) {
+            if ($user->isSuperAdminPrincipal()) {
                 $canViewClear = true;
             } elseif ($user->isSecretaire() || $user->isResponsableZone()) {
                 $canViewClear = DemandeDemasquage::hasActiveAccess($user->id, 'visite', $this->id);

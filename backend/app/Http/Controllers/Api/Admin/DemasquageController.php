@@ -7,12 +7,17 @@ use App\Models\Demande_client;
 use App\Models\DemandeDemasquage;
 use App\Models\Visite_client;
 use App\Services\AuditService;
+use App\Services\PlatformSettingsService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
 class DemasquageController extends Controller
 {
+    public function __construct(
+        protected PlatformSettingsService $settings
+    ) {
+    }
     /**
      * Soumet une demande formelle de démasquage temporaire sur un dossier précis.
      * Réservé aux Secrétaires et Responsables de zone.
@@ -91,7 +96,7 @@ class DemasquageController extends Controller
             'motif' => $validated['motif'],
             'justification' => $validated['justification'],
             'statut' => 'en_attente',
-            'duree_minutes' => config('emobilier.demasquage_default_ttl_minutes', 120),
+            'duree_minutes' => $this->settings->getDemasquageDefaultTtlMinutes(),
         ]);
 
         AuditService::log('demande_demasquage_soumise', $demande, [
@@ -172,11 +177,12 @@ class DemasquageController extends Controller
             ], 422);
         }
 
+        $maxTtl = $this->settings->getDemasquageMaxTtlMinutes();
         $validated = $request->validate([
-            'duree_minutes' => ['nullable', 'integer', 'min:15', 'max:1440'],
+            'duree_minutes' => ['nullable', 'integer', 'min:15', 'max:' . $maxTtl],
         ]);
 
-        $duree = $validated['duree_minutes'] ?? config('emobilier.demasquage_default_ttl_minutes', 120);
+        $duree = $validated['duree_minutes'] ?? $this->settings->getDemasquageDefaultTtlMinutes();
         $expiresAt = now()->addMinutes($duree);
 
         $demande->update([
@@ -315,11 +321,13 @@ class DemasquageController extends Controller
             ], 404);
         }
 
-        // 3. Contrôle des droits d'accès
-        $isSuperAdmin = $user->isSuperAdminPrincipal() || $user->isSuperAdminTechnique();
+        // 3. Contrôle des droits d'accès STRICT :
+        // Seuls les Super Admins Principaux ont un accès permanent aux coordonnées réelles des clients.
+        // Les autres profils (Secrétaire, Responsable de zone) nécessitent une autorisation TTL active.
+        $isSuperAdminPrincipal = $user->isSuperAdminPrincipal();
         $hasActiveTtl = DemandeDemasquage::hasActiveAccess($user->id, $type, $id);
 
-        if (! $isSuperAdmin && ! $hasActiveTtl) {
+        if (! $isSuperAdminPrincipal && ! $hasActiveTtl) {
             AuditService::securityAlert('TENTATIVE_LECTURE_COORDONNEES_SANS_AUTORISATION', "L'utilisateur ID {$user->id} ({$user->email}) a tenté de lire les coordonnées du dossier {$ref} sans autorisation valide.", [
                 'type_dossier' => $type,
                 'dossier_id' => $id,
@@ -328,7 +336,7 @@ class DemasquageController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Accès refusé : Vous ne disposez pas d\'une autorisation active et non expirée pour consulter les coordonnées réelles de ce client.',
+                'message' => 'Accès refusé : Seul un Super Admin Principal ou un agent disposant d\'une autorisation TTL active peut consulter les coordonnées réelles de ce client.',
                 'code' => 'UNAUTHORIZED_CONTACT_ACCESS',
                 'demasquage_requis' => true,
             ], 403);
@@ -336,7 +344,7 @@ class DemasquageController extends Controller
 
         // 4. Récupération de l'échéance si sous TTL
         $expiresAt = null;
-        if (! $isSuperAdmin) {
+        if (! $isSuperAdminPrincipal) {
             $grant = DemandeDemasquage::where('user_id', $user->id)
                 ->where('type_dossier', $type)
                 ->where('dossier_id', $id)
@@ -354,7 +362,7 @@ class DemasquageController extends Controller
             'reference' => $ref,
             'client_cible_id' => $client->id,
             'consulte_par' => $user->email,
-            'mode_acces' => $isSuperAdmin ? 'SUPER_ADMIN' : 'TTL_DEMASQUAGE',
+            'mode_acces' => $isSuperAdminPrincipal ? 'SUPER_ADMIN_PRINCIPAL' : 'TTL_DEMASQUAGE',
             'expires_at' => $expiresAt,
         ]);
 
@@ -370,7 +378,7 @@ class DemasquageController extends Controller
                 'telephone' => $client->telephone,
                 'email' => $client->email,
                 'is_verifed' => $client->is_verifed,
-                'mode_acces' => $isSuperAdmin ? 'Permanent (Super Admin)' : 'Temporaire (TTL)',
+                'mode_acces' => $isSuperAdminPrincipal ? 'Permanent (Super Admin Principal)' : 'Temporaire (TTL)',
                 'expires_at' => $expiresAt,
             ],
         ]);

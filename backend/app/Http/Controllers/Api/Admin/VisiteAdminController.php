@@ -36,13 +36,14 @@ class VisiteAdminController extends Controller
             $userZone = $user->zone;
             $commune = $userZone?->commune;
 
-            $query->where(function ($q) use ($user, $commune) {
+            $like = \Illuminate\Support\Facades\DB::connection()->getDriverName() === 'pgsql' ? 'ILIKE' : 'LIKE';
+            $query->where(function ($q) use ($user, $commune, $like) {
                 $q->where('zone_id', $user->zone_id)
                     ->orWhere('target_agent_id', $user->id)
-                    ->orWhereHas('propriete', function ($propQ) use ($user, $commune) {
+                    ->orWhereHas('propriete', function ($propQ) use ($user, $commune, $like) {
                         $propQ->where('zone_id', $user->zone_id);
                         if ($commune) {
-                            $propQ->orWhere('commune', 'ILIKE', '%' . $commune . '%');
+                            $propQ->orWhere('commune', $like, '%' . $commune . '%');
                         }
                     });
             });

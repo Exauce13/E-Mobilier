@@ -80,7 +80,8 @@ export function resolveStorageUrl(rawUrl: string | undefined | null, storageBase
 export function mapBackendPropertyToItem(
   prop: BackendProperty,
   storageBaseUrl: string,
-  favoriteIds: Set<string> = new Set()
+  favoriteIds: Set<string> = new Set(),
+  defaultFees?: { unlockFee?: number; visitFee?: number }
 ): PropertyItem {
   const priceNum = Number(prop.prix) || 0;
   const isLocation = prop.transaction_type === 'location';
@@ -115,7 +116,8 @@ export function mapBackendPropertyToItem(
 
   const firstImageMedia = prop.media?.find((m) => m.media_type !== 'video');
   const resolvedImageUri = resolveStorageUrl(firstImageMedia?.media_url, storageBaseUrl);
-  const unlockFee = prop.unlock_fee ?? 50;
+  const unlockFee = prop.unlock_fee ?? defaultFees?.unlockFee ?? 0;
+  const visitFee = prop.visit_fee ?? defaultFees?.visitFee;
 
   return {
     id: String(prop.id),
@@ -145,8 +147,9 @@ export function mapBackendPropertyToItem(
       isNegotiable: prop.is_negotiable ?? false,
     },
     unlockFee,
-    visitFee: prop.visit_fee ?? 500,
-    unlockButtonText: `Débloquer les détails (${unlockFee} F)`,
+    visitFee,
+    unlockButtonText:
+      unlockFee > 0 ? `Débloquer les détails (${unlockFee} F)` : 'Débloquer les détails',
     image: resolvedImageUri ? { uri: resolvedImageUri } : FALLBACK_IMAGES[prop.type] ?? FALLBACK_IMAGES.maison,
     isFavorite: favoriteIds.has(String(prop.id)),
     isUnlocked: Boolean(prop.is_unlocked),

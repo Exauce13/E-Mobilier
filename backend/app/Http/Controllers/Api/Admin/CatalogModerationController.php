@@ -36,7 +36,7 @@ class CatalogModerationController extends Controller
             if ($status === 'pending') {
                 $query->whereIn('status', ['pending', 'pending_payment']);
             } elseif ($status === 'conclu') {
-                $query->whereIn('status', ['conclu', 'sold', 'rented']);
+                $query->whereIn('status', ['conclu', 'sold', 'rented', 'sold_rented']);
             } else {
                 $query->where('status', $status);
             }
@@ -55,14 +55,15 @@ class CatalogModerationController extends Controller
 
         if ($request->filled('search')) {
             $term = '%' . trim((string) $request->input('search')) . '%';
-            $query->where(function ($q) use ($term) {
-                $q->where('commune', 'ILIKE', $term)
-                    ->orWhere('quartier', 'ILIKE', $term)
-                    ->orWhere('type', 'ILIKE', $term)
-                    ->orWhere('description', 'ILIKE', $term)
-                    ->orWhereHas('user', function ($uq) use ($term) {
-                        $uq->where('name', 'ILIKE', $term)
-                            ->orWhere('prenom', 'ILIKE', $term);
+            $like = \Illuminate\Support\Facades\DB::connection()->getDriverName() === 'pgsql' ? 'ILIKE' : 'LIKE';
+            $query->where(function ($q) use ($term, $like) {
+                $q->where('commune', $like, $term)
+                    ->orWhere('quartier', $like, $term)
+                    ->orWhere('type', $like, $term)
+                    ->orWhere('description', $like, $term)
+                    ->orWhereHas('user', function ($uq) use ($term, $like) {
+                        $uq->where('name', $like, $term)
+                            ->orWhere('prenom', $like, $term);
                     });
             });
         }

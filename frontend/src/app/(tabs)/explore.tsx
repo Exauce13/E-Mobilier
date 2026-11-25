@@ -16,8 +16,6 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PropertyCard } from '@/components/property-card';
-import { PropertyActionModal, PropertyActionTab } from '@/components/property/property-action-modal';
-import { UnlockModal } from '@/components/unlock-modal';
 import {
   BENIN_COMMUNES,
   FILTER_CATEGORIES,
@@ -25,7 +23,6 @@ import {
 } from '@/constants/locations';
 import { BottomTabInset, Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
-import { MOCK_PROPERTIES } from '@/data/mock-properties';
 import { useResponsive } from '@/hooks/use-responsive';
 import { useTheme } from '@/hooks/use-theme';
 import { getStorageBaseUrl, proprietesApi } from '@/services/api';
@@ -56,7 +53,7 @@ export default function ExploreScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { isMobile, twoColLayout, gridColumns, contentMaxWidth, horizontalPadding } = useResponsive();
-  const { isAuthenticated, openAuthModal } = useAuth();
+  const { isAuthenticated, isAgentMobilier, openAuthModal } = useAuth();
   const storageBaseUrl = useMemo(() => getStorageBaseUrl(), []);
 
   const [searchQuery, setSearchQuery] = useState(params.q || '');
@@ -83,13 +80,12 @@ export default function ExploreScreen() {
 
   const [properties, setProperties] = useState<PropertyItem[]>([]);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
+  const [page, setPage] = useState(1);
+  const [lastPage, setLastPage] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-
-  const [unlockModalVisible, setUnlockModalVisible] = useState(false);
-  const [selectedProperty, setSelectedProperty] = useState<PropertyItem | null>(null);
-  const [actionProperty, setActionProperty] = useState<PropertyItem | null>(null);
-  const [actionTab, setActionTab] = useState<PropertyActionTab>('demande_visite');
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const availableQuartiers = useMemo(() => {
     if (selectedCommune === 'Toutes les communes') return [];
@@ -101,118 +97,73 @@ export default function ExploreScreen() {
     setSelectedQuartier('Tous');
   };
 
-  const applyClientSideFallbackFilter = useCallback(
-    (list: PropertyItem[]) => {
-      const pMin = Number(minPrice.replace(/\s+/g, '')) || 0;
-      const pMax = Number(maxPrice.replace(/\s+/g, '')) || 0;
-      const sMin = Number(minSurface.replace(/\s+/g, '')) || 0;
-      const rooms = Number(minRooms) || 0;
-      const q = searchQuery.trim().toLowerCase();
+  const loadSearchResults = useCallback(
+    async (targetPage = 1, replace = true) => {
+      setErrorMsg(null);
+      const favs = await favoritesStorage.getAll();
+      setFavoriteIds(favs);
 
-      const filtered = list.filter((p) => {
-        if (selectedCategory !== 'tous' && p.type !== selectedCategory) return false;
-        if (selectedTransaction !== 'tous' && p.transactionType !== selectedTransaction) return false;
-        if (
-          selectedCommune !== 'Toutes les communes' &&
-          !p.location.commune.toLowerCase().includes(selectedCommune.toLowerCase())
-        ) {
-          return false;
-        }
-        if (
-          selectedQuartier !== 'Tous' &&
-          !p.location.quartier.toLowerCase().includes(selectedQuartier.toLowerCase())
-        ) {
-          return false;
-        }
-        if (pMin > 0 && p.price < pMin) return false;
-        if (pMax > 0 && p.price > pMax) return false;
-        if (sMin > 0 && (p.features.surface ?? 0) < sMin) return false;
-        if (rooms > 0 && (p.features.chambres ?? 0) < rooms) return false;
-        if (negotiableOnly && !p.features.isNegotiable) return false;
-        if (q) {
-          const hay = `${p.title} ${p.location.fullAddress} ${p.tags.join(' ')}`.toLowerCase();
-          if (!hay.includes(q)) return false;
-        }
-        return true;
+      const parsedMin = Number(minPrice.replace(/\s+/g, ''));
+      const parsedMax = Number(maxPrice.replace(/\s+/g, ''));
+      const parsedSurf = Number(minSurface.replace(/\s+/g, ''));
+      const parsedRooms = Number(minRooms);
+
+      const res = await proprietesApi.getFeed({
+        type: selectedCategory === 'tous' ? undefined : selectedCategory,
+        transaction_type: selectedTransaction === 'tous' ? undefined : selectedTransaction,
+        commune: selectedCommune === 'Toutes les communes' ? undefined : selectedCommune,
+        arrondissement: arrondissement.trim() || undefined,
+        quartier: selectedQuartier === 'Tous' ? undefined : selectedQuartier,
+        prix_min: parsedMin > 0 ? parsedMin : undefined,
+        prix_max: parsedMax > 0 ? parsedMax : undefined,
+        surface_min: parsedSurf > 0 ? parsedSurf : undefined,
+        nombres_chambres: parsedRooms > 0 ? parsedRooms : undefined,
+        is_negotiable: negotiableOnly ? true : undefined,
+        accessibilite: accessFilter.trim() || undefined,
+        eau_courant: utilitiesFilter.trim() || undefined,
+        sort: sortBy,
+        search: searchQuery.trim() || undefined,
+        page: targetPage,
+        per_page: 24,
       });
 
-      if (sortBy === 'prix_asc') filtered.sort((a, b) => a.price - b.price);
-      else if (sortBy === 'prix_desc') filtered.sort((a, b) => b.price - a.price);
-      else if (sortBy === 'surface_desc') {
-        filtered.sort((a, b) => (b.features.surface ?? 0) - (a.features.surface ?? 0));
+      if (res.success && res.data) {
+        const mapped = (res.data.data || []).map((p: BackendProperty) =>
+          mapBackendPropertyToItem(p, storageBaseUrl, favs)
+        );
+        setPage(res.data.current_page || targetPage);
+        setLastPage(res.data.last_page || 1);
+        setProperties((prev) => (replace ? mapped : [...prev, ...mapped]));
+      } else {
+        if (replace) setProperties([]);
+        setErrorMsg(res.message || 'Impossible de contacter le serveur pour la recherche.');
       }
-      return filtered;
     },
     [
       selectedCategory,
       selectedTransaction,
       selectedCommune,
+      arrondissement,
       selectedQuartier,
       minPrice,
       maxPrice,
       minSurface,
       minRooms,
       negotiableOnly,
-      searchQuery,
+      accessFilter,
+      utilitiesFilter,
       sortBy,
+      searchQuery,
+      storageBaseUrl,
     ]
   );
 
-  const loadSearchResults = useCallback(async () => {
-    const favs = await favoritesStorage.getAll();
-    setFavoriteIds(favs);
-
-    const parsedMin = Number(minPrice.replace(/\s+/g, ''));
-    const parsedMax = Number(maxPrice.replace(/\s+/g, ''));
-    const parsedSurf = Number(minSurface.replace(/\s+/g, ''));
-    const parsedRooms = Number(minRooms);
-
-    const res = await proprietesApi.getFeed({
-      type: selectedCategory === 'tous' ? undefined : selectedCategory,
-      transaction_type: selectedTransaction === 'tous' ? undefined : selectedTransaction,
-      commune: selectedCommune === 'Toutes les communes' ? undefined : selectedCommune,
-      arrondissement: arrondissement.trim() || undefined,
-      quartier: selectedQuartier === 'Tous' ? undefined : selectedQuartier,
-      prix_min: parsedMin > 0 ? parsedMin : undefined,
-      prix_max: parsedMax > 0 ? parsedMax : undefined,
-      surface_min: parsedSurf > 0 ? parsedSurf : undefined,
-      nombres_chambres: parsedRooms > 0 ? parsedRooms : undefined,
-      is_negotiable: negotiableOnly ? true : undefined,
-      accessibilite: accessFilter.trim() || undefined,
-      eau_courant: utilitiesFilter.trim() || undefined,
-      sort: sortBy,
-      search: searchQuery.trim() || undefined,
-      per_page: 30,
-    });
-
-    if (res.success && res.data) {
-      setProperties(
-        (res.data.data || []).map((p: BackendProperty) =>
-          mapBackendPropertyToItem(p, storageBaseUrl, favs)
-        )
-      );
-    } else {
-      const mockWithFav = MOCK_PROPERTIES.map((m) => ({ ...m, isFavorite: favs.has(m.id) }));
-      setProperties(applyClientSideFallbackFilter(mockWithFav));
-    }
-  }, [
-    selectedCategory,
-    selectedTransaction,
-    selectedCommune,
-    arrondissement,
-    selectedQuartier,
-    minPrice,
-    maxPrice,
-    minSurface,
-    minRooms,
-    negotiableOnly,
-    accessFilter,
-    utilitiesFilter,
-    sortBy,
-    searchQuery,
-    storageBaseUrl,
-    applyClientSideFallbackFilter,
-  ]);
+  const handleLoadMore = async () => {
+    if (loadingMore || page >= lastPage) return;
+    setLoadingMore(true);
+    await loadSearchResults(page + 1, false);
+    setLoadingMore(false);
+  };
 
   useEffect(() => {
     let active = true;
@@ -678,13 +629,18 @@ export default function ExploreScreen() {
                     <Text style={[styles.resetText, { color: '#DC2626' }]}>Réinitialiser</Text>
                   </Pressable>
                 )}
-                <Pressable
-                  onPress={() => router.push('/search-requests' as any)}
-                  style={[styles.saveSearchBtn, { backgroundColor: theme.primaryLight }]}>
-                  <Text style={{ color: theme.primaryDark, fontSize: 12, fontWeight: '800' }}>
-                    + Enregistrer mon alerte
-                  </Text>
-                </Pressable>
+                {!isAgentMobilier && (
+                  <Pressable
+                    onPress={() => {
+                      if (!isAuthenticated) openAuthModal('login');
+                      else router.push('/search-requests' as any);
+                    }}
+                    style={[styles.saveSearchBtn, { backgroundColor: theme.primaryLight }]}>
+                    <Text style={{ color: theme.primaryDark, fontSize: 12, fontWeight: '800' }}>
+                      + Enregistrer mon alerte
+                    </Text>
+                  </Pressable>
+                )}
               </View>
             </View>
           </View>
@@ -692,6 +648,22 @@ export default function ExploreScreen() {
           {/* Results Grid */}
           {loading ? (
             <ActivityIndicator size="large" color={theme.primary} style={{ marginTop: 32 }} />
+          ) : errorMsg ? (
+            <View
+              style={[
+                styles.emptyBox,
+                { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder },
+              ]}>
+              <Text style={[styles.emptyTitle, { color: theme.text }]}>
+                Erreur lors de la recherche
+              </Text>
+              <Text style={[styles.emptySub, { color: theme.textSecondary }]}>{errorMsg}</Text>
+              <Pressable
+                onPress={() => void loadSearchResults(1, true)}
+                style={[styles.ctaBtn, { backgroundColor: theme.primary }]}>
+                <Text style={styles.ctaBtnText}>Réessayer</Text>
+              </Pressable>
+            </View>
           ) : properties.length === 0 ? (
             <View
               style={[
@@ -703,7 +675,7 @@ export default function ExploreScreen() {
               </Text>
               <Text style={[styles.emptySub, { color: theme.textSecondary }]}>
                 Élargissez vos critères ou publiez une demande de recherche personnalisée pour que nos
-                agents trouvent votre maison idéale.
+                équipes trouvent votre maison idéale.
               </Text>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center' }}>
                 <Pressable
@@ -711,61 +683,46 @@ export default function ExploreScreen() {
                   style={[styles.ctaBtn, { backgroundColor: theme.navy }]}>
                   <Text style={styles.ctaBtnText}>Réinitialiser les filtres</Text>
                 </Pressable>
-                <Pressable
-                  onPress={() => {
-                    if (!isAuthenticated) openAuthModal('login');
-                    else router.push('/search-requests' as any);
-                  }}
-                  style={[styles.ctaBtn, { backgroundColor: theme.primary }]}>
-                  <Text style={styles.ctaBtnText}>Créer une demande de recherche</Text>
-                </Pressable>
+                {!isAgentMobilier && (
+                  <Pressable
+                    onPress={() => {
+                      if (!isAuthenticated) openAuthModal('login');
+                      else router.push('/search-requests' as any);
+                    }}
+                    style={[styles.ctaBtn, { backgroundColor: theme.primary }]}>
+                    <Text style={styles.ctaBtnText}>Créer une demande de recherche</Text>
+                  </Pressable>
+                )}
               </View>
             </View>
           ) : (
-            <View style={styles.cardsGrid}>
-              {properties.map((item) => (
-                <View key={item.id} style={{ width: cardWidthPercent as any }}>
-                  <PropertyCard
-                    property={item}
-                    onPressCard={handleOpenProperty}
-                    onPressDetails={handleOpenProperty}
-                    onToggleFavorite={handleToggleFavorite}
-                    onPressQuickAction={(prop, action) => {
-                      setActionProperty(prop);
-                      setActionTab(action);
-                    }}
-                  />
-                </View>
-              ))}
-            </View>
+            <>
+              <View style={styles.cardsGrid}>
+                {properties.map((item) => (
+                  <View key={item.id} style={{ width: cardWidthPercent as any }}>
+                    <PropertyCard
+                      property={item}
+                      onPressCard={handleOpenProperty}
+                      onPressDetails={handleOpenProperty}
+                      onToggleFavorite={handleToggleFavorite}
+                    />
+                  </View>
+                ))}
+              </View>
+              {page < lastPage && (
+                <Pressable
+                  onPress={handleLoadMore}
+                  disabled={loadingMore}
+                  style={[styles.ctaBtn, { backgroundColor: theme.primary, alignSelf: 'center', marginTop: 8 }]}>
+                  <Text style={styles.ctaBtnText}>
+                    {loadingMore ? 'Chargement...' : "Charger plus d'annonces"}
+                  </Text>
+                </Pressable>
+              )}
+            </>
           )}
         </View>
       </ScrollView>
-
-      <UnlockModal
-        visible={unlockModalVisible}
-        property={selectedProperty}
-        onClose={() => setUnlockModalVisible(false)}
-        onConfirmUnlock={(prop, updatedBackend) => {
-          const refreshed = updatedBackend
-            ? mapBackendPropertyToItem(updatedBackend, storageBaseUrl, favoriteIds)
-            : { ...prop, isUnlocked: true };
-          setProperties((prev) => prev.map((p) => (p.id === refreshed.id ? refreshed : p)));
-          setSelectedProperty(refreshed);
-        }}
-        onOpenFullDetails={handleOpenProperty}
-      />
-
-      {actionProperty && (
-        <PropertyActionModal
-          visible={Boolean(actionProperty)}
-          initialAction={actionTab}
-          propertyId={actionProperty.backendId ?? null}
-          propertyTitle={actionProperty.title}
-          propertyLocation={actionProperty.location.fullAddress}
-          onClose={() => setActionProperty(null)}
-        />
-      )}
     </SafeAreaView>
   );
 }

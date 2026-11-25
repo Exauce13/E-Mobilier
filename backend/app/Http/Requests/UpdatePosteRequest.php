@@ -49,9 +49,8 @@ class UpdatePosteRequest extends FormRequest
         }
 
         if ($this->has('isNegotiable') && ! $this->has('is_negotiable')) {
-            $mergeData['is_negotiable'] = $this->input('isNegotiable');
-        }
-        if ($this->has('is_negotiable')) {
+            $mergeData['is_negotiable'] = filter_var($this->input('isNegotiable'), FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? false;
+        } elseif ($this->has('is_negotiable')) {
             $mergeData['is_negotiable'] = filter_var($this->input('is_negotiable'), FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? false;
         }
 
@@ -100,12 +99,13 @@ class UpdatePosteRequest extends FormRequest
             'permis_habiter' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:12288'],
             'attestation_recasement' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:12288'],
             'titre_foncier' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:12288'],
+            'plan_cadastral' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:12288'],
             'autre_document' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:12288'],
 
             'documents' => ['nullable', 'array'],
             'documents.*' => ['file', 'mimes:pdf,jpg,jpeg,png', 'max:12288'],
             'document_types' => ['nullable', 'array'],
-            'document_types.*' => ['string', 'in:convention_vente,permis_habiter,attestation_recasement,titre_foncier,autre'],
+            'document_types.*' => ['string', 'in:convention_vente,permis_habiter,attestation_recasement,titre_foncier,plan_cadastral,autre'],
 
             // Nouveaux médias éventuels
             'photos' => ['nullable', 'array'],

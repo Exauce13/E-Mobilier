@@ -168,7 +168,7 @@ class FinancialLedgerService
                 'total_retraits_vires' => $totalRetraitsExecutes,
             ],
             'ventilation_recettes' => $categories,
-            'compte_beneficiaire_officiel' => config('emobilier.beneficiaire_officiel'),
+            'compte_beneficiaire_officiel' => app(PlatformSettingsService::class)->getBeneficiaireOfficiel(),
         ];
     }
 }

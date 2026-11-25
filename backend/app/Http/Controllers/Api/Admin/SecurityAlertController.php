@@ -45,20 +45,25 @@ class SecurityAlertController extends Controller
 
         $query = AuditLog::query()
             ->where(function ($q) {
-                $q->where('action', 'LIKE', '%security%')
-                    ->orWhere('action', 'LIKE', '%violation%')
-                    ->orWhere('action', 'LIKE', '%kill_switch%')
-                    ->orWhere('action', 'LIKE', '%brute_force%')
-                    ->orWhere('action', 'LIKE', '%escalade%');
+                $q->whereRaw('LOWER(action) LIKE ?', ['%security%'])
+                    ->orWhereRaw('LOWER(action) LIKE ?', ['%violation%'])
+                    ->orWhereRaw('LOWER(action) LIKE ?', ['%kill_switch%'])
+                    ->orWhereRaw('LOWER(action) LIKE ?', ['%brute_force%'])
+                    ->orWhereRaw('LOWER(action) LIKE ?', ['%escalade%']);
             })
             ->latest();
 
         // Cloisonnement : si Tech Admin, filtrer les alertes ciblant le compte de Justin
         if (! $user->isSuperAdminPrincipal()) {
-            $ownerEmail = config('emobilier.super_admin_principal_email');
-            $query->where(function ($q) use ($ownerEmail) {
-                $q->whereNull('details')
-                    ->orWhereRaw("details::text NOT ILIKE ?", ["%{$ownerEmail}%"]);
+            $ownerEmail = strtolower((string) config('emobilier.super_admin_principal_email'));
+            $driver = $query->getConnection()->getDriverName();
+            $query->where(function ($q) use ($ownerEmail, $driver) {
+                $q->whereNull('details');
+                if ($driver === 'pgsql') {
+                    $q->orWhereRaw('LOWER(details::text) NOT LIKE ?', ["%{$ownerEmail}%"]);
+                } else {
+                    $q->orWhereRaw('LOWER(CAST(details AS CHAR)) NOT LIKE ?', ["%{$ownerEmail}%"]);
+                }
             });
         }
 

@@ -97,7 +97,8 @@ class PushNotificationService
         $dateFormatted = $visite->scheduled_date ? $visite->scheduled_date->format('d/m/Y à H:i') : 'Date à convenir';
 
         // 1. Notification Push destinée à l'ADMINISTRATION (Détails complets avec contact du client)
-        $adminTitle = 'Nouvelle demande de visite physique (500 FCFA)';
+        $visitFee = app(PlatformSettingsService::class)->getTarifs()['visite'];
+        $adminTitle = "Nouvelle demande de visite physique ({$visitFee} FCFA)";
         $adminBody = "Le client {$client->name} {$client->prenom} (Tél: {$client->telephone}) a réservé une visite pour le bien #{$propriete->id} ({$propriete->type} à {$propriete->commune}) prévue le {$dateFormatted}.";
         
         $adminData = [

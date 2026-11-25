@@ -15,6 +15,7 @@ import {
 
 import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
+import { usePlatformConfig } from '@/context/platform-config-context';
 import { useResponsive } from '@/hooks/use-responsive';
 import { useTheme } from '@/hooks/use-theme';
 import { inquiriesApi } from '@/services/api';
@@ -73,6 +74,7 @@ export function PropertyActionModal({
   const theme = useTheme();
   const { twoColLayout } = useResponsive();
   const { user, isAuthenticated } = useAuth();
+  const { tarifs } = usePlatformConfig();
 
   const [actionType, setActionType] = useState<PropertyActionTab>(initialAction);
   const [nom, setNom] = useState('');
@@ -300,7 +302,9 @@ export function PropertyActionModal({
                     }}
                     style={[styles.goldBtn, { backgroundColor: theme.gold }]}>
                     <Text style={styles.goldBtnText}>
-                      Confirmer en visite terrain prioritaire (500 F CFA)
+                      {tarifs
+                        ? `Confirmer en visite terrain prioritaire (${tarifs.visite} F CFA)`
+                        : 'Confirmer en visite terrain prioritaire'}
                     </Text>
                   </Pressable>
                 ) : null}

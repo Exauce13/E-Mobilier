@@ -6,6 +6,7 @@ import { ReceiptModal } from '@/components/receipt-modal';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
+import { usePlatformConfig } from '@/context/platform-config-context';
 import { useResponsive } from '@/hooks/use-responsive';
 import { useTheme } from '@/hooks/use-theme';
 import { paiementsApi } from '@/services/api';
@@ -17,12 +18,15 @@ export default function TransactionsScreen() {
   const insets = useSafeAreaInsets();
   const { horizontalPadding } = useResponsive();
   const { isAuthenticated, openAuthModal } = useAuth();
+  const { config, tarifs, loading: configLoading, error: configError, refresh: refreshConfig } =
+    usePlatformConfig();
 
   const [loading, setLoading] = useState(true);
   const [pricing, setPricing] = useState<{
     post_client: number;
     post_agent: number;
     unlock_details: number;
+    visit_fee?: number;
     current_user_post_fee: number;
   } | null>(null);
   const [history, setHistory] = useState<StoredPaymentRef[]>([]);
@@ -54,18 +58,56 @@ export default function TransactionsScreen() {
           { paddingHorizontal: horizontalPadding, paddingBottom: insets.bottom + 28 },
         ]}>
         <View style={styles.innerWrap}>
-          {loading ? (
+          {loading || configLoading ? (
             <ActivityIndicator size="large" color={theme.primary} />
+          ) : configError && !pricing && !tarifs ? (
+            <View style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder }]}>
+              <Text style={[styles.sectionTitle, { color: theme.text }]}>
+                Tarifs indisponibles
+              </Text>
+              <Text style={{ color: theme.textSecondary, fontSize: 13 }}>{configError}</Text>
+              <Pressable
+                onPress={() => void refreshConfig()}
+                style={[styles.primaryBtn, { backgroundColor: theme.primary }]}>
+                <Text style={styles.primaryBtnText}>Réessayer</Text>
+              </Pressable>
+            </View>
           ) : (
             <View style={[styles.card, { backgroundColor: theme.navy }]}>
-              <Text style={styles.tariffsTitle}>Tarifs Officiels E-Mobilier</Text>
-              <Text style={styles.tariffLine}>• Déblocage coordonnées : 50 F CFA</Text>
-              <Text style={styles.tariffLine}>• Visite physique encadrée : 500 F CFA</Text>
-              <Text style={styles.tariffLine}>
-                • Publication Client : {formatFcfa(pricing?.post_client ?? 500)}
+              <Text style={styles.tariffsTitle}>
+                Tarifs Officiels {config?.platform_name || 'E-Mobilier'}
               </Text>
               <Text style={styles.tariffLine}>
-                • Publication Agent mobilier : {formatFcfa(pricing?.post_agent ?? 100)}
+                • Déblocage coordonnées :{' '}
+                {pricing?.unlock_details !== undefined
+                  ? formatFcfa(pricing.unlock_details)
+                  : tarifs
+                  ? formatFcfa(tarifs.deblocage_coordonnees)
+                  : '—'}
+              </Text>
+              <Text style={styles.tariffLine}>
+                • Visite physique encadrée :{' '}
+                {pricing?.visit_fee !== undefined
+                  ? formatFcfa(pricing.visit_fee)
+                  : tarifs
+                  ? formatFcfa(tarifs.visite)
+                  : '—'}
+              </Text>
+              <Text style={styles.tariffLine}>
+                • Publication Client :{' '}
+                {pricing?.post_client !== undefined
+                  ? formatFcfa(pricing.post_client)
+                  : tarifs
+                  ? formatFcfa(tarifs.post_client)
+                  : '—'}
+              </Text>
+              <Text style={styles.tariffLine}>
+                • Publication Agent mobilier :{' '}
+                {pricing?.post_agent !== undefined
+                  ? formatFcfa(pricing.post_agent)
+                  : tarifs
+                  ? formatFcfa(tarifs.post_agent)
+                  : '—'}
               </Text>
               {pricing ? (
                 <Text style={[styles.tariffHighlight, { color: '#FDE68A' }]}>

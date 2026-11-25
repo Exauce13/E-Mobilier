@@ -276,6 +276,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     try {
+      await notificationsApi.deleteDeviceToken().catch(() => {});
       await authApi.deconnexion();
     } catch (e) {
       console.warn('Erreur lors de la déconnexion backend:', e);
@@ -312,7 +313,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isSuperAdminPrincipal || hasRole('Super Admin Technique');
   const isAdminStaff = hasAnyRole(ADMIN_ROLES);
   const isAgentMobilier = hasRole('Agent mobilier') || user?.role === 'agent_immobilier';
-  const isClient = hasRole('Client') || user?.role === 'client_proprietaire';
+  const isClient = !isAdminStaff && !isAgentMobilier && (hasRole('Client') || user?.role === 'client_proprietaire');
 
   return (
     <AuthContext.Provider

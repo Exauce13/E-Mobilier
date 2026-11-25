@@ -28,7 +28,7 @@ class PosteRechercheController extends Controller
         }
 
         // Seuls les clients (ou administrateurs) peuvent poster des demandes de recherche
-        if ($user->hasRole('Agent mobilier') && ! $user->hasRole('Client') && ! $user->hasRole('Admin')) {
+        if ($user->hasRole('Agent mobilier') && ! $user->hasRole('Client') && ! $user->isAnyAdmin()) {
             return response()->json([
                 'success' => false,
                 'message' => 'Seuls les clients sont autorisés à publier des demandes de recherche de biens.',
@@ -45,7 +45,7 @@ class PosteRechercheController extends Controller
                 'target_quartier' => $request->input('target_quartier'),
                 'budget_max' => $request->input('budget_max'),
                 'criteria_details' => $request->input('criteria_details'),
-                'is_paid' => $request->boolean('is_paid', false),
+                'is_paid' => false,
                 'status' => 'active',
             ]);
 
@@ -100,7 +100,7 @@ class PosteRechercheController extends Controller
         }
 
         // Vérification des droits de propriété : seul l'auteur ou l'administrateur peut modifier
-        if ($demande->client_id !== $user->id && ! $user->hasRole('Admin')) {
+        if ($demande->client_id !== $user->id && ! $user->isAnyAdmin()) {
             return response()->json([
                 'success' => false,
                 'message' => 'Vous n\'êtes pas autorisé à modifier cette demande de recherche.',
@@ -119,7 +119,8 @@ class PosteRechercheController extends Controller
                 'status' => $request->input('status'),
             ], fn ($value) => $value !== null);
 
-            if ($request->has('is_paid')) {
+            // Seul un administrateur peut modifier le flag is_paid directement
+            if ($request->has('is_paid') && $user->isAnyAdmin()) {
                 $dataToUpdate['is_paid'] = $request->boolean('is_paid');
             }
 
@@ -187,7 +188,8 @@ class PosteRechercheController extends Controller
         // Filtre optionnel par commune
         if ($request->filled('target_commune') || $request->filled('commune')) {
             $commune = $request->input('target_commune', $request->input('commune'));
-            $query->where('target_commune', 'ILIKE', '%' . $commune . '%');
+            $like = \Illuminate\Support\Facades\DB::connection()->getDriverName() === 'pgsql' ? 'ILIKE' : 'LIKE';
+            $query->where('target_commune', $like, '%' . $commune . '%');
         }
 
         $perPage = (int) $request->input('per_page', 15);

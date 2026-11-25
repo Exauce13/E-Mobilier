@@ -30,11 +30,14 @@ export function LoginView({
   const theme = useTheme();
   const { login, verifyTwoFactorOtp, resendTwoFactorOtp } = useAuth();
 
+  const [loginMode, setLoginMode] = useState<'phone' | 'email'>('phone');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  const isEmailInput = loginMode === 'email' || phone.includes('@');
 
   // États pour la double authentification par OTP (2FA Admin)
   const [step, setStep] = useState<'credentials' | 'otp'>('credentials');
@@ -48,7 +51,12 @@ export function LoginView({
   const handleLogin = async () => {
     setMessage(null);
     if (!phone.trim()) {
-      setMessage({ text: 'Veuillez saisir votre numéro de téléphone béninois.', type: 'error' });
+      setMessage({
+        text: isEmailInput
+          ? 'Veuillez saisir votre adresse e-mail.'
+          : 'Veuillez saisir votre numéro de téléphone béninois ou votre e-mail.',
+        type: 'error',
+      });
       return;
     }
     if (!password.trim()) {
@@ -62,7 +70,7 @@ export function LoginView({
 
       if (!response.success) {
         setMessage({
-          text: response.message || 'Numéro de téléphone ou mot de passe incorrect.',
+          text: response.message || 'Identifiant ou mot de passe incorrect.',
           type: 'error',
         });
         return;
@@ -350,10 +358,63 @@ export function LoginView({
             </Pressable>
           </View>
         ) : (
-          /* STEP 1 : Normal Credentials (Phone & Password) */
+          /* STEP 1 : Normal Credentials (Phone or Email & Password) */
           <View style={styles.formSection}>
-            {/* Phone Field */}
-            <Text style={[styles.inputLabel, { color: theme.text }]}>Numéro de téléphone</Text>
+            {/* Mode Switcher: Téléphone / E-mail */}
+            <View
+              style={{
+                flexDirection: 'row',
+                backgroundColor: theme.tagBackground,
+                borderRadius: 12,
+                padding: 4,
+                gap: 4,
+                marginBottom: Spacing.two,
+              }}>
+              <Pressable
+                onPress={() => {
+                  setLoginMode('phone');
+                  if (phone.includes('@')) setPhone('');
+                }}
+                style={{
+                  flex: 1,
+                  paddingVertical: 8,
+                  borderRadius: 9,
+                  alignItems: 'center',
+                  backgroundColor: !isEmailInput ? theme.cardBackground : 'transparent',
+                }}>
+                <Text
+                  style={{
+                    fontSize: 13,
+                    fontWeight: '700',
+                    color: !isEmailInput ? theme.primary : theme.textSecondary,
+                  }}>
+                  Téléphone (+229)
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setLoginMode('email')}
+                style={{
+                  flex: 1,
+                  paddingVertical: 8,
+                  borderRadius: 9,
+                  alignItems: 'center',
+                  backgroundColor: isEmailInput ? theme.cardBackground : 'transparent',
+                }}>
+                <Text
+                  style={{
+                    fontSize: 13,
+                    fontWeight: '700',
+                    color: isEmailInput ? theme.primary : theme.textSecondary,
+                  }}>
+                  Adresse E-mail
+                </Text>
+              </Pressable>
+            </View>
+
+            {/* Identifier Field */}
+            <Text style={[styles.inputLabel, { color: theme.text }]}>
+              {isEmailInput ? 'Adresse e-mail' : 'Numéro de téléphone'}
+            </Text>
             <View
               style={[
                 styles.inputRow,
@@ -362,18 +423,34 @@ export function LoginView({
                   borderColor: theme.cardBorder,
                 },
               ]}>
-              <View style={[styles.prefixBadge, { backgroundColor: theme.tagBackground }]}>
-                <Text style={styles.flagEmoji}>🇧🇯</Text>
-                <Text style={[styles.prefixText, { color: theme.text }]}>+229</Text>
-              </View>
+              {isEmailInput ? (
+                <View style={styles.iconPrefix}>
+                  <SymbolView
+                    name={{ ios: 'envelope.fill', android: 'mail', web: 'mail' }}
+                    size={20}
+                    tintColor={theme.textSecondary}
+                  />
+                </View>
+              ) : (
+                <View style={[styles.prefixBadge, { backgroundColor: theme.tagBackground }]}>
+                  <Text style={styles.flagEmoji}>🇧🇯</Text>
+                  <Text style={[styles.prefixText, { color: theme.text }]}>+229</Text>
+                </View>
+              )}
               <TextInput
                 style={[styles.textInput, { color: theme.text }]}
-                placeholder="Numéro de téléphone (MTN / Moov)"
+                placeholder={isEmailInput ? 'exemple@e-mobilier.bj' : '0197001122 (MTN / Moov)'}
                 placeholderTextColor={theme.textSecondary}
-                keyboardType="phone-pad"
+                keyboardType={isEmailInput ? 'email-address' : 'phone-pad'}
                 value={phone}
-                onChangeText={setPhone}
+                onChangeText={(val) => {
+                  setPhone(val);
+                  if (val.includes('@') && loginMode !== 'email') {
+                    setLoginMode('email');
+                  }
+                }}
                 autoCapitalize="none"
+                autoCorrect={false}
               />
             </View>
 

@@ -5,6 +5,7 @@ import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { KkiapayCheckoutModal } from '@/components/kkiapay-checkout-modal';
 import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
+import { usePlatformConfig } from '@/context/platform-config-context';
 import { useTheme } from '@/hooks/use-theme';
 import { proprietesApi } from '@/services/api';
 import type { BackendProperty } from '@/types/api';
@@ -27,12 +28,15 @@ export function UnlockModal({
 }: UnlockModalProps) {
   const theme = useTheme();
   const { isAuthenticated, openAuthModal } = useAuth();
+  const { tarifs } = usePlatformConfig();
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   if (!property) return null;
 
-  const fee = property.unlockFee || 50;
+  const fee = property.unlockFee > 0 ? property.unlockFee : tarifs?.deblocage_coordonnees ?? null;
+  const feeShortLabel = fee !== null ? `${fee} F` : 'tarif officiel';
+  const feeFullLabel = fee !== null ? `${fee} F CFA` : 'Tarif serveur';
 
   const handleStartUnlock = () => {
     setErrorMsg(null);
@@ -85,7 +89,7 @@ export function UnlockModal({
                 <Text style={[styles.priceLabel, { color: theme.textSecondary }]}>
                   Frais officiels de déblocage (Kkiapay)
                 </Text>
-                <Text style={[styles.priceValue, { color: theme.primaryDark }]}>{fee} F CFA</Text>
+                <Text style={[styles.priceValue, { color: theme.primaryDark }]}>{feeFullLabel}</Text>
                 <Text style={[styles.priceHint, { color: theme.textSecondary }]}>
                   Accès immédiat aux repères précis, téléphone du propriétaire/agent et documents légaux.
                 </Text>
@@ -103,7 +107,7 @@ export function UnlockModal({
                 <Pressable
                   onPress={handleStartUnlock}
                   style={[styles.primaryBtn, { backgroundColor: theme.primary }]}>
-                  <Text style={styles.primaryBtnText}>Débloquer via Kkiapay ({fee} F)</Text>
+                  <Text style={styles.primaryBtnText}>Débloquer via Kkiapay ({feeShortLabel})</Text>
                 </Pressable>
               ) : null}
 
@@ -133,7 +137,7 @@ export function UnlockModal({
         operationType="deblocage_coordonnees"
         entityId={property.backendId ?? null}
         title={`Déblocage Bien #${property.id}`}
-        description={`Déblocage unique des coordonnées et documents du bien (${fee} F CFA).`}
+        description={`Déblocage unique des coordonnées et documents du bien (${feeFullLabel}).`}
         onClose={() => setCheckoutOpen(false)}
         onSuccess={async ({ transactionId }) => {
           const idToUnlock = property.backendId ?? property.id;

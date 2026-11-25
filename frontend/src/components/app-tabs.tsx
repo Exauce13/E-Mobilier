@@ -1,3 +1,4 @@
+import { Slot } from 'expo-router';
 import { NativeTabs } from 'expo-router/native-tabs';
 
 import { Colors } from '@/constants/theme';
@@ -7,7 +8,11 @@ import { useThemeMode } from '@/context/theme-context';
 export default function AppTabs() {
   const { colorScheme } = useThemeMode();
   const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isSuperAdminPrincipal } = useAuth();
+
+  if (isAuthenticated && isSuperAdminPrincipal) {
+    return <Slot />;
+  }
 
   return (
     <NativeTabs

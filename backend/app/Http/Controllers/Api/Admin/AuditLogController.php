@@ -28,43 +28,45 @@ class AuditLogController extends Controller
             $query->where('is_financial', false);
         }
 
+        $like = \Illuminate\Support\Facades\DB::connection()->getDriverName() === 'pgsql' ? 'ILIKE' : 'LIKE';
+
         // Filtre par module métier
         if ($request->filled('module') && $request->input('module') !== 'all') {
             $mod = $request->input('module');
             if ($mod === 'finance') {
-                $query->where(function ($q) {
+                $query->where(function ($q) use ($like) {
                     $q->where('is_financial', true)
-                        ->orWhere('action', 'ILIKE', '%finance%')
-                        ->orWhere('action', 'ILIKE', '%retrait%')
-                        ->orWhere('action', 'ILIKE', '%paiement%')
-                        ->orWhere('action', 'ILIKE', '%kkiapay%');
+                        ->orWhere('action', $like, '%finance%')
+                        ->orWhere('action', $like, '%retrait%')
+                        ->orWhere('action', $like, '%paiement%')
+                        ->orWhere('action', $like, '%kkiapay%');
                 });
             } elseif ($mod === 'auth') {
-                $query->where(function ($q) {
-                    $q->where('action', 'ILIKE', '%auth%')
-                        ->orWhere('action', 'ILIKE', '%connexion%')
-                        ->orWhere('action', 'ILIKE', '%otp%')
-                        ->orWhere('action', 'ILIKE', '%profil%');
+                $query->where(function ($q) use ($like) {
+                    $q->where('action', $like, '%auth%')
+                        ->orWhere('action', $like, '%connexion%')
+                        ->orWhere('action', $like, '%otp%')
+                        ->orWhere('action', $like, '%profil%');
                 });
             } elseif ($mod === 'posts') {
-                $query->where(function ($q) {
-                    $q->where('action', 'ILIKE', '%propriete%')
-                        ->orWhere('action', 'ILIKE', '%moderation%')
-                        ->orWhere('action', 'ILIKE', '%annonce%');
+                $query->where(function ($q) use ($like) {
+                    $q->where('action', $like, '%propriete%')
+                        ->orWhere('action', $like, '%moderation%')
+                        ->orWhere('action', $like, '%annonce%');
                 });
             } elseif ($mod === 'visites') {
-                $query->where(function ($q) {
-                    $q->where('action', 'ILIKE', '%visite%')
-                        ->orWhere('action', 'ILIKE', '%demande%');
+                $query->where(function ($q) use ($like) {
+                    $q->where('action', $like, '%visite%')
+                        ->orWhere('action', $like, '%demande%');
                 });
             } elseif ($mod === 'securite') {
-                $query->where(function ($q) {
-                    $q->where('action', 'ILIKE', '%demasquage%')
-                        ->orWhere('action', 'ILIKE', '%securite%')
-                        ->orWhere('action', 'ILIKE', '%revoqu%')
-                        ->orWhere('action', 'ILIKE', '%charte%')
-                        ->orWhere('action', 'ILIKE', '%kyc%')
-                        ->orWhere('action', 'ILIKE', '%role%');
+                $query->where(function ($q) use ($like) {
+                    $q->where('action', $like, '%demasquage%')
+                        ->orWhere('action', $like, '%securite%')
+                        ->orWhere('action', $like, '%revoqu%')
+                        ->orWhere('action', $like, '%charte%')
+                        ->orWhere('action', $like, '%kyc%')
+                        ->orWhere('action', $like, '%role%');
                 });
             }
         }
@@ -72,20 +74,20 @@ class AuditLogController extends Controller
         // Recherche libre sur action, IP ou acteur
         if ($request->filled('search')) {
             $term = '%' . trim((string) $request->input('search')) . '%';
-            $query->where(function ($q) use ($term) {
-                $q->where('action', 'ILIKE', $term)
-                    ->orWhere('ip_address', 'ILIKE', $term)
-                    ->orWhereHas('user', function ($uq) use ($term) {
-                        $uq->where('name', 'ILIKE', $term)
-                            ->orWhere('prenom', 'ILIKE', $term)
-                            ->orWhere('email', 'ILIKE', $term);
+            $query->where(function ($q) use ($term, $like) {
+                $q->where('action', $like, $term)
+                    ->orWhere('ip_address', $like, $term)
+                    ->orWhereHas('user', function ($uq) use ($term, $like) {
+                        $uq->where('name', $like, $term)
+                            ->orWhere('prenom', $like, $term)
+                            ->orWhere('email', $like, $term);
                     });
             });
         }
 
         // Filtre optionnel par action
         if ($request->filled('action')) {
-            $query->where('action', 'ILIKE', '%' . $request->input('action') . '%');
+            $query->where('action', $like, '%' . $request->input('action') . '%');
         }
 
         // Filtre optionnel par utilisateur

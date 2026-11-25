@@ -56,31 +56,25 @@ class PropertyInquiryController extends Controller
             'status' => 'nouveau',
         ]);
 
-        // Notification interne silencieuse au destinataire (agent/propriétaire)
-        if ($recipientId && (! $user || $recipientId !== $user->id)) {
+        // RÈGLE DE MONOPOLE E-MOBILIER :
+        // Un client propriétaire ne doit JAMAIS recevoir de notification ni voir les demandes faites sur ses biens.
+        // Seul un Agent mobilier est informé de façon anonyme (prénom + nom uniquement, zéro contact).
+        $recipientIsAgent = $propriete && $propriete->user && $propriete->user->hasRole('Agent mobilier');
+        if ($recipientId && $recipientIsAgent && (! $user || $recipientId !== $user->id)) {
             try {
-                $typeLabel = match ($inquiry->type) {
-                    'demande_visite' => 'Nouvelle demande de visite',
-                    'rendez_vous' => 'Nouvelle prise de rendez-vous',
-                    'contact' => 'Nouveau message de contact',
-                    default => 'Nouvelle demande client',
-                };
-
                 NotificationInterne::create([
                     'user_id' => $recipientId,
                     'type' => 'property_inquiry',
-                    'titre' => $typeLabel,
+                    'titre' => 'Nouvelle sollicitation sur votre bien',
                     'message' => sprintf(
-                        '%s %s souhaite échanger au sujet de votre bien #%d (%s).',
+                        '%s %s a manifesté son intérêt pour votre bien #%d (%s). La coordination est assurée par E-Mobilier.',
                         $inquiry->prenom,
                         $inquiry->nom,
                         $propriete->id,
                         $propriete->commune
                     ),
                     'data' => [
-                        'inquiry_id' => $inquiry->id,
                         'property_id' => $propriete->id,
-                        'inquiry_type' => $inquiry->type,
                     ],
                     'lu' => false,
                 ]);
@@ -138,8 +132,10 @@ class PropertyInquiryController extends Controller
     }
 
     /**
-     * Tableau de bord complet pour l'Agent Immobilier :
-     * KPIs biens, visites, demandes reçues et prospects clients.
+     * Tableau de bord pour l'Agent Immobilier uniquement (RÈGLE DE MONOPOLE E-MOBILIER) :
+     * - Interdit aux Clients propriétaires (un client ne voit JAMAIS les demandes faites sur ses biens).
+     * - L'Agent voit ses biens + les demandes de visite sur ses biens avec UNIQUEMENT le nom/prénom du client
+     *   (téléphone et email strictement masqués, zéro CRM contact direct).
      */
     public function agentDashboard(Request $request): JsonResponse
     {
@@ -148,45 +144,43 @@ class PropertyInquiryController extends Controller
             return response()->json(['success' => false, 'message' => 'Non authentifié.'], 401);
         }
 
+        if (! $user->hasRole('Agent mobilier') && ! $user->isAnyAdmin()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Accès réservé aux Agents mobiliers agréés.',
+            ], 403);
+        }
+
         $myProperties = Proprietes::where('user_id', $user->id)
             ->with(['media', 'documents'])
             ->latest()
             ->get();
 
-        $receivedInquiries = PropertyInquiry::with(['propriete:id,type,transaction_type,commune,quartier,prix,status'])
-            ->where('recipient_id', $user->id)
+        // Règle de monopole : uniquement les visites où l'agent est target_agent_id,
+        // avec UNIQUEMENT id, name, prenom du client (ZÉRO téléphone, ZÉRO email).
+        $receivedVisits = Visite_client::with([
+            'propriete:id,type,transaction_type,commune,quartier,prix,status',
+            'client:id,name,prenom',
+        ])
+            ->where('target_agent_id', $user->id)
             ->latest()
             ->limit(50)
-            ->get();
+            ->get()
+            ->map(function (Visite_client $v) {
+                $arr = $v->toArray();
+                if (isset($arr['client']) && is_array($arr['client'])) {
+                    $arr['client'] = [
+                        'id' => $arr['client']['id'] ?? null,
+                        'name' => $arr['client']['name'] ?? '',
+                        'prenom' => $arr['client']['prenom'] ?? '',
+                        'telephone' => null,
+                        'email' => null,
+                    ];
+                }
 
-        $receivedVisits = Visite_client::with(['propriete:id,type,transaction_type,commune,quartier,prix,status', 'client:id,name,prenom'])
-            ->where(function ($q) use ($user) {
-                $q->where('target_agent_id', $user->id)
-                    ->orWhereHas('propriete', fn ($pq) => $pq->where('user_id', $user->id));
+                return $arr;
             })
-            ->latest()
-            ->limit(30)
-            ->get();
-
-        // Synthèse unique des clients/prospects ayant interagi avec l'agent
-        $clientsMap = [];
-        foreach ($receivedInquiries as $inq) {
-            $key = strtolower($inq->email ?: $inq->telephone);
-            if (! isset($clientsMap[$key])) {
-                $clientsMap[$key] = [
-                    'key' => $key,
-                    'nom' => $inq->nom,
-                    'prenom' => $inq->prenom,
-                    'telephone' => $inq->telephone,
-                    'email' => $inq->email,
-                    'total_demandes' => 0,
-                    'derniere_interaction' => $inq->created_at?->toISOString(),
-                    'dernier_type' => $inq->type,
-                    'dernier_statut' => $inq->status,
-                ];
-            }
-            $clientsMap[$key]['total_demandes']++;
-        }
+            ->values();
 
         return response()->json([
             'success' => true,
@@ -198,14 +192,14 @@ class PropertyInquiryController extends Controller
                     'biens_conclus' => $myProperties->where('status', 'sold_rented')->count(),
                     'total_visites' => $receivedVisits->count(),
                     'visites_en_attente' => $receivedVisits->where('status', 'pending')->count(),
-                    'total_demandes' => $receivedInquiries->count(),
-                    'demandes_nouvelles' => $receivedInquiries->where('status', 'nouveau')->count(),
-                    'total_clients' => count($clientsMap),
+                    'total_demandes' => 0,
+                    'demandes_nouvelles' => 0,
+                    'total_clients' => 0,
                 ],
                 'proprietes' => $myProperties,
-                'inquiries' => $receivedInquiries,
+                'inquiries' => [],
                 'visites' => $receivedVisits,
-                'clients' => array_values($clientsMap),
+                'clients' => [],
             ],
         ], 200);
     }

@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { Check, CheckCircle2, Eye, Heart, MapPin } from 'lucide-react-native';
+import { Check, CheckCircle2, Heart, Lock, MapPin } from 'lucide-react-native';
 import React from 'react';
 import {
   Platform,
@@ -18,7 +18,6 @@ interface PropertyCardProps {
   onPressDetails: (property: PropertyItem) => void;
   onPressCard?: (property: PropertyItem) => void;
   onToggleFavorite?: (id: string) => void;
-  onPressQuickAction?: (property: PropertyItem, action: 'demande_visite' | 'contact') => void;
   compact?: boolean;
 }
 
@@ -27,7 +26,6 @@ export function PropertyCard({
   onPressDetails,
   onPressCard,
   onToggleFavorite,
-  onPressQuickAction,
   compact = false,
 }: PropertyCardProps) {
   const theme = useTheme();
@@ -145,7 +143,7 @@ export function PropertyCard({
           </View>
         )}
 
-        {/* Quick Actions Row */}
+        {/* Primary Action Row (Monopole E-Mobilier : déblocage 50 F puis visite 500 F sur la fiche) */}
         <View style={styles.actionsRow}>
           <Pressable
             style={({ pressed }) => [
@@ -159,7 +157,7 @@ export function PropertyCard({
             {property.isUnlocked ? (
               <CheckCircle2 size={15} color={theme.badgeGreenText} strokeWidth={2.2} />
             ) : (
-              <Eye size={15} color="#FFFFFF" strokeWidth={2.2} />
+              <Lock size={14} color="#FFFFFF" strokeWidth={2.2} />
             )}
             <Text
               numberOfLines={1}
@@ -167,23 +165,13 @@ export function PropertyCard({
                 styles.actionButtonText,
                 { color: property.isUnlocked ? theme.badgeGreenText : '#FFFFFF' },
               ]}>
-              {property.isUnlocked ? 'Voir la fiche' : 'Voir le bien'}
+              {property.isUnlocked
+                ? 'Voir la fiche complète'
+                : property.unlockFee > 0
+                ? `Débloquer les détails (${property.unlockFee} F)`
+                : 'Voir & débloquer la fiche'}
             </Text>
           </Pressable>
-
-          {onPressQuickAction ? (
-            <Pressable
-              style={({ pressed }) => [
-                styles.secondaryActionBtn,
-                { borderColor: theme.primary, backgroundColor: theme.primaryLight },
-                pressed && styles.actionButtonPressed,
-              ]}
-              onPress={() => onPressQuickAction(property, 'demande_visite')}>
-              <Text numberOfLines={1} style={[styles.secondaryActionText, { color: theme.primaryDark }]}>
-                Visiter / RDV
-              </Text>
-            </Pressable>
-          ) : null}
         </View>
       </View>
     </View>

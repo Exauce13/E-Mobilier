@@ -4,21 +4,16 @@ import {
   Calendar,
   Check,
   Clock,
-  Inbox,
   Lock,
-  Mail,
   MapPin,
-  Phone,
+  ShieldCheck,
   Sparkles,
   Tag,
-  Users,
   X,
 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
-  Linking,
   Modal,
   Pressable,
   RefreshControl,
@@ -34,20 +29,25 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
+import { usePlatformConfig } from '@/context/platform-config-context';
 import { useResponsive } from '@/hooks/use-responsive';
 import { useTheme } from '@/hooks/use-theme';
 import { inquiriesApi, proprietesApi } from '@/services/api';
-import type { AgentDashboardData, BackendProperty, PropertyInquiryItem } from '@/types/api';
+import type { AgentDashboardData, BackendProperty } from '@/types/api';
 import { formatFcfa } from '@/types/property';
-import { getInquiryTypeLabel, getStatusDisplay } from '@/utils/validation';
+import { confirmDialog } from '@/utils/dialog';
+import { getStatusDisplay } from '@/utils/validation';
 
-type AgentTab = 'biens' | 'demandes' | 'clients';
+type AgentTab = 'biens' | 'visites';
 
 export default function AgentDashboardScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { isMobile, contentMaxWidth, horizontalPadding } = useResponsive();
   const { user, isAuthenticated, isAgentMobilier, isAdminStaff, openAuthModal } = useAuth();
+  const { tarifs } = usePlatformConfig();
+  const agentFeeLabel = tarifs ? formatFcfa(tarifs.post_agent) : 'tarif préférentiel';
+  const clientFeeLabel = tarifs ? formatFcfa(tarifs.post_client) : 'tarif officiel';
 
   const [activeTab, setActiveTab] = useState<AgentTab>('biens');
   const [statusFilter, setStatusFilter] = useState<string>('tous');
@@ -57,6 +57,7 @@ export default function AgentDashboardScreen() {
   const [feedback, setFeedback] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
   const [dashboard, setDashboard] = useState<AgentDashboardData | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Quick edit property modal state
   const [editingProp, setEditingProp] = useState<BackendProperty | null>(null);
@@ -67,15 +68,19 @@ export default function AgentDashboardScreen() {
   const [savingEdit, setSavingEdit] = useState(false);
 
   const loadDashboard = useCallback(async () => {
-    if (!isAuthenticated) {
+    setLoadError(null);
+    if (!isAuthenticated || (!isAgentMobilier && !isAdminStaff)) {
       setDashboard(null);
       return;
     }
     const res = await inquiriesApi.getAgentDashboard();
     if (res.success && res.data) {
       setDashboard(res.data);
+    } else {
+      setDashboard(null);
+      setLoadError(res.message || 'Impossible de charger le tableau de bord agent.');
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, isAgentMobilier, isAdminStaff]);
 
   useEffect(() => {
     let active = true;
@@ -141,44 +146,45 @@ export default function AgentDashboardScreen() {
     }
   };
 
-  const handleDeleteProperty = (prop: BackendProperty) => {
-    Alert.alert(
+  const handleDeleteProperty = async (prop: BackendProperty) => {
+    const confirmed = await confirmDialog(
       'Supprimer ce bien ?',
       `Annonce #${prop.id} — ${prop.type} à ${prop.commune}`,
-      [
-        { text: 'Annuler', style: 'cancel' },
-        {
-          text: 'Supprimer',
-          style: 'destructive',
-          onPress: async () => {
-            const res = await proprietesApi.delete(prop.id);
-            if (res.success) {
-              setFeedback({ text: `Annonce #${prop.id} supprimée.`, type: 'success' });
-              await loadDashboard();
-            } else {
-              setFeedback({ text: res.message || 'Suppression refusée.', type: 'error' });
-            }
-          },
-        },
-      ]
+      'Supprimer'
     );
-  };
+    if (!confirmed) return;
 
-  const handleUpdateInquiryStatus = async (
-    inq: PropertyInquiryItem,
-    status: 'en_cours' | 'confirme' | 'traite' | 'annule'
-  ) => {
-    const res = await inquiriesApi.updateStatus(inq.id, status);
+    const res = await proprietesApi.delete(prop.id);
     if (res.success) {
-      setFeedback({
-        text: `Demande #${inq.id} marquée comme "${getStatusDisplay(status).label}".`,
-        type: 'success',
-      });
+      setFeedback({ text: `Annonce #${prop.id} supprimée.`, type: 'success' });
       await loadDashboard();
     } else {
-      setFeedback({ text: res.message || 'Mise à jour du statut impossible.', type: 'error' });
+      setFeedback({ text: res.message || 'Suppression refusée.', type: 'error' });
     }
   };
+
+  if (isAuthenticated && !isAgentMobilier && !isAdminStaff) {
+    return (
+      <SafeAreaView edges={['top']} style={[styles.container, { backgroundColor: theme.background }]}>
+        <ScreenHeader title="Espace Agent Immobilier" subtitle="Accès réservé" />
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 12 }}>
+          <Lock size={34} color={theme.primary} strokeWidth={2.2} />
+          <Text style={{ fontSize: 18, fontWeight: '800', color: theme.text, textAlign: 'center' }}>
+            Espace strictement réservé aux agents immobiliers agréés
+          </Text>
+          <Text style={{ fontSize: 13, color: theme.textSecondary, textAlign: 'center', maxWidth: 420 }}>
+            En tant que client, gérez vos annonces publiées depuis « Mes annonces » et vos visites
+            sortantes depuis « Mes visites ».
+          </Text>
+          <Pressable
+            onPress={() => router.replace('/my-properties' as any)}
+            style={[styles.primaryBtn, { backgroundColor: theme.primary }]}>
+            <Text style={styles.primaryBtnText}>Aller vers Mes annonces</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (!isAuthenticated) {
     return (
@@ -202,8 +208,8 @@ export default function AgentDashboardScreen() {
                 Développez votre activité d'agent immobilier au Bénin
               </Text>
               <Text style={styles.heroSub}>
-                Publiez vos biens au tarif préférentiel de 100 F CFA, recevez des demandes de visites
-                qualifiées, gérez vos rendez-vous et suivez vos prospects depuis un seul tableau de bord.
+                Publiez vos biens au tarif préférentiel de {agentFeeLabel}, suivez la modération de
+                vos annonces et consultez en temps réel les visites programmées par E-Mobilier.
               </Text>
               <View style={styles.heroActions}>
                 <Pressable
@@ -221,9 +227,9 @@ export default function AgentDashboardScreen() {
 
             <View style={styles.benefitsGrid}>
               {[
-                { Icon: Tag, title: 'Tarif Agent 100 F CFA', desc: 'Publication accélérée avec suivi de modération en temps réel.' },
-                { Icon: Calendar, title: 'Visites & Rendez-vous', desc: 'Centralisez toutes les demandes de visite et rendez-vous sur vos biens.' },
-                { Icon: Users, title: 'Fichier Clients CRM', desc: 'Retrouvez automatiquement l’historique de vos contacts et prospects.' },
+                { Icon: Tag, title: `Tarif Agent ${agentFeeLabel}`, desc: 'Publication accélérée avec suivi de modération en temps réel.' },
+                { Icon: Calendar, title: 'Visites encadrées', desc: 'Suivez les visites programmées sur vos biens par l’équipe E-Mobilier.' },
+                { Icon: ShieldCheck, title: 'Sécurité & Monopole', desc: 'Les transactions et mises en relation sont sécurisées par E-Mobilier.' },
               ].map((b) => (
                 <View
                   key={b.title}
@@ -305,7 +311,7 @@ export default function AgentDashboardScreen() {
                 </View>
                 <Text style={styles.heroTitle}>{user?.name}</Text>
                 <Text style={styles.heroSub}>
-                  Tarif publication actif : {isAdminStaff ? 'Gratuit' : isAgentMobilier ? '100 F CFA' : '500 F CFA'} •{' '}
+                  Tarif publication actif : {isAdminStaff ? 'Gratuit' : isAgentMobilier ? agentFeeLabel : clientFeeLabel} •{' '}
                   {user?.phone}
                 </Text>
               </View>
@@ -349,6 +355,21 @@ export default function AgentDashboardScreen() {
             </View>
           )}
 
+          {loadError ? (
+            <View
+              style={[
+                styles.feedbackBanner,
+                { backgroundColor: '#FEF2F2', borderColor: '#FECACA' },
+              ]}>
+              <Text style={{ color: '#B91C1C', fontSize: 13, fontWeight: '700', flex: 1 }}>
+                {loadError}
+              </Text>
+              <Pressable onPress={() => void loadDashboard()}>
+                <Text style={{ color: '#B91C1C', fontSize: 12, fontWeight: '800' }}>Réessayer</Text>
+              </Pressable>
+            </View>
+          ) : null}
+
           {/* KPI Strip */}
           <View style={styles.kpiGrid}>
             {[
@@ -365,16 +386,16 @@ export default function AgentDashboardScreen() {
                 Icon: Clock,
               },
               {
-                label: 'Demandes & Visites',
-                value: (kpis?.total_demandes ?? 0) + (kpis?.total_visites ?? 0),
-                sub: `${kpis?.demandes_nouvelles ?? 0} nouvelles`,
-                Icon: Inbox,
+                label: 'Visites reçues',
+                value: kpis?.total_visites ?? 0,
+                sub: `${kpis?.visites_en_attente ?? 0} en attente`,
+                Icon: Calendar,
               },
               {
-                label: 'Clients & Prospects',
+                label: 'Visiteurs uniques',
                 value: kpis?.total_clients ?? 0,
-                sub: 'Contacts enregistrés',
-                Icon: Users,
+                sub: 'Nom & prénom uniquement',
+                Icon: ShieldCheck,
               },
             ].map((item) => (
               <View
@@ -395,16 +416,12 @@ export default function AgentDashboardScreen() {
             ))}
           </View>
 
-          {/* Main Section Tabs */}
+          {/* Main Section Tabs (Strict Monopole : Biens + Visites reçues sans contacts) */}
           <View style={styles.tabsRow}>
             {(
               [
                 { key: 'biens', label: `Gestion des biens (${dashboard?.proprietes.length ?? 0})` },
-                {
-                  key: 'demandes',
-                  label: `Demandes & Visites (${(dashboard?.inquiries.length ?? 0) + (dashboard?.visites.length ?? 0)})`,
-                },
-                { key: 'clients', label: `Clients (${dashboard?.clients.length ?? 0})` },
+                { key: 'visites', label: `Visites sur mes biens (${dashboard?.visites.length ?? 0})` },
               ] as const
             ).map((tab) => {
               const active = activeTab === tab.key;
@@ -582,133 +599,48 @@ export default function AgentDashboardScreen() {
                 </View>
               )}
 
-              {/* TAB 2: DEMANDES & VISITES */}
-              {activeTab === 'demandes' && (
+              {/* TAB 2: VISITES REÇUES SUR MES BIENS (MONOPOLE E-MOBILIER : NOM & PRÉNOM UNIQUEMENT) */}
+              {activeTab === 'visites' && (
                 <View style={{ gap: 14 }}>
+                  <View
+                    style={[
+                      styles.propStrip,
+                      {
+                        backgroundColor: theme.primaryLight,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 8,
+                        padding: 12,
+                      },
+                    ]}>
+                    <Lock size={15} color={theme.primary} strokeWidth={2.2} />
+                    <Text style={{ color: theme.primaryDark, fontSize: 12, fontWeight: '700', flex: 1 }}>
+                      Règle de monopole E-Mobilier : seuls le nom et le prénom du visiteur sont
+                      affichés. La coordination et les coordonnées complètes sont gérées
+                      exclusivement par l'administration E-Mobilier.
+                    </Text>
+                  </View>
+
                   <Text style={[styles.subHeading, { color: theme.text }]}>
-                    Demandes de visite, Rendez-vous & Messages reçus ({dashboard?.inquiries.length ?? 0})
+                    Visites programmées sur vos biens ({dashboard?.visites.length ?? 0})
                   </Text>
 
-                  {(dashboard?.inquiries.length ?? 0) === 0 ? (
+                  {(dashboard?.visites.length ?? 0) === 0 ? (
                     <View
                       style={[
                         styles.emptyCard,
                         { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder },
                       ]}>
-                      <Text style={{ color: theme.textSecondary, fontSize: 14 }}>
-                        Aucune demande client reçue sur vos biens pour le moment.
+                      <Text style={{ color: theme.textSecondary, fontSize: 14, textAlign: 'center' }}>
+                        Aucune demande de visite physique enregistrée sur vos annonces pour le moment.
                       </Text>
                     </View>
                   ) : (
-                    dashboard?.inquiries.map((inq) => {
-                      const st = getStatusDisplay(inq.status);
-                      return (
-                        <View
-                          key={`ag-inq-${inq.id}`}
-                          style={[
-                            styles.listCard,
-                            { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder },
-                          ]}>
-                          <View style={styles.cardHeader}>
-                            <View style={{ flex: 1 }}>
-                              <Text style={[styles.cardTitle, { color: theme.text }]}>
-                                {getInquiryTypeLabel(inq.type)} — {inq.prenom} {inq.nom}
-                              </Text>
-                              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 3 }}>
-                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                                  <Phone size={12} color={theme.textSecondary} strokeWidth={2} />
-                                  <Text style={{ color: theme.textSecondary, fontSize: 12 }}>
-                                    {inq.telephone}
-                                  </Text>
-                                </View>
-                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                                  <Mail size={12} color={theme.textSecondary} strokeWidth={2} />
-                                  <Text style={{ color: theme.textSecondary, fontSize: 12 }}>
-                                    {inq.email}
-                                  </Text>
-                                </View>
-                              </View>
-                            </View>
-                            <View style={[styles.statusBadge, { backgroundColor: st.bg }]}>
-                              <Text style={{ color: st.text, fontSize: 11, fontWeight: '800' }}>
-                                {st.label}
-                              </Text>
-                            </View>
-                          </View>
-
-                          {inq.propriete ? (
-                            <Pressable
-                              onPress={() => router.push(`/property/${inq.propriete!.id}` as any)}
-                              style={[styles.propStrip, { backgroundColor: theme.backgroundElement }]}>
-                              <Text style={{ color: theme.text, fontSize: 12, fontWeight: '700' }}>
-                                Bien #{inq.propriete.id} • {inq.propriete.type.toUpperCase()} —{' '}
-                                {inq.propriete.commune} ({formatFcfa(inq.propriete.prix)})
-                              </Text>
-                            </Pressable>
-                          ) : null}
-
-                          {inq.scheduled_date ? (
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                              <Calendar size={14} color={theme.primary} strokeWidth={2.2} />
-                              <Text style={{ color: theme.primary, fontSize: 13, fontWeight: '700' }}>
-                                Souhaité le {new Date(inq.scheduled_date).toLocaleString('fr-FR')}
-                                {inq.meeting_mode ? ` (${inq.meeting_mode.replace('_', ' ')})` : ''}
-                              </Text>
-                            </View>
-                          ) : null}
-
-                          {inq.message ? (
-                            <Text style={{ color: theme.text, fontSize: 13, lineHeight: 19 }}>
-                              « {inq.message} »
-                            </Text>
-                          ) : null}
-
-                          <View style={styles.statusActionsRow}>
-                            {(
-                              [
-                                { key: 'en_cours', label: 'En cours' },
-                                { key: 'confirme', label: 'Confirmer' },
-                                { key: 'traite', label: 'Clôturer / Traité' },
-                                { key: 'annule', label: 'Annuler' },
-                              ] as const
-                            ).map((act) => (
-                              <Pressable
-                                key={act.key}
-                                onPress={() => handleUpdateInquiryStatus(inq, act.key)}
-                                style={[
-                                  styles.statusActionChip,
-                                  {
-                                    backgroundColor:
-                                      inq.status === act.key ? theme.primary : theme.backgroundElement,
-                                  },
-                                ]}>
-                                <Text
-                                  style={{
-                                    color: inq.status === act.key ? '#FFFFFF' : theme.text,
-                                    fontSize: 11,
-                                    fontWeight: '700',
-                                  }}>
-                                  {act.label}
-                                </Text>
-                              </Pressable>
-                            ))}
-                          </View>
-                        </View>
-                      );
-                    })
-                  )}
-
-                  {/* Visites physiques officielles */}
-                  <Text style={[styles.subHeading, { color: theme.text, marginTop: 8 }]}>
-                    Visites physiques encadrées E-Mobilier ({dashboard?.visites.length ?? 0})
-                  </Text>
-                  {(dashboard?.visites.length ?? 0) === 0 ? (
-                    <Text style={{ color: theme.textSecondary, fontSize: 13 }}>
-                      Aucune visite physique payée programmée sur vos annonces.
-                    </Text>
-                  ) : (
                     dashboard?.visites.map((v) => {
                       const st = getStatusDisplay(v.status);
+                      const clientFullName = v.client
+                        ? `${v.client.prenom ?? ''} ${v.client.name ?? ''}`.trim() || 'Client E-Mobilier'
+                        : 'Client E-Mobilier';
                       return (
                         <View
                           key={`ag-vis-${v.id}`}
@@ -717,119 +649,41 @@ export default function AgentDashboardScreen() {
                             { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder },
                           ]}>
                           <View style={styles.cardHeader}>
-                            <Text style={[styles.cardTitle, { color: theme.text }]}>
-                              VIS-{String(v.id).padStart(5, '0')} •{' '}
-                              {v.client ? `${v.client.prenom ?? ''} ${v.client.name ?? ''}`.trim() : 'Client'}
-                            </Text>
+                            <View style={{ flex: 1, gap: 2 }}>
+                              <Text style={[styles.cardTitle, { color: theme.text }]}>
+                                VIS-{String(v.id).padStart(5, '0')} • {clientFullName}
+                              </Text>
+                              {v.propriete ? (
+                                <Text style={{ color: theme.textSecondary, fontSize: 12 }}>
+                                  Bien #{v.propriete.id} • {v.propriete.type.toUpperCase()} —{' '}
+                                  {v.propriete.commune}
+                                  {v.propriete.quartier ? ` (${v.propriete.quartier})` : ''}
+                                </Text>
+                              ) : null}
+                            </View>
                             <View style={[styles.statusBadge, { backgroundColor: st.bg }]}>
                               <Text style={{ color: st.text, fontSize: 11, fontWeight: '800' }}>
                                 {st.label}
                               </Text>
                             </View>
                           </View>
-                          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+                          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                              <Calendar size={13} color={theme.textSecondary} strokeWidth={2} />
-                              <Text style={{ color: theme.textSecondary, fontSize: 12 }}>
+                              <Calendar size={13} color={theme.primary} strokeWidth={2.2} />
+                              <Text style={{ color: theme.text, fontSize: 12, fontWeight: '700' }}>
                                 {new Date(v.scheduled_date).toLocaleString('fr-FR')}
                               </Text>
                             </View>
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
                               <Lock size={13} color={theme.textSecondary} strokeWidth={2} />
                               <Text style={{ color: theme.textSecondary, fontSize: 12 }}>
-                                Coordonnées encadrées par E-Mobilier
+                                Coordonnées réservées à E-Mobilier
                               </Text>
                             </View>
                           </View>
                         </View>
                       );
                     })
-                  )}
-                </View>
-              )}
-
-              {/* TAB 3: CLIENTS & PROSPECTS */}
-              {activeTab === 'clients' && (
-                <View style={{ gap: 12 }}>
-                  {(dashboard?.clients.length ?? 0) === 0 ? (
-                    <View
-                      style={[
-                        styles.emptyCard,
-                        { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder },
-                      ]}>
-                      <Text style={[styles.emptyTitle, { color: theme.text }]}>
-                        Aucun client / prospect enregistré
-                      </Text>
-                      <Text style={{ color: theme.textSecondary, fontSize: 13, textAlign: 'center' }}>
-                        Dès qu’un client vous contacte ou prend rendez-vous sur l’un de vos biens, sa
-                        fiche apparaît automatiquement ici.
-                      </Text>
-                    </View>
-                  ) : (
-                    <View style={styles.cardsGrid}>
-                      {dashboard?.clients.map((cl) => {
-                        const st = getStatusDisplay(cl.dernier_statut);
-                        return (
-                          <View
-                            key={cl.key}
-                            style={[
-                              styles.propCard,
-                              {
-                                backgroundColor: theme.cardBackground,
-                                borderColor: theme.cardBorder,
-                                width: isMobile ? '100%' : '48.8%',
-                              },
-                            ]}>
-                            <View style={styles.cardHeader}>
-                              <View style={{ flex: 1 }}>
-                                <Text style={[styles.cardTitle, { color: theme.text }]}>
-                                  {cl.prenom} {cl.nom}
-                                </Text>
-                                <Text style={{ color: theme.textSecondary, fontSize: 12 }}>
-                                  {cl.total_demandes} interaction{cl.total_demandes > 1 ? 's' : ''} •{' '}
-                                  {getInquiryTypeLabel(cl.dernier_type)}
-                                </Text>
-                              </View>
-                              <View style={[styles.statusBadge, { backgroundColor: st.bg }]}>
-                                <Text style={{ color: st.text, fontSize: 11, fontWeight: '800' }}>
-                                  {st.label}
-                                </Text>
-                              </View>
-                            </View>
-
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                              <Phone size={14} color={theme.primary} strokeWidth={2.2} />
-                              <Text style={{ color: theme.text, fontSize: 13, fontWeight: '600' }}>
-                                {cl.telephone}
-                              </Text>
-                            </View>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                              <Mail size={14} color={theme.textSecondary} strokeWidth={2} />
-                              <Text style={{ color: theme.textSecondary, fontSize: 13 }}>
-                                {cl.email}
-                              </Text>
-                            </View>
-
-                            <View style={styles.actionBtns}>
-                              <Pressable
-                                onPress={() => Linking.openURL(`tel:${cl.telephone}`)}
-                                style={[styles.smallBtn, { backgroundColor: theme.primaryLight }]}>
-                                <Text style={{ color: theme.primaryDark, fontWeight: '800', fontSize: 12 }}>
-                                  Appeler
-                                </Text>
-                              </Pressable>
-                              <Pressable
-                                onPress={() => Linking.openURL(`mailto:${cl.email}`)}
-                                style={[styles.smallBtn, { backgroundColor: theme.backgroundElement }]}>
-                                <Text style={{ color: theme.text, fontWeight: '800', fontSize: 12 }}>
-                                  Envoyer un e-mail
-                                </Text>
-                              </Pressable>
-                            </View>
-                          </View>
-                        );
-                      })}
-                    </View>
                   )}
                 </View>
               )}
