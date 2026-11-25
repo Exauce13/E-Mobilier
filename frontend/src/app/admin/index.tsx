@@ -22,6 +22,7 @@ import {
   ModerationSection,
   VisitesOpsSection,
 } from '@/components/admin/admin-ops-sections';
+import { SuperAdminPrincipalPortal } from '@/components/super-admin/super-admin-portal';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
@@ -39,6 +40,16 @@ type AdminTabKey =
   | 'tech';
 
 export default function AdminDashboardScreen() {
+  const { isSuperAdminPrincipal } = useAuth();
+
+  if (isSuperAdminPrincipal) {
+    return <SuperAdminPrincipalPortal initialPage="dashboard" />;
+  }
+
+  return <StandardAdminDashboard />;
+}
+
+function StandardAdminDashboard() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { isAdminStaff, isSuperAdmin, hasAnyRole } = useAuth();
@@ -190,7 +201,12 @@ const styles = StyleSheet.create({
   tabBarWrap: { borderBottomWidth: 1, paddingVertical: 8 },
   tabScroll: { paddingHorizontal: Spacing.three, gap: 8 },
   tabPill: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 16 },
-  scroll: { padding: Spacing.three },
+  scroll: {
+    padding: Spacing.three,
+    maxWidth: 1000,
+    width: '100%',
+    alignSelf: 'center',
+  },
   charteBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
   charteBtnText: { color: '#0F172A', fontWeight: '800', fontSize: 12 },
   deniedBox: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: Spacing.five, gap: 8 },

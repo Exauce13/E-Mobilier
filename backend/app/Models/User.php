@@ -14,8 +14,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Laravel\Sanctum\HasApiTokens;
 use Spatie\Permission\Traits\HasRoles;
 
-#[Fillable(['name', 'prenom', 'email', 'telephone', 'is_verifed', 'password', 'device_token', 'zone_id', 'statut'])]
-#[Hidden(['password', 'remember_token'])]
+#[Fillable(['name', 'prenom', 'email', 'telephone', 'photo_profil', 'is_verifed', 'password', 'device_token', 'zone_id', 'statut', 'two_factor_token', 'two_factor_otp_hash', 'two_factor_otp_expires_at', 'two_factor_otp_tentatives'])]
+#[Hidden(['password', 'remember_token', 'two_factor_token', 'two_factor_otp_hash'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
@@ -32,6 +32,8 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'is_verifed' => 'boolean',
             'password' => 'hashed',
+            'two_factor_otp_expires_at' => 'datetime',
+            'two_factor_otp_tentatives' => 'integer',
         ];
     }
 
@@ -163,7 +165,7 @@ class User extends Authenticatable
     public function isFinancialOwner(): bool
     {
         $ownerEmail = config('emobilier.super_admin_principal_email');
-        $isOwnerEmail = $ownerEmail && strtolower($this->email) === strtolower($ownerEmail);
+        $isOwnerEmail = $ownerEmail && strtolower((string) $this->email) === strtolower($ownerEmail);
 
         $ownerId = config('emobilier.super_admin_principal_id');
         $isOwnerId = $ownerId && (int) $this->id === (int) $ownerId;
@@ -205,5 +207,47 @@ class User extends Authenticatable
         return $this->signaturesLegales()
             ->where('document_legal_id', $charte->id)
             ->exists();
+    }
+
+    /**
+     * Génère et initialise un code OTP de double authentification.
+     */
+    public function generateTwoFactorOtp(?string $existingSessionToken = null): string
+    {
+        $codeOtp = str_pad((string) random_int(100000, 999999), 6, '0', STR_PAD_LEFT);
+        $ttlMinutes = (int) config('emobilier.admin_2fa_otp_ttl_minutes', 5);
+        $sessionToken = $existingSessionToken ?: bin2hex(random_bytes(32));
+
+        $this->update([
+            'two_factor_token' => $sessionToken,
+            'two_factor_otp_hash' => hash('sha256', $codeOtp),
+            'two_factor_otp_expires_at' => now()->addMinutes($ttlMinutes),
+            'two_factor_otp_tentatives' => 0,
+        ]);
+
+        return $codeOtp;
+    }
+
+    /**
+     * Réinitialise et purge la session de double authentification.
+     */
+    public function clearTwoFactorOtp(): void
+    {
+        $this->update([
+            'two_factor_token' => null,
+            'two_factor_otp_hash' => null,
+            'two_factor_otp_expires_at' => null,
+            'two_factor_otp_tentatives' => 0,
+        ]);
+    }
+
+    /**
+     * Vérifie si l'utilisateur possède une session 2FA active et valide.
+     */
+    public function hasValidTwoFactorSession(): bool
+    {
+        return $this->two_factor_token !== null
+            && $this->two_factor_otp_expires_at !== null
+            && now()->lte($this->two_factor_otp_expires_at);
     }
 }

@@ -130,12 +130,19 @@ export function KkiapayCheckoutModal({
     setErrorMsg(null);
     setVerifying(true);
     try {
-      const ref = initData?.reference || cleanId;
+      const ref = cleanId;
       const amount = initData?.montant_officiel || 0;
 
-      // Reconcile/verify via backend ledger endpoint if initData exists
-      if (operationType !== 'publication_client' && operationType !== 'publication_agent') {
-        await paiementsApi.verifier({ transactionId: cleanId, amount }).catch(() => null);
+      // Reconcile/verify via backend ledger endpoint for all operation types
+      const verifyRes = await paiementsApi.verifier({
+        transactionId: cleanId,
+        reference: initData?.reference,
+        amount,
+      });
+
+      if (!verifyRes.success) {
+        setErrorMsg(verifyRes.message || 'Échec de la vérification du paiement auprès du serveur.');
+        return;
       }
 
       await paymentHistoryStorage.add({

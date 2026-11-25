@@ -74,6 +74,17 @@ export const tokenStorage = {
     } catch {
       // Ignore
     }
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && window?.localStorage) {
+      try {
+        const stored = window.localStorage.getItem(AUTH_TOKEN_KEY);
+        if (stored) {
+          inMemoryToken = stored;
+          return stored;
+        }
+      } catch {
+        // Ignore
+      }
+    }
     return inMemoryToken;
   },
   set: async (token: string): Promise<void> => {
@@ -83,6 +94,13 @@ export const tokenStorage = {
     } catch {
       // Ignore
     }
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && window?.localStorage) {
+      try {
+        window.localStorage.setItem(AUTH_TOKEN_KEY, token);
+      } catch {
+        // Ignore
+      }
+    }
   },
   remove: async (): Promise<void> => {
     inMemoryToken = null;
@@ -90,6 +108,13 @@ export const tokenStorage = {
       await AsyncStorage.removeItem(AUTH_TOKEN_KEY);
     } catch {
       // Ignore
+    }
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && window?.localStorage) {
+      try {
+        window.localStorage.removeItem(AUTH_TOKEN_KEY);
+      } catch {
+        // Ignore
+      }
     }
   },
 };
@@ -124,7 +149,7 @@ export interface AuthentificationPayload {
 }
 
 export interface AuthResponseData {
-  user: {
+  user?: {
     id: string;
     name: string;
     nom?: string;
@@ -133,16 +158,34 @@ export interface AuthResponseData {
     phone: string;
     telephone?: string;
     email?: string;
+    photo_profil?: string | null;
+    photo_url?: string | null;
     role: 'client_proprietaire' | 'agent_immobilier';
     roles?: string[];
+    is_financial_owner?: boolean;
     is_verifed: boolean;
     statut?: string;
     zone_id?: number | null;
     balanceFifa: number;
     created_at?: string;
   };
-  token: string;
-  token_type: string;
+  token?: string;
+  token_type?: string;
+  requires_two_factor?: boolean;
+  two_factor_token?: string;
+  destination_masquee?: string;
+  expires_in?: number;
+  test_otp_code?: string;
+  role?: string;
+}
+
+export interface VerifierOtp2FaPayload {
+  two_factor_token: string;
+  code_otp: string;
+}
+
+export interface RenvoyerOtp2FaPayload {
+  two_factor_token: string;
 }
 
 function buildQuery(params: Record<string, string | number | boolean | undefined | null>): string {
@@ -238,14 +281,59 @@ export const authApi = {
     return res;
   },
 
+  verifierOtp2Fa: async (
+    payload: VerifierOtp2FaPayload
+  ): Promise<ApiResponse<AuthResponseData>> => {
+    const res = await apiRequest<AuthResponseData>('/authentification/verifier-otp', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    if (res.success && res.data?.token) {
+      await tokenStorage.set(res.data.token);
+    }
+    return res;
+  },
+
+  renvoyerOtp2Fa: async (
+    payload: RenvoyerOtp2FaPayload
+  ): Promise<ApiResponse<AuthResponseData>> => {
+    return apiRequest<AuthResponseData>('/authentification/renvoyer-otp', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
   profil: async (): Promise<ApiResponse<{ user: AuthResponseData['user'] }>> => {
     return apiRequest('/profil', { method: 'GET' });
   },
 
+  updateProfil: async (payload: { name?: string; prenom?: string }): Promise<ApiResponse<{ user: AuthResponseData['user'] }>> => {
+    return apiRequest('/profil', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  uploadPhotoProfil: async (formData: FormData): Promise<ApiResponse<{ user: AuthResponseData['user'] }>> => {
+    return apiRequest('/profil/photo', {
+      method: 'POST',
+      body: formData,
+    });
+  },
+
+  deletePhotoProfil: async (): Promise<ApiResponse<{ user: AuthResponseData['user'] }>> => {
+    return apiRequest('/profil/photo', { method: 'DELETE' });
+  },
+
   deconnexion: async (): Promise<ApiResponse> => {
-    const res = await apiRequest('/deconnexion', { method: 'POST' });
-    await tokenStorage.remove();
-    return res;
+    try {
+      const res = await apiRequest('/deconnexion', { method: 'POST' });
+      return res;
+    } catch {
+      return { success: true, message: 'Déconnecté avec succès.' };
+    } finally {
+      await tokenStorage.remove();
+    }
   },
 };
 
@@ -309,12 +397,14 @@ export const paiementsApi = {
 
   verifier: async (payload: {
     transactionId: string;
+    reference?: string;
     amount?: number;
   }): Promise<ApiResponse<any>> => {
     return apiRequest('/paiements/verifier', {
       method: 'POST',
       body: JSON.stringify({
         transactionId: payload.transactionId,
+        reference: payload.reference,
         amount: payload.amount,
       }),
     });
@@ -583,7 +673,13 @@ export const adminApi = {
   },
 
   // Audit logs
-  getAuditLogs: async (filters?: { action?: string; page?: number }): Promise<ApiResponse<PaginatedPayload<AuditLogItem>>> => {
+  getAuditLogs: async (filters?: {
+    action?: string;
+    module?: string;
+    search?: string;
+    page?: number;
+    per_page?: number;
+  }): Promise<ApiResponse<PaginatedPayload<AuditLogItem>>> => {
     return apiRequest(`/admin/audit-logs${buildQuery(filters || {})}`, { method: 'GET' });
   },
 
@@ -627,7 +723,16 @@ export const adminApi = {
     return apiRequest(`/admin/dossiers/${type}/${id}/coordonnees`, { method: 'GET' });
   },
 
-  // Brique A : Modération catalogue
+  // Brique A : Modération catalogue & Tous les posts (Clients & Agents)
+  getAllProprietes: async (filters?: {
+    author_role?: 'all' | 'client' | 'agent';
+    status?: string;
+    search?: string;
+    page?: number;
+    per_page?: number;
+  }): Promise<ApiResponse<BackendProperty[]>> => {
+    return apiRequest(`/admin/proprietes${buildQuery(filters || {})}`, { method: 'GET' });
+  },
   getProprietesEnAttente: async (page = 1): Promise<ApiResponse<BackendProperty[]>> => {
     return apiRequest(`/admin/proprietes/en-attente?page=${page}`, { method: 'GET' });
   },

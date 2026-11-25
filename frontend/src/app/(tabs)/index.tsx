@@ -31,6 +31,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { LandingShowcase } from '@/components/home/landing-showcase';
 import { PropertyCard } from '@/components/property-card';
 import { PropertyActionModal, PropertyActionTab } from '@/components/property/property-action-modal';
+import { SuperAdminPrincipalPortal } from '@/components/super-admin/super-admin-portal';
 import { UnlockModal } from '@/components/unlock-modal';
 import { FILTER_CATEGORIES } from '@/constants/locations';
 import { BottomTabInset, Spacing } from '@/constants/theme';
@@ -49,7 +50,7 @@ import {
 } from '@/types/property';
 
 export default function HomeScreen() {
-  const { isAuthenticated, openAuthModal } = useAuth();
+  const { isAuthenticated, isSuperAdminPrincipal, openAuthModal } = useAuth();
 
   if (!isAuthenticated) {
     return (
@@ -58,6 +59,10 @@ export default function HomeScreen() {
         onOpenRegister={() => openAuthModal('register')}
       />
     );
+  }
+
+  if (isSuperAdminPrincipal) {
+    return <SuperAdminPrincipalPortal initialPage="dashboard" />;
   }
 
   return <AuthenticatedCatalog />;

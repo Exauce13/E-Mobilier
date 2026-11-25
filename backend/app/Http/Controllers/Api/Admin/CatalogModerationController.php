@@ -12,6 +12,76 @@ use Illuminate\Http\Request;
 class CatalogModerationController extends Controller
 {
     /**
+     * Liste l'ensemble des posts (annonces) publiés par les Clients et les Agents immobiliers.
+     * Filtres supportés : author_role (client|agent), status, search.
+     */
+    public function index(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        $query = Proprietes::with([
+            'user:id,name,prenom,email,telephone',
+            'user.roles:id,name',
+            'zone:id,nom',
+            'documents',
+            'media',
+        ])->latest();
+
+        if ($user->isResponsableZone() && ! $user->isSuperAdminPrincipal() && ! $user->isSuperAdminTechnique()) {
+            $query->where('zone_id', $user->zone_id);
+        }
+
+        if ($request->filled('status') && $request->input('status') !== 'all') {
+            $status = $request->input('status');
+            if ($status === 'pending') {
+                $query->whereIn('status', ['pending', 'pending_payment']);
+            } elseif ($status === 'conclu') {
+                $query->whereIn('status', ['conclu', 'sold', 'rented']);
+            } else {
+                $query->where('status', $status);
+            }
+        }
+
+        if ($request->filled('author_role') && $request->input('author_role') !== 'all') {
+            $authorRole = $request->input('author_role');
+            if ($authorRole === 'agent') {
+                $query->whereHas('user.roles', fn ($q) => $q->where('name', 'Agent mobilier'));
+            } elseif ($authorRole === 'client') {
+                $query->whereHas('user', function ($uq) {
+                    $uq->whereDoesntHave('roles', fn ($rq) => $rq->where('name', 'Agent mobilier'));
+                });
+            }
+        }
+
+        if ($request->filled('search')) {
+            $term = '%' . trim((string) $request->input('search')) . '%';
+            $query->where(function ($q) use ($term) {
+                $q->where('commune', 'ILIKE', $term)
+                    ->orWhere('quartier', 'ILIKE', $term)
+                    ->orWhere('type', 'ILIKE', $term)
+                    ->orWhere('description', 'ILIKE', $term)
+                    ->orWhereHas('user', function ($uq) use ($term) {
+                        $uq->where('name', 'ILIKE', $term)
+                            ->orWhere('prenom', 'ILIKE', $term);
+                    });
+            });
+        }
+
+        $biens = $query->paginate($request->integer('per_page', 30));
+
+        return response()->json([
+            'success' => true,
+            'data' => $biens->items(),
+            'pagination' => [
+                'current_page' => $biens->currentPage(),
+                'last_page' => $biens->lastPage(),
+                'per_page' => $biens->perPage(),
+                'total' => $biens->total(),
+            ],
+        ]);
+    }
+
+    /**
      * Liste les biens soumis en attente de modération.
      * Filtrage territorial automatique si Responsable de zone.
      */

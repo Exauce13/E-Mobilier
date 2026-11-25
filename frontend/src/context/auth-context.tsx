@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 
 import {
@@ -17,17 +18,26 @@ export interface AuthUser {
   fullName?: string;
   phone: string;
   email?: string;
+  photo_profil?: string | null;
+  photo_url?: string | null;
   role: UserRole;
   roles: string[];
+  is_financial_owner?: boolean;
   is_verifed: boolean;
   statut?: string;
   zone_id?: number | null;
   balanceFifa: number;
 }
 
-interface AuthResult {
+export interface AuthResult {
   success: boolean;
   message?: string;
+  requiresTwoFactor?: boolean;
+  twoFactorToken?: string;
+  destinationMasquee?: string;
+  expiresIn?: number;
+  testOtpCode?: string;
+  role?: string;
 }
 
 interface AuthContextType {
@@ -41,6 +51,8 @@ interface AuthContextType {
   closeAuthModal: () => void;
   setAuthModalMode: (mode: 'login' | 'register') => void;
   login: (phone: string, password: string) => Promise<AuthResult>;
+  verifyTwoFactorOtp: (twoFactorToken: string, codeOtp: string) => Promise<AuthResult>;
+  resendTwoFactorOtp: (twoFactorToken: string) => Promise<AuthResult>;
   register: (payload: InscriptionPayload) => Promise<AuthResult>;
   logout: () => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -50,6 +62,7 @@ interface AuthContextType {
   isAdminStaff: boolean;
   isSuperAdmin: boolean;
   isSuperAdminPrincipal: boolean;
+  isFinancialOwner: boolean;
   isAgentMobilier: boolean;
   isClient: boolean;
 }
@@ -79,8 +92,11 @@ function mapBackendUserToAuthUser(u: any): AuthUser {
     fullName: u.fullName,
     phone: u.phone || u.telephone || '',
     email: u.email,
+    photo_profil: u.photo_profil ?? null,
+    photo_url: u.photo_url ?? null,
     role,
     roles,
+    is_financial_owner: Boolean(u.is_financial_owner),
     is_verifed: Boolean(u.is_verifed),
     statut: u.statut,
     zone_id: u.zone_id ?? null,
@@ -153,10 +169,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (phone: string, password: string): Promise<AuthResult> => {
     const response = await authApi.authentification({ phone, password });
 
-    if (!response.success || !response.data?.user) {
+    if (!response.success) {
       return {
         success: false,
         message: response.message || 'Identifiants incorrects ou erreur serveur.',
+      };
+    }
+
+    // Gestion du challenge de double authentification (2FA OTP) pour les rôles administratifs
+    if (response.data?.requires_two_factor) {
+      return {
+        success: true,
+        requiresTwoFactor: true,
+        twoFactorToken: response.data.two_factor_token,
+        destinationMasquee: response.data.destination_masquee,
+        expiresIn: response.data.expires_in,
+        testOtpCode: response.data.test_otp_code,
+        role: response.data.role,
+        message: response.message || 'Double authentification requise. Un code OTP a été envoyé.',
+      };
+    }
+
+    if (!response.data?.user) {
+      return {
+        success: false,
+        message: response.message || 'Erreur lors de la récupération du profil utilisateur.',
       };
     }
 
@@ -166,6 +203,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return {
       success: true,
       message: response.message,
+    };
+  };
+
+  const verifyTwoFactorOtp = async (
+    twoFactorToken: string,
+    codeOtp: string
+  ): Promise<AuthResult> => {
+    const response = await authApi.verifierOtp2Fa({
+      two_factor_token: twoFactorToken,
+      code_otp: codeOtp,
+    });
+
+    if (!response.success || !response.data?.user) {
+      return {
+        success: false,
+        message: response.message || 'Code OTP invalide ou expiré.',
+      };
+    }
+
+    setUser(mapBackendUserToAuthUser(response.data.user));
+    setAuthModalVisible(false);
+    void refreshUnreadCount();
+    return {
+      success: true,
+      message: response.message,
+    };
+  };
+
+  const resendTwoFactorOtp = async (
+    twoFactorToken: string
+  ): Promise<AuthResult> => {
+    const response = await authApi.renvoyerOtp2Fa({
+      two_factor_token: twoFactorToken,
+    });
+
+    return {
+      success: response.success,
+      message: response.message,
+      twoFactorToken: response.data?.two_factor_token || twoFactorToken,
+      destinationMasquee: response.data?.destination_masquee,
+      expiresIn: response.data?.expires_in,
+      testOtpCode: response.data?.test_otp_code,
     };
   };
 
@@ -196,9 +275,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
-    await authApi.deconnexion();
-    setUser(null);
-    setUnreadNotificationsCount(0);
+    try {
+      await authApi.deconnexion();
+    } catch (e) {
+      console.warn('Erreur lors de la déconnexion backend:', e);
+    } finally {
+      await tokenStorage.remove();
+      setUser(null);
+      setUnreadNotificationsCount(0);
+      try {
+        router.replace('/' as any);
+      } catch {
+        // Ignore navigation error
+      }
+    }
   };
 
   const hasRole = useCallback(
@@ -217,6 +307,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const isSuperAdminPrincipal = hasRole('Super Admin Principal');
+  const isFinancialOwner = Boolean(user?.is_financial_owner);
   const isSuperAdmin =
     isSuperAdminPrincipal || hasRole('Super Admin Technique');
   const isAdminStaff = hasAnyRole(ADMIN_ROLES);
@@ -236,6 +327,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         closeAuthModal,
         setAuthModalMode,
         login,
+        verifyTwoFactorOtp,
+        resendTwoFactorOtp,
         register,
         logout,
         refreshProfile,
@@ -245,6 +338,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isAdminStaff,
         isSuperAdmin,
         isSuperAdminPrincipal,
+        isFinancialOwner,
         isAgentMobilier,
         isClient,
       }}>

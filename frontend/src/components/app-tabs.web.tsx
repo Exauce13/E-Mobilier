@@ -17,42 +17,44 @@ import { useResponsive } from '@/hooks/use-responsive';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function AppTabs() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isSuperAdminPrincipal } = useAuth();
   const { isMobile } = useResponsive();
 
   return (
     <Tabs>
       <TabSlot style={{ height: '100%' }} />
 
-      <TabList asChild>
-        <CustomTabList isMobile={isMobile}>
-          <TabTrigger name="home" href="/" asChild>
-            <TabButton compact={isMobile} icon="home">
-              Accueil
-            </TabButton>
-          </TabTrigger>
-
-          <TabTrigger name="explore" href="/explore" asChild>
-            <TabButton compact={isMobile} icon="search">
-              Recherche
-            </TabButton>
-          </TabTrigger>
-
-          <TabTrigger name="publish" href="/publish" asChild>
-            <TabButton compact={isMobile} icon="publish">
-              Publier
-            </TabButton>
-          </TabTrigger>
-
-          {isAuthenticated && (
-            <TabTrigger name="visits" href="/visits" asChild>
-              <TabButton compact={isMobile} icon="visits">
-                Visites
+      {!isSuperAdminPrincipal && (
+        <TabList asChild>
+          <CustomTabList isMobile={isMobile}>
+            <TabTrigger name="home" href="/" asChild>
+              <TabButton compact={isMobile} icon="home">
+                Accueil
               </TabButton>
             </TabTrigger>
-          )}
-        </CustomTabList>
-      </TabList>
+
+            <TabTrigger name="explore" href="/explore" asChild>
+              <TabButton compact={isMobile} icon="search">
+                Recherche
+              </TabButton>
+            </TabTrigger>
+
+            <TabTrigger name="publish" href="/publish" asChild>
+              <TabButton compact={isMobile} icon="publish">
+                Publier
+              </TabButton>
+            </TabTrigger>
+
+            {isAuthenticated && (
+              <TabTrigger name="visits" href="/visits" asChild>
+                <TabButton compact={isMobile} icon="visits">
+                  Visites
+                </TabButton>
+              </TabTrigger>
+            )}
+          </CustomTabList>
+        </TabList>
+      )}
     </Tabs>
   );
 }

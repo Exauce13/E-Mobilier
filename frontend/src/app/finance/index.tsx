@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { SuperAdminPrincipalPortal } from '@/components/super-admin/super-admin-portal';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
@@ -23,9 +24,19 @@ import { formatFcfa } from '@/types/property';
 type FinanceTab = 'dashboard' | 'ledger' | 'payouts' | 'security' | 'webhooks_notifs';
 
 export default function FinanceVaultScreen() {
+  const { isFinancialOwner } = useAuth();
+
+  if (isFinancialOwner) {
+    return <SuperAdminPrincipalPortal initialPage="finance" />;
+  }
+
+  return <LegacyFinanceVaultScreen />;
+}
+
+function LegacyFinanceVaultScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const { isSuperAdminPrincipal } = useAuth();
+  const { isFinancialOwner: isSuperAdminPrincipal } = useAuth();
 
   const [activeTab, setActiveTab] = useState<FinanceTab>('dashboard');
   const [loading, setLoading] = useState(true);
@@ -383,7 +394,12 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   tabRow: { flexDirection: 'row', padding: 8, gap: 6, borderBottomWidth: 1 },
   tabBtn: { flex: 1, paddingVertical: 8, borderRadius: 10, alignItems: 'center' },
-  scroll: { padding: Spacing.three },
+  scroll: {
+    padding: Spacing.three,
+    maxWidth: 1000,
+    width: '100%',
+    alignSelf: 'center',
+  },
   section: { gap: Spacing.two },
   vaultCard: { borderRadius: 18, padding: Spacing.four },
   card: { borderRadius: 16, borderWidth: 1, padding: Spacing.three, gap: 8 },

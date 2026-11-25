@@ -287,21 +287,35 @@ class PosteController extends Controller
                     'amount_paid' => $fraisDeblocage,
                 ]);
 
-                // 2. Enregistrement de la trace dans la table paiements
+                // 2. Enregistrement ou liaison de la trace dans la table paiements
                 $transactionRef = $verification['transaction_id'] ?? $transactionId;
-                if (Paiement::where('transaction_reference', $transactionRef)->exists()) {
-                    $transactionRef .= '-VIEW-' . uniqid();
-                }
+                $existingPaiement = Paiement::where('transaction_reference', $transactionRef)
+                    ->where('user_id', $user->id)
+                    ->where('payment_type', 'view_details')
+                    ->first();
 
-                Paiement::create([
-                    'user_id' => $user->id,
-                    'property_id' => $propriete->id,
-                    'transaction_reference' => $transactionRef,
-                    'payment_type' => 'view_details',
-                    'amount' => $fraisDeblocage,
-                    'payment_method' => 'kkiapay',
-                    'status' => 'successful',
-                ]);
+                if ($existingPaiement && ($existingPaiement->property_id === null || $existingPaiement->property_id === $propriete->id)) {
+                    $existingPaiement->update([
+                        'property_id' => $propriete->id,
+                        'related_entity_id' => $propriete->id,
+                        'amount' => $fraisDeblocage,
+                        'status' => 'successful',
+                    ]);
+                } else {
+                    if (Paiement::where('transaction_reference', $transactionRef)->exists()) {
+                        $transactionRef .= '-VIEW-' . uniqid();
+                    }
+
+                    Paiement::create([
+                        'user_id' => $user->id,
+                        'property_id' => $propriete->id,
+                        'transaction_reference' => $transactionRef,
+                        'payment_type' => 'view_details',
+                        'amount' => $fraisDeblocage,
+                        'payment_method' => 'kkiapay',
+                        'status' => 'successful',
+                    ]);
+                }
             });
 
             return response()->json([
@@ -445,9 +459,13 @@ class PosteController extends Controller
                 }
             }
 
-            // Vérifier que la transaction Kkiapay n'a pas déjà été utilisée
-            $alreadyUsed = Paiement::where('transaction_reference', $kkiapayTransactionId)->exists();
-            if ($alreadyUsed) {
+            // Vérifier que la transaction Kkiapay n'a pas déjà été utilisée pour une autre publication
+            $existingPubPayment = Paiement::where('transaction_reference', $kkiapayTransactionId)->first();
+            if ($existingPubPayment && (
+                $existingPubPayment->property_id !== null
+                || $existingPubPayment->user_id !== $user->id
+                || ! in_array($existingPubPayment->payment_type, ['agent_post', 'owner_post_submission'], true)
+            )) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Cette transaction Kkiapay a déjà été validée pour une autre publication.',
@@ -497,19 +515,35 @@ class PosteController extends Controller
             // 3. Traitement et stockage des documents (convention_vente, permis_habiter, attestation_recasement, titre_foncier)
             $this->storePropertyDocuments($propriete, $postrequest);
 
-            // 4. Enregistrement de la souscription Kkiapay (500 FCFA pour Client ou 100 FCFA pour Agent)
+            // 4. Enregistrement ou liaison de la souscription Kkiapay (500 FCFA pour Client ou 100 FCFA pour Agent)
             $paiement = null;
             if ($fraisSouscription > 0 && $kkiapayTransactionId) {
-                $paiement = Paiement::create([
-                    'user_id' => $user->id,
-                    'property_id' => $propriete->id,
-                    'transaction_reference' => $kkiapayTransactionId,
-                    'payment_type' => $paymentType,
-                    'related_entity_id' => $propriete->id,
-                    'amount' => $fraisSouscription,
-                    'payment_method' => 'kkiapay',
-                    'status' => 'successful',
-                ]);
+                $existingPaiement = Paiement::where('transaction_reference', $kkiapayTransactionId)
+                    ->where('user_id', $user->id)
+                    ->whereNull('property_id')
+                    ->first();
+
+                if ($existingPaiement) {
+                    $existingPaiement->update([
+                        'property_id' => $propriete->id,
+                        'payment_type' => $paymentType,
+                        'related_entity_id' => $propriete->id,
+                        'amount' => $fraisSouscription,
+                        'status' => 'successful',
+                    ]);
+                    $paiement = $existingPaiement->fresh();
+                } else {
+                    $paiement = Paiement::create([
+                        'user_id' => $user->id,
+                        'property_id' => $propriete->id,
+                        'transaction_reference' => $kkiapayTransactionId,
+                        'payment_type' => $paymentType,
+                        'related_entity_id' => $propriete->id,
+                        'amount' => $fraisSouscription,
+                        'payment_method' => 'kkiapay',
+                        'status' => 'successful',
+                    ]);
+                }
             }
 
             DB::commit();
