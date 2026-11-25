@@ -23,9 +23,9 @@ import { formatFcfa } from '@/types/property';
 type FinanceTab = 'dashboard' | 'ledger' | 'payouts' | 'security' | 'webhooks_notifs';
 
 export default function FinanceVaultScreen() {
-  const { isSuperAdminPrincipal } = useAuth();
+  const { isFinancialOwner } = useAuth();
 
-  if (isSuperAdminPrincipal) {
+  if (isFinancialOwner) {
     return <SuperAdminPrincipalPortal initialPage="finance" />;
   }
 
@@ -35,7 +35,7 @@ export default function FinanceVaultScreen() {
 function LegacyFinanceVaultScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const { isSuperAdminPrincipal } = useAuth();
+  const { isFinancialOwner: isSuperAdminPrincipal } = useAuth();
 
   const [activeTab, setActiveTab] = useState<FinanceTab>('dashboard');
   const [loading, setLoading] = useState(true);

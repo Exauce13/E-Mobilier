@@ -527,6 +527,7 @@ class InscriptionController extends Controller
             'photo_url' => $photoUrl,
             'role' => $frontendRole,
             'roles' => $roles,
+            'is_financial_owner' => $user->isFinancialOwner(),
             'statut' => $user->statut ?? 'actif',
             'zone_id' => $user->zone_id,
             'is_verifed' => (bool) $user->is_verifed,

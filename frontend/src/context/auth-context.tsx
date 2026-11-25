@@ -22,6 +22,7 @@ export interface AuthUser {
   photo_url?: string | null;
   role: UserRole;
   roles: string[];
+  is_financial_owner?: boolean;
   is_verifed: boolean;
   statut?: string;
   zone_id?: number | null;
@@ -61,6 +62,7 @@ interface AuthContextType {
   isAdminStaff: boolean;
   isSuperAdmin: boolean;
   isSuperAdminPrincipal: boolean;
+  isFinancialOwner: boolean;
   isAgentMobilier: boolean;
   isClient: boolean;
 }
@@ -94,6 +96,7 @@ function mapBackendUserToAuthUser(u: any): AuthUser {
     photo_url: u.photo_url ?? null,
     role,
     roles,
+    is_financial_owner: Boolean(u.is_financial_owner),
     is_verifed: Boolean(u.is_verifed),
     statut: u.statut,
     zone_id: u.zone_id ?? null,
@@ -304,6 +307,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const isSuperAdminPrincipal = hasRole('Super Admin Principal');
+  const isFinancialOwner = Boolean(user?.is_financial_owner);
   const isSuperAdmin =
     isSuperAdminPrincipal || hasRole('Super Admin Technique');
   const isAdminStaff = hasAnyRole(ADMIN_ROLES);
@@ -334,6 +338,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isAdminStaff,
         isSuperAdmin,
         isSuperAdminPrincipal,
+        isFinancialOwner,
         isAgentMobilier,
         isClient,
       }}>

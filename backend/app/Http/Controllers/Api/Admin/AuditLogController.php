@@ -18,13 +18,13 @@ class AuditLogController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
-        $isPrincipal = $user->isSuperAdminPrincipal();
+        $isFinancialOwner = $user->isFinancialOwner();
 
         $query = AuditLog::with(['user:id,name,prenom,email', 'user.roles:id,name'])
             ->orderBy('created_at', 'desc');
 
-        // Cloisonnement : Si ce n'est pas Justin, interdire la vue des logs financiers
-        if (! $isPrincipal) {
+        // Cloisonnement strict : Seul le propriétaire financier (Justin MAGNIDE) voit les logs financiers
+        if (! $isFinancialOwner) {
             $query->where('is_financial', false);
         }
 
@@ -106,7 +106,7 @@ class AuditLogController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Journal d\'audit de sécurité récupéré avec succès.',
-            'financial_view_enabled' => $isPrincipal,
+            'financial_view_enabled' => $isFinancialOwner,
             'data' => $logs,
         ]);
     }

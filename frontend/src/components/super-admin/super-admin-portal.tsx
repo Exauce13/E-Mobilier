@@ -82,8 +82,10 @@ export function SuperAdminPrincipalPortal({
   const insets = useSafeAreaInsets();
   const isDesktop = width >= 900;
 
-  const { user, unreadNotificationsCount, logout } = useAuth();
-  const [activePage, setActivePage] = useState<SuperAdminPageKey>(initialPage);
+  const { user, unreadNotificationsCount, isFinancialOwner, logout } = useAuth();
+  const safeInitialPage: SuperAdminPageKey =
+    initialPage === 'finance' && !isFinancialOwner ? 'dashboard' : initialPage;
+  const [activePage, setActivePage] = useState<SuperAdminPageKey>(safeInitialPage);
   const [visitesSubTab, setVisitesSubTab] = useState<'visites' | 'demandes'>('visites');
   const [equipeSubTab, setEquipeSubTab] = useState<'governance' | 'kyc'>('governance');
 
@@ -117,24 +119,26 @@ export function SuperAdminPrincipalPortal({
               {NAV_GROUPS.map((group) => (
                 <View key={group.section} style={{ marginBottom: 10 }}>
                   <Text style={styles.navSectionTitle}>{group.section}</Text>
-                  {group.items.map((item) => {
-                    const active = activePage === item.key;
-                    return (
-                      <Pressable
-                        key={item.key}
-                        onPress={() => setActivePage(item.key)}
-                        style={[styles.navItem, active && styles.navItemActive]}>
-                        <Text style={[styles.navItemText, active && styles.navItemTextActive]}>
-                          {item.label}
-                        </Text>
-                        {item.tag && (
-                          <View style={styles.tagPill}>
-                            <Text style={styles.tagPillText}>{item.tag}</Text>
-                          </View>
-                        )}
-                      </Pressable>
-                    );
-                  })}
+                  {group.items
+                    .filter((item) => item.key !== 'finance' || isFinancialOwner)
+                    .map((item) => {
+                      const active = activePage === item.key;
+                      return (
+                        <Pressable
+                          key={item.key}
+                          onPress={() => setActivePage(item.key)}
+                          style={[styles.navItem, active && styles.navItemActive]}>
+                          <Text style={[styles.navItemText, active && styles.navItemTextActive]}>
+                            {item.label}
+                          </Text>
+                          {item.tag && (
+                            <View style={styles.tagPill}>
+                              <Text style={styles.tagPillText}>{item.tag}</Text>
+                            </View>
+                          )}
+                        </Pressable>
+                      );
+                    })}
                 </View>
               ))}
             </ScrollView>
@@ -216,7 +220,7 @@ export function SuperAdminPrincipalPortal({
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.mobileNavContent}>
                 {[
                   { key: 'dashboard', label: 'Accueil' },
-                  { key: 'finance', label: 'Coffre-Fort' },
+                  ...(isFinancialOwner ? [{ key: 'finance', label: 'Coffre-Fort' }] : []),
                   { key: 'moderation', label: 'Posts' },
                   { key: 'visites', label: 'Visites' },
                   { key: 'demasquages', label: 'TTL' },
@@ -250,7 +254,7 @@ export function SuperAdminPrincipalPortal({
             ]}
             showsVerticalScrollIndicator={false}>
             {activePage === 'dashboard' && <SuperAdminDashboardSection onNavigate={setActivePage} />}
-            {activePage === 'finance' && <SuperAdminFinanceSection />}
+            {activePage === 'finance' && isFinancialOwner && <SuperAdminFinanceSection />}
             {activePage === 'moderation' && <SuperAdminPostsSection />}
 
             {activePage === 'visites' && (

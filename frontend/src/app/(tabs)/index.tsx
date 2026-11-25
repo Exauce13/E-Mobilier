@@ -62,7 +62,7 @@ function AuthenticatedCatalog() {
     refreshUnreadCount,
     isAdminStaff,
     isAgentMobilier,
-    isSuperAdminPrincipal,
+    isFinancialOwner,
   } = useAuth();
   const storageBaseUrl = useMemo(() => getStorageBaseUrl(), []);
 
@@ -280,7 +280,7 @@ function AuthenticatedCatalog() {
                     style={[styles.roleActionBtn, { backgroundColor: theme.primary }]}>
                     <Text style={styles.roleActionBtnText}>Console Admin</Text>
                   </Pressable>
-                  {isSuperAdminPrincipal && (
+                  {isFinancialOwner && (
                     <Pressable
                       onPress={() => router.push('/finance' as any)}
                       style={[styles.roleActionBtnOutline, { borderColor: theme.primary }]}>

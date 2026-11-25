@@ -67,6 +67,7 @@ export function SuperAdminDashboardSection({
 }: {
   onNavigate: (page: SuperAdminPageKey) => void;
 }) {
+  const { isFinancialOwner } = useAuth();
   const [loading, setLoading] = useState(true);
   const [solde, setSolde] = useState<number>(0);
   const [pendingPostsCount, setPendingPostsCount] = useState<number>(0);
@@ -79,7 +80,7 @@ export function SuperAdminDashboardSection({
     setLoading(true);
     try {
       const [finRes, allPostsRes, pendingPostsRes, demRes, logsRes, zoneRes] = await Promise.all([
-        financeApi.getTableauDeBord().catch(() => null),
+        isFinancialOwner ? financeApi.getTableauDeBord().catch(() => null) : Promise.resolve(null),
         adminApi.getAllProprietes({ per_page: 1 }).catch(() => null),
         adminApi.getProprietesEnAttente(1).catch(() => null),
         adminApi.enAttenteDemasquage(1).catch(() => null),
@@ -117,7 +118,7 @@ export function SuperAdminDashboardSection({
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isFinancialOwner]);
 
   useEffect(() => {
     void loadDashboard();
@@ -136,11 +137,13 @@ export function SuperAdminDashboardSection({
     <View style={styles.sectionGap}>
       {/* KPI Grid */}
       <View style={styles.kpiGrid}>
-        <Pressable onPress={() => onNavigate('finance')} style={styles.kpiCard}>
-          <Text style={styles.kpiLabel}>Solde Coffre-Fort</Text>
-          <Text style={[styles.kpiValue, { color: SA_COLORS.green }]}>{formatFcfa(solde)}</Text>
-          <Text style={styles.kpiSub}>Intégrité HMAC protégée ✓</Text>
-        </Pressable>
+        {isFinancialOwner && (
+          <Pressable onPress={() => onNavigate('finance')} style={styles.kpiCard}>
+            <Text style={styles.kpiLabel}>Solde Coffre-Fort</Text>
+            <Text style={[styles.kpiValue, { color: SA_COLORS.green }]}>{formatFcfa(solde)}</Text>
+            <Text style={styles.kpiSub}>Intégrité HMAC protégée ✓</Text>
+          </Pressable>
+        )}
 
         <Pressable onPress={() => onNavigate('moderation')} style={styles.kpiCard}>
           <Text style={styles.kpiLabel}>Posts Clients &amp; Agents</Text>
@@ -193,10 +196,12 @@ export function SuperAdminDashboardSection({
         {/* Accès rapides */}
         <View style={[styles.card, { flex: 1, minWidth: 250 }]}>
           <Text style={styles.cardTitle}>Accès rapides</Text>
-          <Pressable onPress={() => onNavigate('finance')} style={styles.quickActionCard}>
-            <Text style={styles.rowBold}>Initier un retrait sécurisé (OTP)</Text>
-            <Text style={styles.rowSub}>Décaissement vers compte officiel</Text>
-          </Pressable>
+          {isFinancialOwner && (
+            <Pressable onPress={() => onNavigate('finance')} style={styles.quickActionCard}>
+              <Text style={styles.rowBold}>Initier un retrait sécurisé (OTP)</Text>
+              <Text style={styles.rowSub}>Décaissement vers compte officiel</Text>
+            </Pressable>
+          )}
           <Pressable onPress={() => onNavigate('moderation')} style={styles.quickActionCard}>
             <Text style={styles.rowBold}>Voir les posts Clients &amp; Agents</Text>
             <Text style={styles.rowSub}>Filtrer par auteur et modérer</Text>
@@ -794,6 +799,7 @@ export function SuperAdminPostsSection() {
  * 4. JOURNALISATION GLOBALE DE TOUTE LA PLATEFORME
  * ========================================================================== */
 export function SuperAdminLogsSection() {
+  const { isFinancialOwner } = useAuth();
   const [moduleFilter, setModuleFilter] = useState<'all' | 'auth' | 'posts' | 'finance' | 'visites' | 'securite'>('all');
   const [search, setSearch] = useState('');
   const [logs, setLogs] = useState<AuditLogItem[]>([]);
@@ -834,7 +840,7 @@ export function SuperAdminLogsSection() {
                 { k: 'all', l: 'Tout' },
                 { k: 'auth', l: 'Auth & 2FA' },
                 { k: 'posts', l: 'Posts & Modération' },
-                { k: 'finance', l: 'Finance' },
+                ...(isFinancialOwner ? [{ k: 'finance' as const, l: 'Finance' }] : []),
                 { k: 'visites', l: 'Visites' },
                 { k: 'securite', l: 'Sécurité & TTL' },
               ] as const
@@ -920,7 +926,7 @@ export function SuperAdminLogsSection() {
  * 5. MON PROFIL & CHANGEMENT DE PHOTO DE PROFIL
  * ========================================================================== */
 export function SuperAdminProfileSection() {
-  const { user, refreshProfile, logout } = useAuth();
+  const { user, isFinancialOwner, refreshProfile, logout } = useAuth();
   const [nom, setNom] = useState(user?.nom || '');
   const [prenom, setPrenom] = useState(user?.prenom || '');
   const [saving, setSaving] = useState(false);
@@ -1023,7 +1029,7 @@ export function SuperAdminProfileSection() {
           <View style={{ flex: 1, gap: 4 }}>
             <Text style={styles.postTitle}>{user?.name || 'Super Admin Principal'}</Text>
             <Text style={{ color: SA_COLORS.green, fontSize: 12, fontWeight: '700' }}>
-              Super Admin Principal • Propriétaire Financier
+              {isFinancialOwner ? 'Super Admin Principal • Propriétaire Financier' : 'Super Admin Principal'}
             </Text>
             <Text style={styles.rowSub}>
               {user?.email || ''} {user?.phone ? `• ${user.phone}` : ''}

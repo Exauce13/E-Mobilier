@@ -26,7 +26,7 @@ export default function ProfileScreen() {
     logout,
     unreadNotificationsCount,
     isAdminStaff,
-    isSuperAdminPrincipal,
+    isFinancialOwner,
     isAgentMobilier,
     openAuthModal,
   } = useAuth();
@@ -174,7 +174,7 @@ export default function ProfileScreen() {
           </Pressable>
         )}
 
-        {isSuperAdminPrincipal && (
+        {isFinancialOwner && (
           <Pressable
             onPress={() => router.push('/finance' as any)}
             style={[styles.specialCard, { backgroundColor: '#1E1B4B', borderColor: theme.gold }]}>
