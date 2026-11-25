@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import {
   Tabs,
   TabList,
@@ -6,15 +7,18 @@ import {
   TabTriggerSlotProps,
   TabListProps,
 } from 'expo-router/ui';
+import { Building2, Calendar, Home, PlusCircle, Search } from 'lucide-react-native';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { MaxContentWidth, Spacing } from '@/constants/theme';
+import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
+import { useResponsive } from '@/hooks/use-responsive';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function AppTabs() {
   const { isAuthenticated, isSuperAdminPrincipal } = useAuth();
+  const { isMobile } = useResponsive();
 
   return (
     <Tabs>
@@ -22,30 +26,32 @@ export default function AppTabs() {
 
       {!isSuperAdminPrincipal && (
         <TabList asChild>
-          <CustomTabList>
+          <CustomTabList isMobile={isMobile}>
             <TabTrigger name="home" href="/" asChild>
-              <TabButton>{isAuthenticated ? 'Catalogue' : 'Accueil'}</TabButton>
+              <TabButton compact={isMobile} icon="home">
+                Accueil
+              </TabButton>
             </TabTrigger>
 
             <TabTrigger name="explore" href="/explore" asChild>
-              <TabButton>Recherche</TabButton>
+              <TabButton compact={isMobile} icon="search">
+                Recherche
+              </TabButton>
             </TabTrigger>
 
-            {isAuthenticated && (
-              <TabTrigger name="publish" href="/publish" asChild>
-                <TabButton>Publier</TabButton>
-              </TabTrigger>
-            )}
+            <TabTrigger name="publish" href="/publish" asChild>
+              <TabButton compact={isMobile} icon="publish">
+                Publier
+              </TabButton>
+            </TabTrigger>
 
             {isAuthenticated && (
               <TabTrigger name="visits" href="/visits" asChild>
-                <TabButton>Visites</TabButton>
+                <TabButton compact={isMobile} icon="visits">
+                  Visites
+                </TabButton>
               </TabTrigger>
             )}
-
-            <TabTrigger name="profile" href="/profile" asChild>
-              <TabButton>{isAuthenticated ? 'Mon Profil' : 'Connexion'}</TabButton>
-            </TabTrigger>
           </CustomTabList>
         </TabList>
       )}
@@ -53,23 +59,52 @@ export default function AppTabs() {
   );
 }
 
-export function TabButton({ children, isFocused, ...props }: TabTriggerSlotProps) {
+type TabIconKey = 'home' | 'search' | 'publish' | 'visits';
+
+export function TabButton({
+  children,
+  isFocused,
+  compact,
+  icon,
+  ...props
+}: TabTriggerSlotProps & { compact?: boolean; icon?: TabIconKey }) {
   const theme = useTheme();
+  const iconColor = isFocused ? '#FFFFFF' : '#CBD5E1';
+  const iconSize = compact ? 15 : 16;
+
+  const renderIcon = () => {
+    switch (icon) {
+      case 'home':
+        return <Home size={iconSize} color={iconColor} strokeWidth={2} />;
+      case 'search':
+        return <Search size={iconSize} color={iconColor} strokeWidth={2} />;
+      case 'publish':
+        return <PlusCircle size={iconSize} color={iconColor} strokeWidth={2} />;
+      case 'visits':
+        return <Calendar size={iconSize} color={iconColor} strokeWidth={2} />;
+      default:
+        return null;
+    }
+  };
 
   return (
     <Pressable {...(props as any)} style={({ pressed }) => pressed && styles.pressed}>
       <View
         style={[
           styles.tabButtonView,
+          compact && styles.tabButtonCompact,
           {
             backgroundColor: isFocused ? theme.primary : 'transparent',
           },
         ]}>
+        {renderIcon()}
         <Text
+          numberOfLines={1}
           style={[
             styles.tabButtonText,
+            compact && styles.tabButtonTextCompact,
             {
-              color: isFocused ? '#FFFFFF' : theme.textSecondary,
+              color: iconColor,
               fontWeight: isFocused ? '700' : '500',
             },
           ]}>
@@ -80,27 +115,37 @@ export function TabButton({ children, isFocused, ...props }: TabTriggerSlotProps
   );
 }
 
-export function CustomTabList(props: TabListProps) {
+export function CustomTabList({
+  isMobile,
+  children,
+  ...props
+}: TabListProps & { isMobile: boolean }) {
   const theme = useTheme();
 
   return (
-    <View {...props} style={styles.tabListContainer}>
+    <View {...props} style={[styles.tabListContainer, isMobile && styles.tabListContainerMobile]}>
       <View
         style={[
           styles.innerContainer,
+          isMobile && styles.innerContainerMobile,
           {
-            backgroundColor: theme.navyLight,
-            borderColor: theme.cardBorder,
+            backgroundColor: theme.navy,
+            borderColor: 'rgba(255,255,255,0.12)',
           },
         ]}>
-        <View style={styles.brandRow}>
-          <Text style={[styles.brandText, { color: theme.gold }]}>E-Mobilier</Text>
-          <View style={styles.flagBadge}>
-            <Text style={styles.flagText}>🇧🇯</Text>
-          </View>
-        </View>
+        {!isMobile && (
+          <Pressable onPress={() => router.push('/' as any)} style={styles.brandRow}>
+            <View style={styles.brandIconWrap}>
+              <Building2 size={15} color="#F59E0B" strokeWidth={2.2} />
+            </View>
+            <Text style={[styles.brandText, { color: '#F59E0B' }]}>E-Mobilier</Text>
+            <View style={styles.countryPill}>
+              <Text style={styles.countryPillText}>BJ</Text>
+            </View>
+          </Pressable>
+        )}
 
-        <View style={styles.tabsRow}>{props.children}</View>
+        <View style={[styles.tabsRow, isMobile && styles.tabsRowMobile]}>{children}</View>
       </View>
     </View>
   );
@@ -109,15 +154,20 @@ export function CustomTabList(props: TabListProps) {
 const styles = StyleSheet.create({
   tabListContainer: {
     position: 'absolute',
-    bottom: 16,
+    bottom: 14,
     left: 0,
     right: 0,
     width: '100%',
-    paddingHorizontal: Spacing.four,
+    paddingHorizontal: Spacing.three,
     justifyContent: 'center',
     alignItems: 'center',
     flexDirection: 'row',
     pointerEvents: 'box-none',
+    zIndex: 40,
+  },
+  tabListContainerMobile: {
+    bottom: 10,
+    paddingHorizontal: 10,
   },
   innerContainer: {
     paddingVertical: 8,
@@ -127,45 +177,83 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12,
-    maxWidth: MaxContentWidth,
+    gap: 16,
+    maxWidth: 740,
     width: '100%',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.25,
-    shadowRadius: 12,
+    shadowRadius: 16,
     elevation: 8,
+  },
+  innerContainerMobile: {
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 20,
+    justifyContent: 'center',
   },
   brandRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 7,
+    flexShrink: 0,
+  },
+  brandIconWrap: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    backgroundColor: 'rgba(245, 158, 11, 0.16)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   brandText: {
     fontSize: 14,
-    fontWeight: '800',
+    fontWeight: '900',
     letterSpacing: -0.2,
   },
-  flagBadge: {
-    paddingHorizontal: 4,
+  countryPill: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255,255,255,0.12)',
   },
-  flagText: {
-    fontSize: 12,
+  countryPillText: {
+    color: '#FDE68A',
+    fontSize: 10,
+    fontWeight: '800',
   },
   tabsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    flexShrink: 1,
+  },
+  tabsRowMobile: {
+    width: '100%',
+    justifyContent: 'space-around',
+    gap: 2,
   },
   pressed: {
-    opacity: 0.75,
+    opacity: 0.78,
   },
   tabButtonView: {
-    paddingVertical: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
     paddingHorizontal: 14,
     borderRadius: 16,
   },
+  tabButtonCompact: {
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    borderRadius: 14,
+    gap: 4,
+  },
   tabButtonText: {
     fontSize: 13,
+  },
+  tabButtonTextCompact: {
+    fontSize: 12,
   },
 });

@@ -7,7 +7,7 @@ import { useThemeMode } from '@/context/theme-context';
 export default function AppTabs() {
   const { colorScheme } = useThemeMode();
   const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated } = useAuth();
 
   return (
     <NativeTabs
@@ -15,7 +15,7 @@ export default function AppTabs() {
       indicatorColor={colors.backgroundElement}
       labelStyle={{ selected: { color: colors.text } }}>
       <NativeTabs.Trigger name="index">
-        <NativeTabs.Trigger.Label>{isAuthenticated ? 'Catalogue' : 'Accueil'}</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Label>Accueil</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
           src={require('@/assets/images/tabIcons/home.png')}
           renderingMode="template"
@@ -30,15 +30,13 @@ export default function AppTabs() {
         />
       </NativeTabs.Trigger>
 
-      {isAuthenticated && (
-        <NativeTabs.Trigger name="publish">
-          <NativeTabs.Trigger.Label>Publier</NativeTabs.Trigger.Label>
-          <NativeTabs.Trigger.Icon
-            src={require('@/assets/images/tabIcons/home.png')}
-            renderingMode="template"
-          />
-        </NativeTabs.Trigger>
-      )}
+      <NativeTabs.Trigger name="publish">
+        <NativeTabs.Trigger.Label>Publier</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon
+          src={require('@/assets/images/tabIcons/home.png')}
+          renderingMode="template"
+        />
+      </NativeTabs.Trigger>
 
       {isAuthenticated && (
         <NativeTabs.Trigger name="visits">
@@ -49,14 +47,6 @@ export default function AppTabs() {
           />
         </NativeTabs.Trigger>
       )}
-
-      <NativeTabs.Trigger name="profile">
-        <NativeTabs.Trigger.Label>{isAuthenticated ? 'Profil' : 'Connexion'}</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon
-          src={require('@/assets/images/tabIcons/profile.png')}
-          renderingMode="template"
-        />
-      </NativeTabs.Trigger>
     </NativeTabs>
   );
 }

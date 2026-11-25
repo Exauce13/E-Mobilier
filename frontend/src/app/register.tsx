@@ -4,12 +4,10 @@ import { StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { RegisterView } from '@/components/auth/register-view';
-import { useAuth } from '@/context/auth-context';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function RegisterScreen() {
   const theme = useTheme();
-  const { register } = useAuth();
 
   return (
     <SafeAreaView edges={['top', 'bottom']} style={[styles.container, { backgroundColor: theme.background }]}>
@@ -24,7 +22,7 @@ export default function RegisterScreen() {
             }
           }}
           onSuccessRegister={() => {
-            router.replace('/profile' as any);
+            router.replace('/' as any);
           }}
         />
       </View>

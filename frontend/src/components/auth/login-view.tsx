@@ -26,7 +26,7 @@ export function LoginView({
   onNavigateToRegister,
   onSuccessLogin,
   onBack,
-}: LoginViewProps) {
+}: LoginViewProps): React.JSX.Element {
   const theme = useTheme();
   const { login, verifyTwoFactorOtp, resendTwoFactorOtp } = useAuth();
 

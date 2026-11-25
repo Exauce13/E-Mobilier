@@ -17,6 +17,7 @@ use App\Http\Controllers\Api\Admin\VueDemandeClient;
 use App\Http\Controllers\Api\Admin\ZoneController;
 use App\Http\Controllers\Api\Client\PosteController;
 use App\Http\Controllers\Api\Client\PosteRechercheController;
+use App\Http\Controllers\Api\Client\PropertyInquiryController;
 use App\Http\Controllers\Api\Client\VisitController;
 use App\Http\Controllers\Api\Finance\FinancialNotificationAuditController;
 use App\Http\Controllers\Api\Finance\FinancialSecurityController;
@@ -47,9 +48,14 @@ Route::post('/authentification/renvoyer-otp', [InscriptionController::class, 're
 Route::post('/kkiapay/webhook', [PaymentController::class, 'webhook']);
 Route::post('/paiements/webhook/{gateway?}', [PaymentController::class, 'webhook']);
 
-// Fil d'actualité public des biens immobiliers publiés
+// Fil d'actualité public des biens immobiliers publiés et consultation publique d'une fiche
 Route::get('/proprietes', [PosteController::class, 'filActualite']);
 Route::get('/fil-actualite', [PosteController::class, 'filActualite']);
+Route::get('/proprietes/{id}', [PosteController::class, 'show'])->whereNumber('id');
+
+// Demandes d'actions sur biens (visite, rendez-vous, contact) & formulaire client
+Route::post('/inquiries', [PropertyInquiryController::class, 'store']);
+Route::post('/proprietes/{propertyIdParam}/inquiries', [PropertyInquiryController::class, 'store'])->whereNumber('propertyIdParam');
 
 // Conformité légale publique : consultation de la version active des CGU
 Route::get('/cgu/courante', [LegalDocumentController::class, 'cguCourante']);
@@ -78,13 +84,17 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::get('/mes-proprietes', [PosteController::class, 'mesProprietes']);
         Route::post('/proprietes', [PosteController::class, 'posteProprietes']);
         Route::post('/poste-proprietes', [PosteController::class, 'posteProprietes']);
-        Route::get('/proprietes/{id}', [PosteController::class, 'show']);
         Route::match(['put', 'patch', 'post'], '/proprietes/{id}', [PosteController::class, 'update']);
         Route::delete('/proprietes/{id}', [PosteController::class, 'destroy']);
 
         // Déblocage des détails et coordonnées du bien (50 FCFA - paiement unique)
         Route::post('/proprietes/{id}/debloquer', [PosteController::class, 'debloquerDetails']);
         Route::post('/proprietes/{id}/payer-vue', [PosteController::class, 'debloquerDetails']);
+
+        // Suivi des demandes de contact / rendez-vous / tableau de bord agent
+        Route::get('/mes-inquiries', [PropertyInquiryController::class, 'mesDemandes']);
+        Route::get('/agent/dashboard', [PropertyInquiryController::class, 'agentDashboard']);
+        Route::patch('/inquiries/{id}/statut', [PropertyInquiryController::class, 'updateStatut']);
     });
 
     // Demandes de visites physiques (500 FCFA obligatoires) - Client, Agent mobilier et Admin

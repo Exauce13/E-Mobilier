@@ -22,6 +22,11 @@ function RootNavigationShell() {
         <Stack.Screen name="login" />
         <Stack.Screen name="register" />
         <Stack.Screen name="property/[id]" />
+        <Stack.Screen name="client" />
+        <Stack.Screen name="client-form" />
+        <Stack.Screen name="agent" />
+        <Stack.Screen name="publish-client" />
+        <Stack.Screen name="publish-agent" />
         <Stack.Screen name="notifications" />
         <Stack.Screen name="my-properties" />
         <Stack.Screen name="search-requests" />

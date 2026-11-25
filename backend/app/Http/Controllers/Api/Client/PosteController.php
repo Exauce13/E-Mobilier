@@ -73,11 +73,10 @@ class PosteController extends Controller
      */
     public function filActualite(Request $request): JsonResponse
     {
-        $user = $request->user();
+        $user = $request->user('sanctum') ?? $request->user();
 
         $query = Proprietes::with(['media', 'documents', 'user:id,name,prenom,telephone,email'])
-            ->where('status', 'published')
-            ->latest();
+            ->where('status', 'published');
 
         // Filtre par type de bien (parcelle, maison, chambre)
         if ($request->filled('type') || $request->filled('property_type')) {
@@ -108,9 +107,30 @@ class PosteController extends Controller
             $query->where('prix', '<=', (float) $request->input('prix_max'));
         }
 
+        // Filtre par surface minimale
+        if ($request->filled('surface_min')) {
+            $query->where('surface', '>=', (float) $request->input('surface_min'));
+        }
+
         // Filtre par nombre de chambres
         if ($request->filled('nombres_chambres')) {
             $query->where('nombres_chambres', '>=', (int) $request->input('nombres_chambres'));
+        }
+
+        // Filtre négociable uniquement
+        if ($request->filled('is_negotiable')) {
+            $negotiable = filter_var($request->input('is_negotiable'), FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+            if ($negotiable !== null) {
+                $query->where('is_negotiable', $negotiable);
+            }
+        }
+
+        // Filtres commodités & accessibilité
+        if ($request->filled('eau_courant')) {
+            $query->where('eau_courant', 'ILIKE', '%' . $request->input('eau_courant') . '%');
+        }
+        if ($request->filled('accessibilite')) {
+            $query->where('accessibilite', 'ILIKE', '%' . $request->input('accessibilite') . '%');
         }
 
         // Recherche multi-critères globale
@@ -120,9 +140,19 @@ class PosteController extends Controller
                 $q->where('commune', 'ILIKE', "%{$search}%")
                     ->orWhere('arrondissement', 'ILIKE', "%{$search}%")
                     ->orWhere('quartier', 'ILIKE', "%{$search}%")
-                    ->orWhere('description', 'ILIKE', "%{$search}%");
+                    ->orWhere('description', 'ILIKE', "%{$search}%")
+                    ->orWhere('accessibilite', 'ILIKE', "%{$search}%")
+                    ->orWhere('eau_courant', 'ILIKE', "%{$search}%");
             });
         }
+
+        // Tri des résultats
+        match ($request->input('sort', 'recent')) {
+            'prix_asc' => $query->orderBy('prix', 'asc'),
+            'prix_desc' => $query->orderBy('prix', 'desc'),
+            'surface_desc' => $query->orderBy('surface', 'desc'),
+            default => $query->latest(),
+        };
 
         $perPage = (int) $request->input('per_page', 15);
         $paginated = $query->paginate($perPage);
@@ -154,7 +184,7 @@ class PosteController extends Controller
      */
     public function show(Request $request, int|string $id): JsonResponse
     {
-        $user = $request->user();
+        $user = $request->user('sanctum') ?? $request->user();
 
         $propriete = Proprietes::with(['media', 'documents', 'paiements', 'user'])
             ->find($id);
@@ -831,6 +861,7 @@ class PosteController extends Controller
     {
         $namedDocuments = [
             'titre_foncier' => 'titre_foncier',
+            'plan_cadastral' => 'plan_cadastral',
             'convention_vente' => 'convention_vente',
             'permis_habiter' => 'permis_habiter',
             'attestation_recasement' => 'attestation_recasement',
@@ -861,7 +892,7 @@ class PosteController extends Controller
             foreach ($documents as $index => $file) {
                 if ($file && $file->isValid()) {
                     $docType = $documentTypes[$index] ?? 'autre';
-                    $allowed = ['convention_vente', 'permis_habiter', 'attestation_recasement', 'titre_foncier', 'autre'];
+                    $allowed = ['convention_vente', 'permis_habiter', 'attestation_recasement', 'titre_foncier', 'plan_cadastral', 'autre'];
                     if (! in_array($docType, $allowed)) {
                         $docType = 'autre';
                     }

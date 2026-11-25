@@ -1,4 +1,5 @@
 import * as WebBrowser from 'expo-web-browser';
+import { FileText, Mail, Phone } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -289,8 +290,9 @@ export function ModerationSection({ onCharteRequired }: { onCharteRequired: Char
                     key={doc.id}
                     onPress={() => url && WebBrowser.openBrowserAsync(url)}
                     style={[styles.docRow, { borderColor: theme.cardBorder }]}>
+                    <FileText size={15} color={theme.primary} strokeWidth={2} />
                     <Text style={{ color: theme.text, flex: 1, fontSize: 13 }}>
-                      📄 {doc.type || doc.document_type} — {doc.nom || ''}
+                      {doc.type || doc.document_type} — {doc.nom || ''}
                     </Text>
                     <Text style={{ color: theme.primary, fontWeight: '800', fontSize: 12 }}>Ouvrir</Text>
                   </Pressable>
@@ -608,8 +610,14 @@ export function VisitesOpsSection({ onCharteRequired }: { onCharteRequired: Char
               Coordonnées Tracées ({unmaskedInfo?.dossier_reference})
             </Text>
             <Text style={{ color: theme.text, fontWeight: '700' }}>{unmaskedInfo?.nom_complet}</Text>
-            <Text style={{ color: theme.primaryDark }}>📞 {unmaskedInfo?.telephone}</Text>
-            <Text style={{ color: theme.textSecondary }}>✉️ {unmaskedInfo?.email}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Phone size={14} color={theme.primaryDark} strokeWidth={2.2} />
+              <Text style={{ color: theme.primaryDark }}>{unmaskedInfo?.telephone}</Text>
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Mail size={14} color={theme.textSecondary} strokeWidth={2} />
+              <Text style={{ color: theme.textSecondary }}>{unmaskedInfo?.email}</Text>
+            </View>
             <Text style={{ color: theme.textSecondary, fontSize: 12 }}>
               Mode : {unmaskedInfo?.mode_acces}
               {unmaskedInfo?.expires_at ? ` • Expire le ${new Date(unmaskedInfo.expires_at).toLocaleString('fr-FR')}` : ''}
@@ -674,7 +682,7 @@ export function DemandesMatchingSection({ onCharteRequired }: { onCharteRequired
     if (res.success && res.data) {
       Alert.alert(
         res.data.dossier_reference,
-        `${res.data.nom_complet}\n📞 ${res.data.telephone}\n✉️ ${res.data.email}\n${res.data.mode_acces}`
+        `${res.data.nom_complet}\nTél : ${res.data.telephone}\nE-mail : ${res.data.email}\n${res.data.mode_acces}`
       );
     } else if (res.demasquage_requis) {
       const reqRes = await adminApi.demanderDemasquage({

@@ -1,3 +1,4 @@
+import { CheckCircle2, Lock } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -145,9 +146,16 @@ function LegacyFinanceVaultScreen() {
               <Text style={{ color: theme.gold, fontSize: 28, fontWeight: '900', marginVertical: 4 }}>
                 {formatFcfa(soldeActuel)}
               </Text>
-              <Text style={{ color: retraitsGeles ? '#FCA5A5' : '#6EE7B7', fontSize: 12, fontWeight: '700' }}>
-                {retraitsGeles ? '🔒 Retraits actuellement GELÉS' : '✅ Retraits actifs'}
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                {retraitsGeles ? (
+                  <Lock size={14} color="#FCA5A5" strokeWidth={2.2} />
+                ) : (
+                  <CheckCircle2 size={14} color="#6EE7B7" strokeWidth={2.2} />
+                )}
+                <Text style={{ color: retraitsGeles ? '#FCA5A5' : '#6EE7B7', fontSize: 12, fontWeight: '700' }}>
+                  {retraitsGeles ? 'Retraits actuellement GELÉS' : 'Retraits actifs'}
+                </Text>
+              </View>
             </View>
 
             {dashboard && (

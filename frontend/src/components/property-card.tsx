@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { SymbolView } from 'expo-symbols';
+import { Check, CheckCircle2, Eye, Heart, MapPin } from 'lucide-react-native';
 import React from 'react';
 import {
   Platform,
@@ -18,6 +18,8 @@ interface PropertyCardProps {
   onPressDetails: (property: PropertyItem) => void;
   onPressCard?: (property: PropertyItem) => void;
   onToggleFavorite?: (id: string) => void;
+  onPressQuickAction?: (property: PropertyItem, action: 'demande_visite' | 'contact') => void;
+  compact?: boolean;
 }
 
 export function PropertyCard({
@@ -25,136 +27,164 @@ export function PropertyCard({
   onPressDetails,
   onPressCard,
   onToggleFavorite,
+  onPressQuickAction,
+  compact = false,
 }: PropertyCardProps) {
   const theme = useTheme();
-
   const isLocation = property.transactionType === 'location';
+
+  const typeLabel =
+    property.type === 'parcelle'
+      ? 'PARCELLE'
+      : property.type === 'chambre'
+      ? 'CHAMBRE'
+      : 'MAISON';
 
   return (
     <View
       style={[
         styles.cardContainer,
+        compact && styles.cardContainerCompact,
         {
           backgroundColor: theme.cardBackground,
           borderColor: theme.cardBorder,
         },
       ]}>
-      {/* Property Image Container */}
-      <Pressable onPress={() => (onPressCard ?? onPressDetails)(property)} style={styles.imageContainer}>
+      {/* Property Image */}
+      <Pressable
+        onPress={() => (onPressCard ?? onPressDetails)(property)}
+        style={[styles.imageContainer, compact && styles.imageContainerCompact]}>
         <Image
           source={property.image}
           style={styles.image}
           contentFit="cover"
-          transition={250}
+          transition={220}
         />
 
-        {/* Transaction Badge */}
-        <View
-          style={[
-            styles.badge,
-            {
-              backgroundColor: isLocation ? theme.badgeBlueBg : theme.badgeGreenBg,
-            },
-          ]}>
-          <Text
+        {/* Top Left Badges */}
+        <View style={styles.topLeftBadges}>
+          <View
             style={[
-              styles.badgeText,
+              styles.badge,
               {
-                color: isLocation ? theme.badgeBlueText : theme.badgeGreenText,
+                backgroundColor: isLocation ? '#0F766E' : '#B45309',
               },
             ]}>
-            {isLocation ? 'À LOUER' : 'À VENDRE'}
-          </Text>
+            <Text style={styles.badgeText}>{isLocation ? 'À LOUER' : 'À VENDRE'}</Text>
+          </View>
+          <View style={styles.typeBadge}>
+            <Text style={styles.typeBadgeText}>{typeLabel}</Text>
+          </View>
         </View>
 
         {/* Favorite Button */}
-        <Pressable
-          style={({ pressed }) => [
-            styles.favoriteButton,
-            pressed && { opacity: 0.8, transform: [{ scale: 0.95 }] },
-          ]}
-          onPress={() => onToggleFavorite?.(property.id)}>
-          <SymbolView
-            name={{
-              ios: property.isFavorite ? 'heart.fill' : 'heart',
-              android: property.isFavorite ? 'favorite' : 'favorite_border',
-              web: property.isFavorite ? 'favorite' : 'favorite_border',
-            }}
-            size={18}
-            tintColor={property.isFavorite ? '#EF4444' : '#FFFFFF'}
-          />
-        </Pressable>
+        {onToggleFavorite ? (
+          <Pressable
+            style={({ pressed }) => [
+              styles.favoriteButton,
+              pressed && { opacity: 0.85, transform: [{ scale: 0.94 }] },
+            ]}
+            onPress={() => onToggleFavorite(property.id)}
+            hitSlop={6}>
+            <Heart
+              size={18}
+              color={property.isFavorite ? '#EF4444' : '#FFFFFF'}
+              fill={property.isFavorite ? '#EF4444' : 'transparent'}
+              strokeWidth={2.2}
+            />
+          </Pressable>
+        ) : null}
+
+        {/* Unlocked / Price pill overlay */}
+        {property.isUnlocked ? (
+          <View style={styles.unlockedPill}>
+            <Check size={12} color="#FFFFFF" strokeWidth={3} />
+            <Text style={styles.unlockedPillText}>Débloqué</Text>
+          </View>
+        ) : null}
       </Pressable>
 
-      {/* Card Content */}
+      {/* Content */}
       <View style={styles.contentContainer}>
-        {/* Title */}
+        <View style={styles.locationRow}>
+          <MapPin size={13} color={theme.primary} strokeWidth={2.2} />
+          <Text numberOfLines={1} style={[styles.locationText, { color: theme.textSecondary }]}>
+            {property.location.fullAddress || property.location.commune}
+          </Text>
+        </View>
+
         <Pressable onPress={() => (onPressCard ?? onPressDetails)(property)}>
-          <Text
-            numberOfLines={2}
-            style={[styles.title, { color: theme.text }]}>
+          <Text numberOfLines={2} style={[styles.title, { color: theme.text }]}>
             {property.title}
           </Text>
         </Pressable>
 
-        {/* Price */}
         <View style={styles.priceRow}>
           <Text style={[styles.priceText, { color: theme.primary }]}>
             {property.priceFormatted}
           </Text>
-        </View>
-
-        {/* Tags / Details Badges */}
-        <View style={styles.tagsContainer}>
-          {property.tags.map((tag, index) => (
-            <View
-              key={`${property.id}-tag-${index}`}
-              style={[
-                styles.tagChip,
-                {
-                  backgroundColor: theme.tagBackground,
-                },
-              ]}>
-              <Text style={[styles.tagText, { color: theme.tagText }]}>
-                {tag}
-              </Text>
+          {property.features.isNegotiable ? (
+            <View style={[styles.negBadge, { backgroundColor: theme.badgeGoldBg }]}>
+              <Text style={[styles.negBadgeText, { color: theme.badgeGoldText }]}>Négociable</Text>
             </View>
-          ))}
+          ) : null}
         </View>
 
-        {/* Unlock / View Details Action Button */}
-        <Pressable
-          style={({ pressed }) => [
-            styles.actionButton,
-            {
-              backgroundColor: property.isUnlocked
-                ? theme.badgeGreenBg
-                : theme.primary,
-            },
-            pressed && styles.actionButtonPressed,
-          ]}
-          onPress={() => onPressDetails(property)}>
-          <View style={styles.buttonContent}>
-            <SymbolView
-              name={{
-                ios: property.isUnlocked ? 'checkmark.circle.fill' : 'lock.open.fill',
-                android: property.isUnlocked ? 'check_circle' : 'lock_open',
-                web: property.isUnlocked ? 'check_circle' : 'lock_open',
-              }}
-              size={17}
-              tintColor={property.isUnlocked ? theme.badgeGreenText : '#FFFFFF'}
-            />
+        {/* Feature Tags */}
+        {property.tags.length > 0 && (
+          <View style={styles.tagsContainer}>
+            {property.tags.slice(0, 4).map((tag, index) => (
+              <View
+                key={`${property.id}-tag-${index}`}
+                style={[styles.tagChip, { backgroundColor: theme.tagBackground }]}>
+                <Text numberOfLines={1} style={[styles.tagText, { color: theme.tagText }]}>
+                  {tag}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* Quick Actions Row */}
+        <View style={styles.actionsRow}>
+          <Pressable
+            style={({ pressed }) => [
+              styles.actionButton,
+              {
+                backgroundColor: property.isUnlocked ? theme.badgeGreenBg : theme.primary,
+              },
+              pressed && styles.actionButtonPressed,
+            ]}
+            onPress={() => onPressDetails(property)}>
+            {property.isUnlocked ? (
+              <CheckCircle2 size={15} color={theme.badgeGreenText} strokeWidth={2.2} />
+            ) : (
+              <Eye size={15} color="#FFFFFF" strokeWidth={2.2} />
+            )}
             <Text
+              numberOfLines={1}
               style={[
                 styles.actionButtonText,
-                {
-                  color: property.isUnlocked ? theme.badgeGreenText : '#FFFFFF',
-                },
+                { color: property.isUnlocked ? theme.badgeGreenText : '#FFFFFF' },
               ]}>
-              {property.isUnlocked ? 'Détails débloqués' : property.unlockButtonText}
+              {property.isUnlocked ? 'Voir la fiche' : 'Voir le bien'}
             </Text>
-          </View>
-        </Pressable>
+          </Pressable>
+
+          {onPressQuickAction ? (
+            <Pressable
+              style={({ pressed }) => [
+                styles.secondaryActionBtn,
+                { borderColor: theme.primary, backgroundColor: theme.primaryLight },
+                pressed && styles.actionButtonPressed,
+              ]}
+              onPress={() => onPressQuickAction(property, 'demande_visite')}>
+              <Text numberOfLines={1} style={[styles.secondaryActionText, { color: theme.primaryDark }]}>
+                Visiter / RDV
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
       </View>
     </View>
   );
@@ -165,42 +195,65 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
     overflow: 'hidden',
-    marginBottom: Spacing.four,
+    flex: 1,
     ...Platform.select({
       ios: {
-        shadowColor: '#000000',
-        shadowOffset: { width: 0, height: 4 },
+        shadowColor: '#0F172A',
+        shadowOffset: { width: 0, height: 6 },
         shadowOpacity: 0.07,
-        shadowRadius: 12,
+        shadowRadius: 14,
       },
       android: {
         elevation: 3,
       },
       web: {
-        boxShadow: '0 4px 16px rgba(0, 0, 0, 0.06)',
+        boxShadow: '0 6px 20px rgba(15, 23, 42, 0.06)',
       },
     }),
+  },
+  cardContainerCompact: {
+    borderRadius: 18,
   },
   imageContainer: {
     position: 'relative',
     width: '100%',
-    height: 200,
+    height: 205,
     backgroundColor: '#E2E8F0',
+  },
+  imageContainerCompact: {
+    height: 185,
   },
   image: {
     width: '100%',
     height: '100%',
   },
-  badge: {
+  topLeftBadges: {
     position: 'absolute',
     top: 12,
     left: 12,
+    flexDirection: 'row',
+    gap: 6,
+  },
+  badge: {
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 8,
   },
   badgeText: {
-    fontSize: 11,
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+  },
+  typeBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+  },
+  typeBadgeText: {
+    color: '#F8FAFC',
+    fontSize: 10,
     fontWeight: '700',
     letterSpacing: 0.5,
   },
@@ -211,63 +264,116 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    backgroundColor: 'rgba(15, 23, 42, 0.52)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  unlockedPill: {
+    position: 'absolute',
+    bottom: 10,
+    left: 12,
+    backgroundColor: 'rgba(4, 120, 87, 0.92)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  unlockedPillText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '800',
   },
   contentContainer: {
     padding: Spacing.three,
     gap: 8,
+    flex: 1,
+    justifyContent: 'space-between',
+  },
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  locationText: {
+    fontSize: 12,
+    fontWeight: '600',
+    flex: 1,
   },
   title: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '800',
     lineHeight: 22,
   },
   priceRow: {
     flexDirection: 'row',
-    alignItems: 'baseline',
-    marginVertical: 2,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    flexWrap: 'wrap',
   },
   priceText: {
     fontSize: 18,
-    fontWeight: '800',
+    fontWeight: '900',
     letterSpacing: -0.3,
+  },
+  negBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  negBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
   },
   tagsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    marginVertical: 4,
+    gap: 6,
   },
   tagChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
     borderRadius: 8,
   },
   tagText: {
-    fontSize: 12,
-    fontWeight: '500',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 6,
   },
   actionButton: {
-    marginTop: 8,
-    paddingVertical: 13,
+    flex: 1,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
     borderRadius: 12,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 6,
   },
   actionButtonPressed: {
     opacity: 0.88,
     transform: [{ scale: 0.99 }],
   },
-  buttonContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
   actionButtonText: {
-    fontSize: 15,
-    fontWeight: '700',
-    letterSpacing: 0.2,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  secondaryActionBtn: {
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  secondaryActionText: {
+    fontSize: 12,
+    fontWeight: '800',
   },
 });

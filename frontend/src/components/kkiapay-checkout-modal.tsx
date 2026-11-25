@@ -1,4 +1,4 @@
-import { SymbolView } from 'expo-symbols';
+import { Check, X } from 'lucide-react-native';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -282,7 +282,7 @@ export function KkiapayCheckoutModal({
         <View style={[styles.header, { borderBottomColor: theme.cardBorder }]}>
           <Text style={[styles.headerTitle, { color: theme.text }]}>{title}</Text>
           <Pressable onPress={onClose} hitSlop={10} style={styles.closeBtn}>
-            <SymbolView name={{ ios: 'xmark', android: 'close', web: 'close' }} size={20} tintColor={theme.text} />
+            <X size={20} color={theme.text} strokeWidth={2.2} />
           </Pressable>
         </View>
 
@@ -356,7 +356,7 @@ export function KkiapayCheckoutModal({
                       backgroundColor: cguAccepted ? theme.primary : 'transparent',
                     },
                   ]}>
-                  {cguAccepted && <Text style={styles.checkText}>✓</Text>}
+                  {cguAccepted && <Check size={14} color="#FFFFFF" strokeWidth={3} />}
                 </View>
                 <Text style={[styles.cguText, { color: theme.text }]}>
                   J'accepte les Conditions Générales d'Utilisation {cguDoc ? `(v${cguDoc.version})` : ''} d'E-Mobilier.
