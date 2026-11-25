@@ -22,7 +22,7 @@ export default function LoginScreen() {
             }
           }}
           onSuccessLogin={() => {
-            router.replace('/profile' as any);
+            router.replace('/' as any);
           }}
         />
       </View>

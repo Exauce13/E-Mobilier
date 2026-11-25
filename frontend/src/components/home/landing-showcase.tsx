@@ -1,6 +1,18 @@
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
+import {
+  ArrowRight,
+  Building2,
+  CalendarCheck,
+  CreditCard,
+  Handshake,
+  Home,
+  Moon,
+  Search,
+  ShieldCheck,
+  Sparkles,
+  Sun,
+} from 'lucide-react-native';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -112,7 +124,7 @@ export function LandingShowcase({ onOpenLogin, onOpenRegister }: LandingShowcase
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      {/* Sticky Modern Top Header */}
+      {/* Top Header */}
       <View
         style={[
           styles.topHeader,
@@ -126,11 +138,7 @@ export function LandingShowcase({ onOpenLogin, onOpenRegister }: LandingShowcase
         <View style={[styles.headerInner, { maxWidth: contentMaxWidth }]}>
           <Pressable onPress={() => router.push('/' as any)} style={styles.brandRow}>
             <View style={styles.logoIcon}>
-              <SymbolView
-                name={{ ios: 'building.2.crop.circle.fill', android: 'apartment', web: 'apartment' }}
-                size={22}
-                tintColor="#F59E0B"
-              />
+              <Building2 size={20} color="#F59E0B" strokeWidth={2.2} />
             </View>
             <View style={styles.brandTextWrap}>
               <View style={styles.brandTitleRow}>
@@ -138,7 +146,7 @@ export function LandingShowcase({ onOpenLogin, onOpenRegister }: LandingShowcase
                   E-Mobilier
                 </Text>
                 <View style={styles.flagBadge}>
-                  <Text style={styles.flagText}>🇧🇯 BÉNIN</Text>
+                  <Text style={styles.flagText}>BÉNIN</Text>
                 </View>
               </View>
               {!isMobile && (
@@ -155,17 +163,11 @@ export function LandingShowcase({ onOpenLogin, onOpenRegister }: LandingShowcase
               <Pressable onPress={() => router.push('/explore' as any)} style={styles.navLinkBtn}>
                 <Text style={styles.navLinkText}>Rechercher</Text>
               </Pressable>
-              <Pressable onPress={() => router.push('/client' as any)} style={styles.navLinkBtn}>
-                <Text style={styles.navLinkText}>Espace Client</Text>
-              </Pressable>
-              <Pressable onPress={() => router.push('/agent' as any)} style={styles.navLinkBtn}>
-                <Text style={styles.navLinkText}>Espace Agent</Text>
-              </Pressable>
-              <Pressable onPress={() => router.push('/client-form' as any)} style={styles.navLinkBtn}>
-                <Text style={styles.navLinkText}>Formulaire Client</Text>
-              </Pressable>
               <Pressable onPress={() => router.push('/publish' as any)} style={styles.navLinkBtn}>
-                <Text style={styles.navLinkText}>Publier</Text>
+                <Text style={styles.navLinkText}>Publier un bien</Text>
+              </Pressable>
+              <Pressable onPress={() => router.push('/cgu' as any)} style={styles.navLinkBtn}>
+                <Text style={styles.navLinkText}>CGU & Sécurité</Text>
               </Pressable>
             </View>
           )}
@@ -178,7 +180,11 @@ export function LandingShowcase({ onOpenLogin, onOpenRegister }: LandingShowcase
               }}
               style={({ pressed }) => [styles.themeHeaderBtn, pressed && { opacity: 0.75 }]}
               hitSlop={6}>
-              <Text style={styles.themeHeaderIcon}>{isDark ? '🌙' : '☀️'}</Text>
+              {isDark ? (
+                <Moon size={16} color="#FDE68A" strokeWidth={2} />
+              ) : (
+                <Sun size={16} color="#FDE68A" strokeWidth={2} />
+              )}
             </Pressable>
 
             <Pressable
@@ -209,7 +215,7 @@ export function LandingShowcase({ onOpenLogin, onOpenRegister }: LandingShowcase
         ]}
         showsVerticalScrollIndicator={false}>
         {/* HERO SECTION */}
-        <View style={[styles.heroContainer, { minHeight: isDesktop ? 520 : isTablet ? 470 : 460 }]}>
+        <View style={[styles.heroContainer, { minHeight: isDesktop ? 510 : isTablet ? 470 : 450 }]}>
           <Image
             source={require('@/assets/images/hero_luxury_villa.jpg')}
             style={styles.heroImage}
@@ -219,8 +225,9 @@ export function LandingShowcase({ onOpenLogin, onOpenRegister }: LandingShowcase
           <View style={[styles.heroOverlay, { paddingHorizontal: horizontalPadding }]}>
             <View style={[styles.heroInner, { maxWidth: contentMaxWidth }]}>
               <View style={styles.heroTag}>
+                <Sparkles size={13} color="#FDE68A" strokeWidth={2.2} />
                 <Text style={styles.heroTagText}>
-                  ✦ N°1 DE L'IMMOBILIER SÉCURISÉ AU BÉNIN
+                  PORTAIL IMMOBILIER SÉCURISÉ AU BÉNIN
                 </Text>
               </View>
 
@@ -232,7 +239,7 @@ export function LandingShowcase({ onOpenLogin, onOpenRegister }: LandingShowcase
                     lineHeight: isDesktop ? 52 : isTablet ? 42 : 33,
                   },
                 ]}>
-                Trouvez, louez ou publiez votre bien immobilier en toute sérénité
+                Trouvez, louez ou vendez votre bien immobilier en toute sérénité
               </Text>
 
               <Text style={styles.heroDescription}>
@@ -240,7 +247,7 @@ export function LandingShowcase({ onOpenLogin, onOpenRegister }: LandingShowcase
                 Cotonou, Abomey-Calavi, Porto-Novo et Ouidah.
               </Text>
 
-              {/* Quick Search Box in Hero */}
+              {/* Quick Search Box */}
               <View
                 style={[
                   styles.heroSearchCard,
@@ -253,7 +260,7 @@ export function LandingShowcase({ onOpenLogin, onOpenRegister }: LandingShowcase
                   {(['tous', 'location', 'vente'] as const).map((tx) => {
                     const active = quickTransaction === tx;
                     const label =
-                      tx === 'tous' ? 'Tout voir' : tx === 'location' ? 'Louer' : 'Acheter';
+                      tx === 'tous' ? 'Tout voir' : tx === 'location' ? 'Louer' : 'Vendre';
                     return (
                       <Pressable
                         key={tx}
@@ -286,11 +293,7 @@ export function LandingShowcase({ onOpenLogin, onOpenRegister }: LandingShowcase
                         borderColor: theme.cardBorder,
                       },
                     ]}>
-                    <SymbolView
-                      name={{ ios: 'magnifyingglass', android: 'search', web: 'search' }}
-                      size={18}
-                      tintColor={theme.textSecondary}
-                    />
+                    <Search size={18} color={theme.textSecondary} strokeWidth={2} />
                     <TextInput
                       style={[styles.heroInput, { color: theme.text }]}
                       placeholder="Quartier, commune, villa, parcelle..."
@@ -310,11 +313,7 @@ export function LandingShowcase({ onOpenLogin, onOpenRegister }: LandingShowcase
                       pressed && { opacity: 0.9 },
                     ]}>
                     <Text style={styles.heroSearchBtnText}>Rechercher</Text>
-                    <SymbolView
-                      name={{ ios: 'arrow.right', android: 'arrow_forward', web: 'arrow_forward' }}
-                      size={16}
-                      tintColor="#FFFFFF"
-                    />
+                    <ArrowRight size={16} color="#FFFFFF" strokeWidth={2.2} />
                   </Pressable>
                 </View>
 
@@ -360,18 +359,20 @@ export function LandingShowcase({ onOpenLogin, onOpenRegister }: LandingShowcase
               { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder },
             ]}>
             {[
-              { icon: '🛡️', value: '100%', label: 'Titres & pièces audités' },
-              { icon: '🏠', value: '500+', label: 'Biens vérifiés au Bénin' },
-              { icon: '🤝', value: '24h', label: 'Visite terrain planifiée' },
-              { icon: '💳', value: '50 F', label: 'Déblocage Mobile Money' },
-            ].map((stat) => (
+              { Icon: ShieldCheck, value: '100%', label: 'Titres & pièces audités' },
+              { Icon: Home, value: '500+', label: 'Biens vérifiés au Bénin' },
+              { Icon: Handshake, value: '24h', label: 'Visite terrain planifiée' },
+              { Icon: CreditCard, value: '50 F', label: 'Déblocage Mobile Money' },
+            ].map(({ Icon, value, label }) => (
               <View
-                key={stat.label}
+                key={label}
                 style={[styles.trustCell, { width: isMobile ? '47%' : '23%' }]}>
-                <Text style={styles.trustEmoji}>{stat.icon}</Text>
-                <Text style={[styles.trustValue, { color: theme.primary }]}>{stat.value}</Text>
+                <View style={[styles.trustIconCircle, { backgroundColor: theme.primaryLight }]}>
+                  <Icon size={20} color={theme.primary} strokeWidth={2} />
+                </View>
+                <Text style={[styles.trustValue, { color: theme.primary }]}>{value}</Text>
                 <Text style={[styles.trustLabel, { color: theme.textSecondary }]}>
-                  {stat.label}
+                  {label}
                 </Text>
               </View>
             ))}
@@ -382,9 +383,12 @@ export function LandingShowcase({ onOpenLogin, onOpenRegister }: LandingShowcase
         <View style={[styles.sectionWrap, { maxWidth: contentMaxWidth, paddingHorizontal: horizontalPadding }]}>
           <View style={styles.sectionHeaderRow}>
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={[styles.sectionEyebrow, { color: theme.primary }]}>
-                ✦ CATALOGUE CERTIFIÉ
-              </Text>
+              <View style={styles.eyebrowRow}>
+                <Sparkles size={13} color={theme.primary} strokeWidth={2.2} />
+                <Text style={[styles.sectionEyebrow, { color: theme.primary }]}>
+                  CATALOGUE CERTIFIÉ
+                </Text>
+              </View>
               <Text style={[styles.sectionTitle, { color: theme.text }]}>
                 Biens immobiliers en vedette
               </Text>
@@ -396,8 +400,9 @@ export function LandingShowcase({ onOpenLogin, onOpenRegister }: LandingShowcase
               onPress={() => router.push('/explore' as any)}
               style={[styles.outlinePillBtn, { borderColor: theme.primary }]}>
               <Text style={{ color: theme.primary, fontSize: 13, fontWeight: '800' }}>
-                Tout explorer →
+                Tout explorer
               </Text>
+              <ArrowRight size={14} color={theme.primary} strokeWidth={2.2} />
             </Pressable>
           </View>
 
@@ -454,93 +459,6 @@ export function LandingShowcase({ onOpenLogin, onOpenRegister }: LandingShowcase
           )}
         </View>
 
-        {/* DEDICATED SPACES : CLIENT & AGENT IMMOBILIER */}
-        <View style={[styles.sectionWrap, { maxWidth: contentMaxWidth, paddingHorizontal: horizontalPadding }]}>
-          <Text style={[styles.sectionEyebrow, { color: theme.gold }]}>✦ ESPACES DÉDIÉS</Text>
-          <Text style={[styles.sectionTitle, { color: theme.text, marginBottom: 14 }]}>
-            Un parcours taillé pour chaque profil
-          </Text>
-
-          <View style={[styles.spacesGrid, !isMobile && styles.spacesGridRow]}>
-            {/* Espace Client */}
-            <View
-              style={[
-                styles.spaceCard,
-                { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder },
-              ]}>
-              <View style={[styles.spaceBadge, { backgroundColor: theme.primaryLight }]}>
-                <Text style={[styles.spaceBadgeText, { color: theme.primaryDark }]}>
-                  CLIENT & PROPRIÉTAIRE
-                </Text>
-              </View>
-              <Text style={[styles.spaceTitle, { color: theme.text }]}>
-                Achetez, louez ou publiez votre bien
-              </Text>
-              <Text style={[styles.spaceDesc, { color: theme.textSecondary }]}>
-                Accédez à votre espace client, déposez votre recherche sur mesure, suivez vos visites
-                et publiez vos biens en toute sécurité.
-              </Text>
-              <View style={styles.spaceActions}>
-                <Pressable
-                  onPress={() => router.push('/client' as any)}
-                  style={[styles.spacePrimaryBtn, { backgroundColor: theme.primary }]}>
-                  <Text style={styles.spacePrimaryBtnText}>Ouvrir Espace Client</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => router.push('/client-form' as any)}
-                  style={[styles.spaceSecondaryBtn, { borderColor: theme.cardBorder }]}>
-                  <Text style={[styles.spaceSecondaryBtnText, { color: theme.text }]}>
-                    Formulaire Client
-                  </Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => router.push('/publish-client' as any)}
-                  style={[styles.spaceSecondaryBtn, { borderColor: theme.primaryBorder }]}>
-                  <Text style={[styles.spaceSecondaryBtnText, { color: theme.primaryDark }]}>
-                    Publier (Client)
-                  </Text>
-                </Pressable>
-              </View>
-            </View>
-
-            {/* Espace Agent Immobilier */}
-            <View
-              style={[
-                styles.spaceCard,
-                { backgroundColor: theme.navy, borderColor: 'rgba(245, 158, 11, 0.35)' },
-              ]}>
-              <View style={[styles.spaceBadge, { backgroundColor: 'rgba(245, 158, 11, 0.18)' }]}>
-                <Text style={[styles.spaceBadgeText, { color: '#FDE68A' }]}>
-                  AGENT IMMOBILIER AGRÉÉ
-                </Text>
-              </View>
-              <Text style={[styles.spaceTitle, { color: '#FFFFFF' }]}>
-                Pilotez votre portefeuille & vos clients
-              </Text>
-              <Text style={[styles.spaceDesc, { color: '#CBD5E1' }]}>
-                Tableau de bord professionnel, gestion des annonces au tarif préférentiel de 100 F CFA,
-                suivi des visites, demandes et prospects.
-              </Text>
-              <View style={styles.spaceActions}>
-                <Pressable
-                  onPress={() => router.push('/agent' as any)}
-                  style={[styles.spacePrimaryBtn, { backgroundColor: '#F59E0B' }]}>
-                  <Text style={[styles.spacePrimaryBtnText, { color: '#0F172A' }]}>
-                    Tableau de bord Agent
-                  </Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => router.push('/publish-agent' as any)}
-                  style={[styles.spaceSecondaryBtn, { borderColor: 'rgba(255,255,255,0.28)' }]}>
-                  <Text style={[styles.spaceSecondaryBtnText, { color: '#FFFFFF' }]}>
-                    Publier (Agent 100 F)
-                  </Text>
-                </Pressable>
-              </View>
-            </View>
-          </View>
-        </View>
-
         {/* HOW IT WORKS */}
         <View style={[styles.sectionWrap, { maxWidth: contentMaxWidth, paddingHorizontal: horizontalPadding }]}>
           <View
@@ -548,7 +466,10 @@ export function LandingShowcase({ onOpenLogin, onOpenRegister }: LandingShowcase
               styles.aboutSection,
               { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder },
             ]}>
-            <Text style={[styles.sectionEyebrow, { color: theme.gold }]}>✦ COMMENT ÇA MARCHE</Text>
+            <View style={styles.eyebrowRow}>
+              <Sparkles size={13} color={theme.gold} strokeWidth={2.2} />
+              <Text style={[styles.sectionEyebrow, { color: theme.gold }]}>COMMENT ÇA MARCHE</Text>
+            </View>
             <Text style={[styles.sectionTitle, { color: theme.text }]}>
               Votre projet immobilier en 3 étapes simples
             </Text>
@@ -556,47 +477,58 @@ export function LandingShowcase({ onOpenLogin, onOpenRegister }: LandingShowcase
             <View style={[styles.stepsGrid, !isMobile && styles.stepsGridRow]}>
               {[
                 {
+                  Icon: Search,
                   num: '01',
                   title: 'Recherchez & Filtrez',
                   desc: 'Affinez par commune, quartier, budget, surface, nombre de chambres et commodités.',
                 },
                 {
+                  Icon: CalendarCheck,
                   num: '02',
                   title: 'Contactez ou Planifiez',
                   desc: 'Demandez une visite, prenez rendez-vous ou contactez le propriétaire / agent directement.',
                 },
                 {
+                  Icon: ShieldCheck,
                   num: '03',
                   title: 'Visitez en Sécurité',
                   desc: 'Nos conseillers vérifient les titres fonciers et vous accompagnent jusqu’à la signature.',
                 },
-              ].map((step) => (
+              ].map(({ Icon, num, title, desc }) => (
                 <View
-                  key={step.num}
+                  key={num}
                   style={[
                     styles.stepCard,
                     { backgroundColor: theme.backgroundElement, borderColor: theme.cardBorder },
                   ]}>
-                  <Text style={[styles.stepNum, { color: theme.primary }]}>{step.num}</Text>
-                  <Text style={[styles.stepTitle, { color: theme.text }]}>{step.title}</Text>
-                  <Text style={[styles.stepDesc, { color: theme.textSecondary }]}>{step.desc}</Text>
+                  <View style={styles.stepTopRow}>
+                    <View style={[styles.stepIconWrap, { backgroundColor: theme.primaryLight }]}>
+                      <Icon size={18} color={theme.primary} strokeWidth={2.2} />
+                    </View>
+                    <Text style={[styles.stepNum, { color: theme.primary }]}>{num}</Text>
+                  </View>
+                  <Text style={[styles.stepTitle, { color: theme.text }]}>{title}</Text>
+                  <Text style={[styles.stepDesc, { color: theme.textSecondary }]}>{desc}</Text>
                 </View>
               ))}
             </View>
           </View>
         </View>
 
-        {/* CONTACT & FINAL CTA */}
+        {/* FINAL CTA & FOOTER */}
         <View style={[styles.sectionWrap, { maxWidth: contentMaxWidth, paddingHorizontal: horizontalPadding }]}>
           <View style={[styles.ctaBanner, { backgroundColor: theme.navy }]}>
             <View style={{ flex: 1, gap: 8 }}>
-              <Text style={styles.ctaEyebrow}>✦ ACCOMPAGNEMENT SUR MESURE</Text>
+              <View style={styles.eyebrowRow}>
+                <Sparkles size={13} color="#FDE68A" strokeWidth={2.2} />
+                <Text style={styles.ctaEyebrow}>DÉMARREZ MAINTENANT</Text>
+              </View>
               <Text style={styles.ctaTitle}>
-                Vous cherchez une maison ou souhaitez publier aujourd'hui ?
+                Vous cherchez un bien ou souhaitez publier une annonce ?
               </Text>
               <Text style={styles.ctaDesc}>
-                Créez votre compte gratuit en moins d'une minute ou remplissez notre formulaire client
-                pour être rappelé par un conseiller à Cotonou.
+                Créez votre compte gratuitement en moins d'une minute pour publier vos biens ou
+                planifier vos visites immobilières au Bénin.
               </Text>
             </View>
             <View style={styles.ctaBtns}>
@@ -604,14 +536,14 @@ export function LandingShowcase({ onOpenLogin, onOpenRegister }: LandingShowcase
                 <Text style={styles.ctaGoldBtnText}>Créer un compte gratuit</Text>
               </Pressable>
               <Pressable
-                onPress={() => router.push('/client-form' as any)}
+                onPress={() => router.push('/publish' as any)}
                 style={styles.ctaOutlineBtn}>
-                <Text style={styles.ctaOutlineBtnText}>Remplir le formulaire client</Text>
+                <Text style={styles.ctaOutlineBtnText}>Publier une annonce</Text>
               </Pressable>
             </View>
           </View>
 
-          {/* Compact Footer */}
+          {/* Footer */}
           <View style={[styles.footer, { borderTopColor: theme.cardBorder }]}>
             <Text style={[styles.footerCopy, { color: theme.textSecondary }]}>
               © 2026 E-Mobilier Bénin — Cadjehoun, Cotonou • +229 01 97 00 11 22 • contact@e-mobilier.bj
@@ -623,8 +555,8 @@ export function LandingShowcase({ onOpenLogin, onOpenRegister }: LandingShowcase
               <Pressable onPress={() => router.push('/explore' as any)}>
                 <Text style={[styles.footerLink, { color: theme.primary }]}>Recherche</Text>
               </Pressable>
-              <Pressable onPress={() => router.push('/client-form' as any)}>
-                <Text style={[styles.footerLink, { color: theme.primary }]}>Contact</Text>
+              <Pressable onPress={() => router.push('/publish' as any)}>
+                <Text style={[styles.footerLink, { color: theme.primary }]}>Publier</Text>
               </Pressable>
             </View>
           </View>
@@ -686,15 +618,15 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 6,
   },
-  flagText: { color: '#FDE68A', fontSize: 9, fontWeight: '800' },
+  flagText: { color: '#FDE68A', fontSize: 9, fontWeight: '800', letterSpacing: 0.4 },
   brandSubtitle: { color: '#94A3B8', fontSize: 11, fontWeight: '500' },
   desktopNav: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
   },
   navLinkBtn: {
-    paddingHorizontal: 11,
+    paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 10,
   },
@@ -713,7 +645,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  themeHeaderIcon: { fontSize: 15 },
   loginHeaderBtn: {
     paddingVertical: 7,
     paddingHorizontal: 10,
@@ -757,6 +688,9 @@ const styles = StyleSheet.create({
   },
   heroTag: {
     alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     backgroundColor: 'rgba(245, 158, 11, 0.2)',
     borderColor: 'rgba(245, 158, 11, 0.45)',
     borderWidth: 1,
@@ -866,9 +800,16 @@ const styles = StyleSheet.create({
   trustCell: {
     alignItems: 'center',
     paddingVertical: 6,
-    gap: 2,
+    gap: 4,
   },
-  trustEmoji: { fontSize: 22, marginBottom: 2 },
+  trustIconCircle: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
   trustValue: { fontSize: 22, fontWeight: '900' },
   trustLabel: { fontSize: 12, fontWeight: '600', textAlign: 'center' },
   sectionHeaderRow: {
@@ -879,11 +820,16 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 14,
   },
+  eyebrowRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
   sectionEyebrow: {
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.8,
-    marginBottom: 4,
   },
   sectionTitle: {
     fontSize: 23,
@@ -894,6 +840,9 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
   outlinePillBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     borderWidth: 1.5,
     paddingHorizontal: 14,
     paddingVertical: 9,
@@ -916,50 +865,6 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
   },
 
-  /* SPACES */
-  spacesGrid: {
-    gap: 16,
-  },
-  spacesGridRow: {
-    flexDirection: 'row',
-  },
-  spaceCard: {
-    flex: 1,
-    borderRadius: 22,
-    borderWidth: 1.5,
-    padding: 22,
-    gap: 10,
-    justifyContent: 'space-between',
-  },
-  spaceBadge: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  spaceBadgeText: { fontSize: 11, fontWeight: '800', letterSpacing: 0.5 },
-  spaceTitle: { fontSize: 20, fontWeight: '900' },
-  spaceDesc: { fontSize: 14, lineHeight: 21 },
-  spaceActions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 8,
-  },
-  spacePrimaryBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
-  },
-  spacePrimaryBtnText: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
-  spaceSecondaryBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    borderRadius: 12,
-    borderWidth: 1.5,
-  },
-  spaceSecondaryBtnText: { fontSize: 13, fontWeight: '700' },
-
   /* STEPS */
   aboutSection: {
     borderRadius: 22,
@@ -974,9 +879,21 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     padding: 16,
-    gap: 6,
+    gap: 8,
   },
-  stepNum: { fontSize: 24, fontWeight: '900' },
+  stepTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  stepIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepNum: { fontSize: 22, fontWeight: '900' },
   stepTitle: { fontSize: 16, fontWeight: '800' },
   stepDesc: { fontSize: 13, lineHeight: 19 },
 

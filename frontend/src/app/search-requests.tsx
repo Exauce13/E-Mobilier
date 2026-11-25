@@ -1,3 +1,4 @@
+import { AlertTriangle } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -308,8 +309,9 @@ export default function SearchRequestsScreen() {
           />
           <ScrollView contentContainerStyle={styles.formScroll}>
             {formError && (
-              <View style={styles.errorBox}>
-                <Text style={styles.errorText}>⚠️ {formError}</Text>
+              <View style={[styles.errorBox, { flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
+                <AlertTriangle size={16} color="#B91C1C" strokeWidth={2.2} />
+                <Text style={[styles.errorText, { flex: 1 }]}>{formError}</Text>
               </View>
             )}
 

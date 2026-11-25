@@ -121,13 +121,14 @@ class PosteRequest extends FormRequest
             'permis_habiter' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:12288'],
             'attestation_recasement' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:12288'],
             'titre_foncier' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:12288'],
+            'plan_cadastral' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:12288'],
             'autre_document' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:12288'],
 
             // Tableau de documents générique optionnel (max 12 Mo par document)
             'documents' => ['nullable', 'array'],
             'documents.*' => ['file', 'mimes:pdf,jpg,jpeg,png', 'max:12288'],
             'document_types' => ['nullable', 'array'],
-            'document_types.*' => ['string', 'in:convention_vente,permis_habiter,attestation_recasement,titre_foncier,autre'],
+            'document_types.*' => ['string', 'in:convention_vente,permis_habiter,attestation_recasement,titre_foncier,plan_cadastral,autre'],
 
             // Photos (max 12 Mo par photo)
             'photos' => ['nullable', 'array'],
@@ -175,6 +176,7 @@ class PosteRequest extends FormRequest
                     || $this->hasFile('permis_habiter')
                     || $this->hasFile('attestation_recasement')
                     || $this->hasFile('titre_foncier')
+                    || $this->hasFile('plan_cadastral')
                     || $this->hasFile('autre_document')
                     || ($this->hasFile('documents') && count((array) $this->file('documents')) > 0);
 

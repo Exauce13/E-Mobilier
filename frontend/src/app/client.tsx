@@ -1,4 +1,17 @@
 import { router } from 'expo-router';
+import {
+  ArrowRight,
+  Bell,
+  Building2,
+  Calendar,
+  FileText,
+  Heart,
+  Home,
+  Mail,
+  Search,
+  Sparkles,
+  Target,
+} from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -147,7 +160,10 @@ export default function ClientSpaceScreen() {
           <View style={[styles.heroCard, { backgroundColor: theme.navy }]}>
             <View style={styles.heroTopRow}>
               <View style={{ flex: 1, gap: 4 }}>
-                <Text style={styles.heroEyebrow}>✦ MON ESPACE CLIENT & PROPRIÉTAIRE</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Sparkles size={13} color="#FDE68A" strokeWidth={2.2} />
+                  <Text style={styles.heroEyebrow}>MON ESPACE CLIENT & PROPRIÉTAIRE</Text>
+                </View>
                 <Text style={styles.heroTitle}>
                   {isAuthenticated && user ? user.name : 'Pilotez votre projet immobilier'}
                 </Text>
@@ -173,9 +189,10 @@ export default function ClientSpaceScreen() {
               ) : (
                 <Pressable
                   onPress={() => router.push('/notifications' as any)}
-                  style={styles.notifChip}>
+                  style={[styles.notifChip, { flexDirection: 'row', alignItems: 'center', gap: 6 }]}>
+                  <Bell size={14} color="#FFFFFF" strokeWidth={2.2} />
                   <Text style={styles.notifChipText}>
-                    🔔 {unreadNotificationsCount} alerte{unreadNotificationsCount > 1 ? 's' : ''}
+                    {unreadNotificationsCount} alerte{unreadNotificationsCount > 1 ? 's' : ''}
                   </Text>
                 </Pressable>
               )}
@@ -185,25 +202,25 @@ export default function ClientSpaceScreen() {
             <View style={styles.quickGrid}>
               {[
                 {
-                  icon: '🔎',
+                  Icon: Search,
                   label: 'Rechercher une maison',
                   route: '/explore',
                   accent: theme.primary,
                 },
                 {
-                  icon: '📝',
+                  Icon: FileText,
                   label: 'Formulaire Client',
                   route: '/client-form',
                   accent: '#F59E0B',
                 },
                 {
-                  icon: '🏠',
+                  Icon: Home,
                   label: 'Publier un bien (Client)',
                   route: '/publish-client',
                   accent: '#0284C7',
                 },
                 {
-                  icon: '📅',
+                  Icon: Calendar,
                   label: 'Mes Visites & RDV',
                   route: '/visits',
                   accent: '#7C3AED',
@@ -217,7 +234,7 @@ export default function ClientSpaceScreen() {
                     { width: isMobile ? '48%' : '23.5%' },
                   ]}>
                   <View style={[styles.quickIconDot, { backgroundColor: action.accent }]}>
-                    <Text style={{ fontSize: 16 }}>{action.icon}</Text>
+                    <action.Icon size={17} color="#FFFFFF" strokeWidth={2.2} />
                   </View>
                   <Text style={styles.quickTileLabel}>{action.label}</Text>
                 </Pressable>
@@ -228,11 +245,11 @@ export default function ClientSpaceScreen() {
           {/* KPI Summary Cards */}
           <View style={styles.kpiGrid}>
             {[
-              { label: 'Mes annonces', value: myProperties.length, icon: '🏘️' },
-              { label: 'Visites programmées', value: myVisits.length, icon: '📅' },
-              { label: 'Recherches actives', value: myRequests.length, icon: '🎯' },
-              { label: 'Demandes & Contacts', value: myInquiries.length, icon: '✉️' },
-              { label: 'Biens favoris', value: favoritesCount, icon: '❤️' },
+              { label: 'Mes annonces', value: myProperties.length, Icon: Building2 },
+              { label: 'Visites programmées', value: myVisits.length, Icon: Calendar },
+              { label: 'Recherches actives', value: myRequests.length, Icon: Target },
+              { label: 'Demandes & Contacts', value: myInquiries.length, Icon: Mail },
+              { label: 'Biens favoris', value: favoritesCount, Icon: Heart },
             ].map((kpi) => (
               <View
                 key={kpi.label}
@@ -244,7 +261,7 @@ export default function ClientSpaceScreen() {
                     width: isMobile ? '47.5%' : '18.5%',
                   },
                 ]}>
-                <Text style={{ fontSize: 18 }}>{kpi.icon}</Text>
+                <kpi.Icon size={18} color={theme.primary} strokeWidth={2.2} />
                 <Text style={[styles.kpiValue, { color: theme.primary }]}>{kpi.value}</Text>
                 <Text style={[styles.kpiLabel, { color: theme.textSecondary }]}>{kpi.label}</Text>
               </View>
@@ -352,9 +369,12 @@ export default function ClientSpaceScreen() {
                                 <Text style={[styles.itemTitle, { color: theme.text }]}>
                                   Visite #{v.id} — {v.propriete?.commune || 'Bien'}
                                 </Text>
-                                <Text style={[styles.itemSub, { color: theme.textSecondary }]}>
-                                  📅 {new Date(v.scheduled_date).toLocaleString('fr-FR')}
-                                </Text>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 }}>
+                                  <Calendar size={12} color={theme.textSecondary} strokeWidth={2} />
+                                  <Text style={[styles.itemSub, { color: theme.textSecondary, marginTop: 0 }]}>
+                                    {new Date(v.scheduled_date).toLocaleString('fr-FR')}
+                                  </Text>
+                                </View>
                               </View>
                               <View style={[styles.statusBadge, { backgroundColor: st.bg }]}>
                                 <Text style={{ color: st.text, fontSize: 11, fontWeight: '800' }}>
@@ -410,7 +430,7 @@ export default function ClientSpaceScreen() {
                               {srv.sub}
                             </Text>
                           </View>
-                          <Text style={{ color: theme.primary, fontWeight: '900' }}>→</Text>
+                          <ArrowRight size={16} color={theme.primary} strokeWidth={2.4} />
                         </Pressable>
                       ))}
                     </View>
@@ -461,9 +481,12 @@ export default function ClientSpaceScreen() {
                               Demandeur : {inq.prenom} {inq.nom} • {inq.telephone} • {inq.email}
                             </Text>
                             {inq.scheduled_date ? (
-                              <Text style={[styles.itemSub, { color: theme.primary }]}>
-                                📅 Créneau : {new Date(inq.scheduled_date).toLocaleString('fr-FR')}
-                              </Text>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                                <Calendar size={13} color={theme.primary} strokeWidth={2.2} />
+                                <Text style={[styles.itemSub, { color: theme.primary, marginTop: 0 }]}>
+                                  Créneau : {new Date(inq.scheduled_date).toLocaleString('fr-FR')}
+                                </Text>
+                              </View>
                             ) : null}
                             {inq.message ? (
                               <Text style={{ color: theme.text, fontSize: 13 }}>{inq.message}</Text>
@@ -491,10 +514,13 @@ export default function ClientSpaceScreen() {
                                 </Text>
                               </View>
                             </View>
-                            <Text style={[styles.itemSub, { color: theme.textSecondary }]}>
-                              📅 {new Date(v.scheduled_date).toLocaleString('fr-FR')} •{' '}
-                              {v.propriete ? `${v.propriete.commune} (${formatFcfa(v.propriete.prix)})` : ''}
-                            </Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                              <Calendar size={13} color={theme.textSecondary} strokeWidth={2} />
+                              <Text style={[styles.itemSub, { color: theme.textSecondary, marginTop: 0, flex: 1 }]}>
+                                {new Date(v.scheduled_date).toLocaleString('fr-FR')} •{' '}
+                                {v.propriete ? `${v.propriete.commune} (${formatFcfa(v.propriete.prix)})` : ''}
+                              </Text>
+                            </View>
                           </Pressable>
                         );
                       })}

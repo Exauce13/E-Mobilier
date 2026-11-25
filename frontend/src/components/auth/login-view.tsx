@@ -1,4 +1,4 @@
-import { SymbolView } from 'expo-symbols';
+import { ArrowLeft, Building2, Eye, EyeOff, Lock, Phone } from 'lucide-react-native';
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
@@ -96,11 +96,7 @@ export function LoginView({
                 pressed && { opacity: 0.7 },
               ]}
               hitSlop={10}>
-              <SymbolView
-                name={{ ios: 'arrow.left', android: 'arrow_back', web: 'arrow_back' }}
-                size={20}
-                tintColor={theme.text}
-              />
+              <ArrowLeft size={20} color={theme.text} strokeWidth={2.2} />
             </Pressable>
           </View>
         )}
@@ -108,11 +104,7 @@ export function LoginView({
         {/* Brand Logo & Name */}
         <View style={styles.brandContainer}>
           <View style={[styles.logoIconCircle, { backgroundColor: theme.primaryLight }]}>
-            <SymbolView
-              name={{ ios: 'house.lodge.fill', android: 'home', web: 'home' }}
-              size={28}
-              tintColor={theme.primary}
-            />
+            <Building2 size={24} color={theme.primary} strokeWidth={2.2} />
           </View>
           <Text style={[styles.brandTitle, { color: theme.primaryDark }]}>E-Mobilier</Text>
         </View>
@@ -158,7 +150,7 @@ export function LoginView({
               },
             ]}>
             <View style={[styles.prefixBadge, { backgroundColor: theme.tagBackground }]}>
-              <Text style={styles.flagEmoji}>🇧🇯</Text>
+              <Phone size={14} color={theme.primary} strokeWidth={2.2} />
               <Text style={[styles.prefixText, { color: theme.text }]}>+229</Text>
             </View>
             <TextInput
@@ -183,11 +175,7 @@ export function LoginView({
               },
             ]}>
             <View style={styles.iconPrefix}>
-              <SymbolView
-                name={{ ios: 'lock.fill', android: 'lock', web: 'lock' }}
-                size={20}
-                tintColor={theme.textSecondary}
-              />
+              <Lock size={18} color={theme.textSecondary} strokeWidth={2} />
             </View>
             <TextInput
               style={[styles.textInput, { color: theme.text }]}
@@ -202,15 +190,11 @@ export function LoginView({
               onPress={() => setShowPassword(!showPassword)}
               style={styles.eyeButton}
               hitSlop={10}>
-              <SymbolView
-                name={{
-                  ios: showPassword ? 'eye.fill' : 'eye.slash.fill',
-                  android: showPassword ? 'visibility' : 'visibility_off',
-                  web: showPassword ? 'visibility' : 'visibility_off',
-                }}
-                size={20}
-                tintColor={theme.textSecondary}
-              />
+              {showPassword ? (
+                <Eye size={19} color={theme.textSecondary} strokeWidth={2} />
+              ) : (
+                <EyeOff size={19} color={theme.textSecondary} strokeWidth={2} />
+              )}
             </Pressable>
           </View>
 

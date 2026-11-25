@@ -1,6 +1,19 @@
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
+import {
+  ArrowRight,
+  Bell,
+  Building2,
+  Calendar,
+  LogOut,
+  Moon,
+  PlusCircle,
+  Search,
+  Settings,
+  Sparkles,
+  Sun,
+  X,
+} from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -54,12 +67,12 @@ function AuthenticatedCatalog() {
   const theme = useTheme();
   const { isDark, toggleTheme } = useThemeMode();
   const insets = useSafeAreaInsets();
-  const { isMobile, isDesktop, gridColumns, contentMaxWidth, horizontalPadding } = useResponsive();
+  const { isMobile, gridColumns, contentMaxWidth, horizontalPadding } = useResponsive();
   const {
     user,
+    logout,
     unreadNotificationsCount,
     refreshUnreadCount,
-    isAgentMobilier,
     isAdminStaff,
   } = useAuth();
   const storageBaseUrl = useMemo(() => getStorageBaseUrl(), []);
@@ -198,11 +211,12 @@ function AuthenticatedCatalog() {
           <View style={styles.brandRow}>
             <View style={styles.brandTitleGroup}>
               <View style={styles.titleWithFlag}>
+                <Building2 size={20} color={theme.primary} strokeWidth={2.2} />
                 <Text numberOfLines={1} style={[styles.brandName, { color: theme.primary }]}>
                   E-Mobilier
                 </Text>
                 <View style={[styles.flagChip, { backgroundColor: theme.backgroundElement }]}>
-                  <Text style={[styles.flagText, { color: theme.text }]}>🇧🇯 BÉNIN</Text>
+                  <Text style={[styles.flagText, { color: theme.text }]}>BÉNIN</Text>
                 </View>
               </View>
               <Text numberOfLines={1} style={[styles.brandSubtitle, { color: theme.textSecondary }]}>
@@ -211,16 +225,6 @@ function AuthenticatedCatalog() {
             </View>
 
             <View style={styles.headerActions}>
-              {isDesktop && (
-                <Pressable
-                  onPress={() => router.push((isAgentMobilier ? '/agent' : '/client') as any)}
-                  style={[styles.spaceHeaderBtn, { backgroundColor: theme.navy }]}>
-                  <Text style={styles.spaceHeaderBtnText}>
-                    {isAgentMobilier ? 'Tableau Agent' : 'Espace Client'}
-                  </Text>
-                </Pressable>
-              )}
-
               <Pressable
                 onPress={() => {
                   void toggleTheme();
@@ -230,7 +234,11 @@ function AuthenticatedCatalog() {
                   { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder },
                 ]}
                 hitSlop={6}>
-                <Text style={{ fontSize: 15 }}>{isDark ? '🌙' : '☀️'}</Text>
+                {isDark ? (
+                  <Moon size={17} color={theme.text} strokeWidth={2} />
+                ) : (
+                  <Sun size={17} color={theme.text} strokeWidth={2} />
+                )}
               </Pressable>
 
               <Pressable
@@ -240,11 +248,7 @@ function AuthenticatedCatalog() {
                   { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder },
                 ]}
                 hitSlop={8}>
-                <SymbolView
-                  name={{ ios: 'bell.fill', android: 'notifications', web: 'notifications' }}
-                  size={18}
-                  tintColor={theme.text}
-                />
+                <Bell size={17} color={theme.text} strokeWidth={2} />
                 {unreadNotificationsCount > 0 && (
                   <View style={styles.notificationBadge}>
                     <Text style={styles.notificationBadgeText}>
@@ -255,65 +259,68 @@ function AuthenticatedCatalog() {
               </Pressable>
 
               <Pressable
-                onPress={() => router.push('/profile' as any)}
+                onPress={() => {
+                  void logout();
+                }}
                 style={[
-                  styles.profilePill,
-                  { backgroundColor: theme.primaryLight, borderColor: theme.primary },
-                ]}>
-                <SymbolView
-                  name={{ ios: 'person.crop.circle.fill', android: 'person', web: 'person' }}
-                  size={15}
-                  tintColor={theme.primary}
-                />
-                <Text numberOfLines={1} style={[styles.profilePillText, { color: theme.primaryDark }]}>
-                  {user?.name ? user.name.split(' ')[0] : 'Profil'}
-                </Text>
+                  styles.logoutPill,
+                  { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder },
+                ]}
+                hitSlop={6}>
+                <LogOut size={15} color="#DC2626" strokeWidth={2} />
+                {!isMobile && (
+                  <Text style={styles.logoutPillText}>Déconnexion</Text>
+                )}
               </Pressable>
             </View>
           </View>
 
-          {/* Compact Modern Hero / Quick Workspace Shortcuts */}
+          {/* Compact Modern Hero */}
           <View style={[styles.heroBanner, { backgroundColor: theme.navy }]}>
             <View style={{ flex: 1, gap: 6 }}>
-              <Text style={styles.heroBadge}>
-                {isAgentMobilier ? '✦ ESPACE AGENT IMMOBILIER' : '✦ ESPACE CLIENT E-MOBILIER'}
-              </Text>
+              <View style={styles.heroBadgeRow}>
+                <Sparkles size={13} color="#FDE68A" strokeWidth={2.2} />
+                <Text style={styles.heroBadge}>CATALOGUE IMMOBILIER EN TEMPS RÉEL</Text>
+              </View>
               <Text style={[styles.heroTitle, !isMobile && { fontSize: 24 }]}>
-                Trouvez le bien idéal ou gérez vos annonces en direct
+                Trouvez le bien idéal ou publiez votre annonce
               </Text>
               <Text style={styles.heroSub}>
-                Accédez à vos espaces dédiés : recherche multi-critères, publication, visites et formulaire client.
+                Explorez nos biens vérifiés à louer ou à vendre, suivez vos annonces et planifiez vos visites.
               </Text>
             </View>
 
             <View style={styles.quickNavGrid}>
               <Pressable
-                onPress={() => router.push((isAgentMobilier ? '/agent' : '/client') as any)}
-                style={[styles.quickActionBtn, { backgroundColor: '#F59E0B' }]}>
-                <Text style={[styles.quickActionText, { color: '#0F172A' }]}>
-                  {isAgentMobilier ? '📊 Mon Tableau Agent' : '👤 Mon Espace Client'}
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={() => router.push((isAgentMobilier ? '/publish-agent' : '/publish-client') as any)}
+                onPress={() => router.push('/publish' as any)}
                 style={[styles.quickActionBtn, { backgroundColor: theme.primary }]}>
-                <Text style={styles.quickActionText}>➕ Publier une annonce</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => router.push('/client-form' as any)}
-                style={[styles.quickActionBtn, styles.quickActionOutline]}>
-                <Text style={styles.quickActionText}>📝 Formulaire Client</Text>
+                <PlusCircle size={15} color="#FFFFFF" strokeWidth={2.2} />
+                <Text style={styles.quickActionText}>Publier une annonce</Text>
               </Pressable>
               <Pressable
                 onPress={() => router.push('/explore' as any)}
                 style={[styles.quickActionBtn, styles.quickActionOutline]}>
-                <Text style={styles.quickActionText}>🔎 Recherche Avancée</Text>
+                <Search size={15} color="#FFFFFF" strokeWidth={2} />
+                <Text style={styles.quickActionText}>Recherche avancée</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => router.push('/my-properties' as any)}
+                style={[styles.quickActionBtn, styles.quickActionOutline]}>
+                <Building2 size={15} color="#FFFFFF" strokeWidth={2} />
+                <Text style={styles.quickActionText}>Mes annonces</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => router.push('/visits' as any)}
+                style={[styles.quickActionBtn, styles.quickActionOutline]}>
+                <Calendar size={15} color="#FFFFFF" strokeWidth={2} />
+                <Text style={styles.quickActionText}>Mes visites</Text>
               </Pressable>
               {isAdminStaff && (
                 <Pressable
                   onPress={() => router.push('/admin' as any)}
                   style={[styles.quickActionBtn, styles.quickActionOutline]}>
-                  <Text style={[styles.quickActionText, { color: '#FDE68A' }]}>⚙️ Admin</Text>
+                  <Settings size={15} color="#FDE68A" strokeWidth={2} />
+                  <Text style={[styles.quickActionText, { color: '#FDE68A' }]}>Admin</Text>
                 </Pressable>
               )}
             </View>
@@ -330,11 +337,7 @@ function AuthenticatedCatalog() {
                 styles.searchContainer,
                 { backgroundColor: theme.backgroundElement, borderColor: theme.cardBorder },
               ]}>
-              <SymbolView
-                name={{ ios: 'magnifyingglass', android: 'search', web: 'search' }}
-                size={19}
-                tintColor={theme.textSecondary}
-              />
+              <Search size={18} color={theme.textSecondary} strokeWidth={2} />
               <TextInput
                 style={[styles.searchInput, { color: theme.text }]}
                 placeholder="Rechercher commune, quartier, villa, parcelle..."
@@ -345,11 +348,7 @@ function AuthenticatedCatalog() {
               />
               {searchQuery.length > 0 && (
                 <Pressable onPress={() => setSearchQuery('')}>
-                  <SymbolView
-                    name={{ ios: 'xmark.circle.fill', android: 'cancel', web: 'cancel' }}
-                    size={18}
-                    tintColor={theme.textSecondary}
-                  />
+                  <X size={18} color={theme.textSecondary} strokeWidth={2} />
                 </Pressable>
               )}
             </View>
@@ -388,7 +387,7 @@ function AuthenticatedCatalog() {
               <View style={[styles.txSegmented, { backgroundColor: theme.backgroundElement }]}>
                 {(['tous', 'location', 'vente'] as const).map((tr) => {
                   const active = selectedTransaction === tr;
-                  const label = tr === 'tous' ? 'Tous' : tr === 'location' ? 'Location' : 'Vente';
+                  const label = tr === 'tous' ? 'Tous' : tr === 'location' ? 'Louer' : 'Vendre';
                   return (
                     <Pressable
                       key={tr}
@@ -419,10 +418,13 @@ function AuthenticatedCatalog() {
                 <Text style={[styles.sectionTitle, { color: theme.text }]}>
                   Propriétés en vedette
                 </Text>
-                <Pressable onPress={() => router.push('/explore' as any)}>
+                <Pressable
+                  onPress={() => router.push('/explore' as any)}
+                  style={styles.inlineLinkRow}>
                   <Text style={[styles.resultsLink, { color: theme.primary }]}>
-                    Filtres avancés →
+                    Filtres avancés
                   </Text>
+                  <ArrowRight size={14} color={theme.primary} strokeWidth={2.2} />
                 </Pressable>
               </View>
               <ScrollView
@@ -479,7 +481,12 @@ function AuthenticatedCatalog() {
             <View
               style={[
                 styles.emptyContainer,
-                { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder, borderWidth: 1, borderRadius: 20 },
+                {
+                  backgroundColor: theme.cardBackground,
+                  borderColor: theme.cardBorder,
+                  borderWidth: 1,
+                  borderRadius: 20,
+                },
               ]}>
               <Text style={[styles.emptyTitle, { color: theme.text }]}>
                 {errorMsg ? 'Erreur de chargement' : 'Aucun bien ne correspond'}
@@ -577,8 +584,6 @@ const styles = StyleSheet.create({
   flagText: { fontSize: 10, fontWeight: '800' },
   brandSubtitle: { fontSize: 12, marginTop: 2 },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0 },
-  spaceHeaderBtn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12 },
-  spaceHeaderBtnText: { color: '#FFFFFF', fontSize: 12, fontWeight: '800' },
   iconCircleBtn: {
     width: 38,
     height: 38,
@@ -601,23 +606,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   notificationBadgeText: { color: '#FFFFFF', fontSize: 10, fontWeight: '800' },
-  profilePill: {
+  logoutPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 6,
     paddingHorizontal: 11,
-    paddingVertical: 8,
+    height: 38,
     borderRadius: 19,
     borderWidth: 1,
-    maxWidth: 115,
   },
-  profilePillText: { fontSize: 12, fontWeight: '800' },
+  logoutPillText: { color: '#DC2626', fontSize: 12, fontWeight: '800' },
 
   heroBanner: {
     borderRadius: 22,
     padding: 20,
     gap: 14,
   },
+  heroBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   heroBadge: { color: '#FDE68A', fontSize: 11, fontWeight: '800', letterSpacing: 0.7 },
   heroTitle: { color: '#FFFFFF', fontSize: 20, fontWeight: '900' },
   heroSub: { color: '#CBD5E1', fontSize: 13, lineHeight: 19 },
@@ -627,6 +632,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   quickActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 12,
@@ -703,6 +711,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  inlineLinkRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   sectionTitle: { fontSize: 18, fontWeight: '900' },
   resultsCount: { fontSize: 13, fontWeight: '600' },
   resultsLink: { fontSize: 13, fontWeight: '800' },

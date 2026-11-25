@@ -1,4 +1,5 @@
 import { router } from 'expo-router';
+import { AlertTriangle, Check, CheckCircle2, Sparkles } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -198,7 +199,7 @@ export default function ClientFormScreen() {
                   { backgroundColor: theme.cardBackground, borderColor: '#10B981' },
                 ]}>
                 <View style={styles.successIcon}>
-                  <Text style={{ fontSize: 32 }}>✅</Text>
+                  <CheckCircle2 size={36} color="#059669" strokeWidth={2.2} />
                 </View>
                 <Text style={[styles.successTitle, { color: theme.text }]}>
                   Formulaire client enregistré !
@@ -243,7 +244,10 @@ export default function ClientFormScreen() {
               <>
                 {/* Intro Header Card */}
                 <View style={[styles.banner, { backgroundColor: theme.navy }]}>
-                  <Text style={styles.bannerEyebrow}>✦ ACCOMPAGNEMENT PERSONNALISÉ</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Sparkles size={13} color="#FDE68A" strokeWidth={2.2} />
+                    <Text style={styles.bannerEyebrow}>ACCOMPAGNEMENT PERSONNALISÉ</Text>
+                  </View>
                   <Text style={styles.bannerTitle}>Parlez-nous de votre besoin immobilier</Text>
                   <Text style={styles.bannerSub}>
                     Tous vos renseignements sont sécurisés et pris en charge par un conseiller agréé
@@ -252,8 +256,9 @@ export default function ClientFormScreen() {
                 </View>
 
                 {globalError && (
-                  <View style={styles.errorBanner}>
-                    <Text style={styles.errorBannerText}>⚠️ {globalError}</Text>
+                  <View style={[styles.errorBanner, { flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
+                    <AlertTriangle size={16} color="#B91C1C" strokeWidth={2.2} />
+                    <Text style={[styles.errorBannerText, { flex: 1 }]}>{globalError}</Text>
                   </View>
                 )}
 
@@ -564,7 +569,7 @@ export default function ClientFormScreen() {
                           backgroundColor: acceptedCgu ? theme.primary : 'transparent',
                         },
                       ]}>
-                      {acceptedCgu && <Text style={styles.checkMark}>✓</Text>}
+                      {acceptedCgu && <Check size={14} color="#FFFFFF" strokeWidth={3} />}
                     </View>
                     <Text style={[styles.cguText, { color: theme.text }]}>
                       J'accepte que mes informations soient traitées conformément aux{' '}

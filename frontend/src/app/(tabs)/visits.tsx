@@ -1,4 +1,15 @@
 import { router } from 'expo-router';
+import {
+  Calendar,
+  CheckCircle2,
+  Clock,
+  FileText,
+  Lock,
+  Mail,
+  MapPin,
+  Phone,
+  User,
+} from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -281,13 +292,19 @@ export default function VisitsScreen() {
                         </Text>
                         <Text style={[styles.clientName, { color: theme.text }]}>{clientName}</Text>
                         {item.client?.telephone ? (
-                          <Text style={[styles.phoneText, { color: theme.textSecondary }]}>
-                            📞 {item.client.telephone}
-                          </Text>
+                          <View style={styles.inlineIconRow}>
+                            <Phone size={13} color={theme.textSecondary} strokeWidth={2} />
+                            <Text style={[styles.phoneText, { color: theme.textSecondary, marginTop: 0 }]}>
+                              {item.client.telephone}
+                            </Text>
+                          </View>
                         ) : isAgentMobilier && !isAdminStaff ? (
-                          <Text style={[styles.maskedNote, { color: theme.textSecondary }]}>
-                            🔒 Coordonnées protégées (gestion E-Mobilier)
-                          </Text>
+                          <View style={styles.inlineIconRow}>
+                            <Lock size={13} color={theme.textSecondary} strokeWidth={2} />
+                            <Text style={[styles.maskedNote, { color: theme.textSecondary, marginTop: 0 }]}>
+                              Coordonnées protégées (gestion E-Mobilier)
+                            </Text>
+                          </View>
                         ) : null}
                       </View>
 
@@ -299,12 +316,22 @@ export default function VisitsScreen() {
                     </View>
 
                     <View style={[styles.infoStrip, { backgroundColor: theme.backgroundElement }]}>
-                      <Text style={[styles.infoText, { color: theme.text }]}>
-                        📅 {new Date(item.scheduled_date).toLocaleString('fr-FR')}
-                      </Text>
-                      <Text style={[styles.infoText, { color: theme.primary }]}>
-                        {item.is_fee_paid ? '✅ Frais 500 F acquittés' : '⏳ Paiement requis'}
-                      </Text>
+                      <View style={styles.inlineIconRow}>
+                        <Calendar size={14} color={theme.text} strokeWidth={2} />
+                        <Text style={[styles.infoText, { color: theme.text }]}>
+                          {new Date(item.scheduled_date).toLocaleString('fr-FR')}
+                        </Text>
+                      </View>
+                      <View style={styles.inlineIconRow}>
+                        {item.is_fee_paid ? (
+                          <CheckCircle2 size={14} color="#059669" strokeWidth={2.2} />
+                        ) : (
+                          <Clock size={14} color={theme.gold} strokeWidth={2.2} />
+                        )}
+                        <Text style={[styles.infoText, { color: theme.primary }]}>
+                          {item.is_fee_paid ? 'Frais 500 F acquittés' : 'Paiement requis'}
+                        </Text>
+                      </View>
                     </View>
 
                     {prop && (
@@ -322,15 +349,21 @@ export default function VisitsScreen() {
                     )}
 
                     {item.instructions_itineraire ? (
-                      <Text style={[styles.instructions, { color: theme.textSecondary }]}>
-                        📍 Consignes : {item.instructions_itineraire}
-                      </Text>
+                      <View style={styles.inlineIconRowStart}>
+                        <MapPin size={14} color={theme.primary} strokeWidth={2} style={{ marginTop: 2 }} />
+                        <Text style={[styles.instructions, { color: theme.textSecondary, flex: 1 }]}>
+                          Consignes : {item.instructions_itineraire}
+                        </Text>
+                      </View>
                     ) : null}
 
                     {item.compte_rendu ? (
-                      <Text style={[styles.instructions, { color: theme.text }]}>
-                        📝 Compte-rendu : {item.compte_rendu}
-                      </Text>
+                      <View style={styles.inlineIconRowStart}>
+                        <FileText size={14} color={theme.text} strokeWidth={2} style={{ marginTop: 2 }} />
+                        <Text style={[styles.instructions, { color: theme.text, flex: 1 }]}>
+                          Compte-rendu : {item.compte_rendu}
+                        </Text>
+                      </View>
                     ) : null}
 
                     {item.status === 'pending' && (
@@ -384,14 +417,30 @@ export default function VisitsScreen() {
                     </View>
                   </View>
 
-                  <Text style={{ color: theme.textSecondary, fontSize: 12 }}>
-                    👤 {inq.prenom} {inq.nom} • 📞 {inq.telephone} • ✉️ {inq.email}
-                  </Text>
+                  <View style={styles.metaWrapRow}>
+                    <View style={styles.inlineIconRow}>
+                      <User size={13} color={theme.textSecondary} strokeWidth={2} />
+                      <Text style={{ color: theme.textSecondary, fontSize: 12 }}>
+                        {inq.prenom} {inq.nom}
+                      </Text>
+                    </View>
+                    <View style={styles.inlineIconRow}>
+                      <Phone size={13} color={theme.textSecondary} strokeWidth={2} />
+                      <Text style={{ color: theme.textSecondary, fontSize: 12 }}>{inq.telephone}</Text>
+                    </View>
+                    <View style={styles.inlineIconRow}>
+                      <Mail size={13} color={theme.textSecondary} strokeWidth={2} />
+                      <Text style={{ color: theme.textSecondary, fontSize: 12 }}>{inq.email}</Text>
+                    </View>
+                  </View>
 
                   {inq.scheduled_date ? (
-                    <Text style={{ color: theme.primary, fontSize: 13, fontWeight: '700' }}>
-                      📅 {new Date(inq.scheduled_date).toLocaleString('fr-FR')}
-                    </Text>
+                    <View style={styles.inlineIconRow}>
+                      <Calendar size={14} color={theme.primary} strokeWidth={2.2} />
+                      <Text style={{ color: theme.primary, fontSize: 13, fontWeight: '700' }}>
+                        {new Date(inq.scheduled_date).toLocaleString('fr-FR')}
+                      </Text>
+                    </View>
                   ) : null}
 
                   {inq.message ? (
@@ -458,4 +507,7 @@ const styles = StyleSheet.create({
   gateDesc: { fontSize: 14, textAlign: 'center', maxWidth: 420 },
   primaryBtn: { borderRadius: 14, paddingHorizontal: 22, paddingVertical: 13 },
   primaryBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
+  inlineIconRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  inlineIconRowStart: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
+  metaWrapRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, alignItems: 'center' },
 });

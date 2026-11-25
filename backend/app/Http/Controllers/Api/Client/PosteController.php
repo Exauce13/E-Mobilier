@@ -827,6 +827,7 @@ class PosteController extends Controller
     {
         $namedDocuments = [
             'titre_foncier' => 'titre_foncier',
+            'plan_cadastral' => 'plan_cadastral',
             'convention_vente' => 'convention_vente',
             'permis_habiter' => 'permis_habiter',
             'attestation_recasement' => 'attestation_recasement',
@@ -857,7 +858,7 @@ class PosteController extends Controller
             foreach ($documents as $index => $file) {
                 if ($file && $file->isValid()) {
                     $docType = $documentTypes[$index] ?? 'autre';
-                    $allowed = ['convention_vente', 'permis_habiter', 'attestation_recasement', 'titre_foncier', 'autre'];
+                    $allowed = ['convention_vente', 'permis_habiter', 'attestation_recasement', 'titre_foncier', 'plan_cadastral', 'autre'];
                     if (! in_array($docType, $allowed)) {
                         $docType = 'autre';
                     }

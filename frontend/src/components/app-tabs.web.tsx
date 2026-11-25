@@ -7,6 +7,7 @@ import {
   TabTriggerSlotProps,
   TabListProps,
 } from 'expo-router/ui';
+import { Building2, Calendar, Home, PlusCircle, Search } from 'lucide-react-native';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -16,7 +17,7 @@ import { useResponsive } from '@/hooks/use-responsive';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function AppTabs() {
-  const { isAuthenticated, isAgentMobilier } = useAuth();
+  const { isAuthenticated } = useAuth();
   const { isMobile } = useResponsive();
 
   return (
@@ -24,43 +25,65 @@ export default function AppTabs() {
       <TabSlot style={{ height: '100%' }} />
 
       <TabList asChild>
-        <CustomTabList isMobile={isMobile} isAuthenticated={isAuthenticated} isAgent={isAgentMobilier}>
+        <CustomTabList isMobile={isMobile}>
           <TabTrigger name="home" href="/" asChild>
-            <TabButton compact={isMobile}>{isAuthenticated ? 'Accueil' : 'Accueil'}</TabButton>
+            <TabButton compact={isMobile} icon="home">
+              Accueil
+            </TabButton>
           </TabTrigger>
 
           <TabTrigger name="explore" href="/explore" asChild>
-            <TabButton compact={isMobile}>Recherche</TabButton>
+            <TabButton compact={isMobile} icon="search">
+              Recherche
+            </TabButton>
           </TabTrigger>
 
           <TabTrigger name="publish" href="/publish" asChild>
-            <TabButton compact={isMobile}>Publier</TabButton>
+            <TabButton compact={isMobile} icon="publish">
+              Publier
+            </TabButton>
           </TabTrigger>
 
           {isAuthenticated && (
             <TabTrigger name="visits" href="/visits" asChild>
-              <TabButton compact={isMobile}>Visites</TabButton>
+              <TabButton compact={isMobile} icon="visits">
+                Visites
+              </TabButton>
             </TabTrigger>
           )}
-
-          <TabTrigger name="profile" href="/profile" asChild>
-            <TabButton compact={isMobile}>
-              {isAuthenticated ? (isAgentMobilier ? 'Agent' : 'Client') : 'Compte'}
-            </TabButton>
-          </TabTrigger>
         </CustomTabList>
       </TabList>
     </Tabs>
   );
 }
 
+type TabIconKey = 'home' | 'search' | 'publish' | 'visits';
+
 export function TabButton({
   children,
   isFocused,
   compact,
+  icon,
   ...props
-}: TabTriggerSlotProps & { compact?: boolean }) {
+}: TabTriggerSlotProps & { compact?: boolean; icon?: TabIconKey }) {
   const theme = useTheme();
+  const iconColor = isFocused ? '#FFFFFF' : '#CBD5E1';
+  const iconSize = compact ? 15 : 16;
+
+  const renderIcon = () => {
+    switch (icon) {
+      case 'home':
+        return <Home size={iconSize} color={iconColor} strokeWidth={2} />;
+      case 'search':
+        return <Search size={iconSize} color={iconColor} strokeWidth={2} />;
+      case 'publish':
+        return <PlusCircle size={iconSize} color={iconColor} strokeWidth={2} />;
+      case 'visits':
+        return <Calendar size={iconSize} color={iconColor} strokeWidth={2} />;
+      default:
+        return null;
+    }
+  };
 
   return (
     <Pressable {...(props as any)} style={({ pressed }) => pressed && styles.pressed}>
@@ -72,13 +95,14 @@ export function TabButton({
             backgroundColor: isFocused ? theme.primary : 'transparent',
           },
         ]}>
+        {renderIcon()}
         <Text
           numberOfLines={1}
           style={[
             styles.tabButtonText,
             compact && styles.tabButtonTextCompact,
             {
-              color: isFocused ? '#FFFFFF' : '#CBD5E1',
+              color: iconColor,
               fontWeight: isFocused ? '700' : '500',
             },
           ]}>
@@ -91,11 +115,9 @@ export function TabButton({
 
 export function CustomTabList({
   isMobile,
-  isAuthenticated,
-  isAgent,
   children,
   ...props
-}: TabListProps & { isMobile: boolean; isAuthenticated: boolean; isAgent: boolean }) {
+}: TabListProps & { isMobile: boolean }) {
   const theme = useTheme();
 
   return (
@@ -111,31 +133,17 @@ export function CustomTabList({
         ]}>
         {!isMobile && (
           <Pressable onPress={() => router.push('/' as any)} style={styles.brandRow}>
+            <View style={styles.brandIconWrap}>
+              <Building2 size={15} color="#F59E0B" strokeWidth={2.2} />
+            </View>
             <Text style={[styles.brandText, { color: '#F59E0B' }]}>E-Mobilier</Text>
-            <Text style={styles.flagText}>🇧🇯</Text>
+            <View style={styles.countryPill}>
+              <Text style={styles.countryPillText}>BJ</Text>
+            </View>
           </Pressable>
         )}
 
         <View style={[styles.tabsRow, isMobile && styles.tabsRowMobile]}>{children}</View>
-
-        {!isMobile && (
-          <View style={styles.quickSpaceRow}>
-            <Pressable
-              onPress={() => router.push((isAgent ? '/agent' : '/client') as any)}
-              style={[styles.spaceChip, { backgroundColor: 'rgba(20, 184, 166, 0.18)', borderColor: 'rgba(20, 184, 166, 0.45)' }]}>
-              <Text style={styles.spaceChipText}>
-                {isAgent ? 'Espace Agent' : 'Espace Client'}
-              </Text>
-            </Pressable>
-            {!isAuthenticated && (
-              <Pressable
-                onPress={() => router.push('/agent' as any)}
-                style={[styles.spaceChip, { backgroundColor: 'rgba(245, 158, 11, 0.16)', borderColor: 'rgba(245, 158, 11, 0.4)' }]}>
-                <Text style={[styles.spaceChipText, { color: '#FDE68A' }]}>Agent</Text>
-              </Pressable>
-            )}
-          </View>
-        )}
       </View>
     </View>
   );
@@ -167,8 +175,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12,
-    maxWidth: 960,
+    gap: 16,
+    maxWidth: 740,
     width: '100%',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },
@@ -185,21 +193,37 @@ const styles = StyleSheet.create({
   brandRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 7,
     flexShrink: 0,
+  },
+  brandIconWrap: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    backgroundColor: 'rgba(245, 158, 11, 0.16)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   brandText: {
     fontSize: 14,
     fontWeight: '900',
     letterSpacing: -0.2,
   },
-  flagText: {
-    fontSize: 12,
+  countryPill: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  countryPillText: {
+    color: '#FDE68A',
+    fontSize: 10,
+    fontWeight: '800',
   },
   tabsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
     flexShrink: 1,
   },
   tabsRowMobile: {
@@ -207,35 +231,22 @@ const styles = StyleSheet.create({
     justifyContent: 'space-around',
     gap: 2,
   },
-  quickSpaceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    flexShrink: 0,
-  },
-  spaceChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 14,
-    borderWidth: 1,
-  },
-  spaceChipText: {
-    color: '#99F6E4',
-    fontSize: 12,
-    fontWeight: '700',
-  },
   pressed: {
     opacity: 0.78,
   },
   tabButtonView: {
-    paddingVertical: 7,
-    paddingHorizontal: 13,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
     borderRadius: 16,
   },
   tabButtonCompact: {
     paddingVertical: 7,
-    paddingHorizontal: 9,
+    paddingHorizontal: 10,
     borderRadius: 14,
+    gap: 4,
   },
   tabButtonText: {
     fontSize: 13,

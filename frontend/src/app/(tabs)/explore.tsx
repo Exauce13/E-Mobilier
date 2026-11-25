@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
+import { ChevronDown, ChevronUp, Search, XCircle } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -342,11 +342,7 @@ export default function ExploreScreen() {
                 styles.searchBar,
                 { backgroundColor: theme.backgroundElement, borderColor: theme.cardBorder },
               ]}>
-              <SymbolView
-                name={{ ios: 'magnifyingglass', android: 'search', web: 'search' }}
-                size={18}
-                tintColor={theme.textSecondary}
-              />
+              <Search size={18} color={theme.textSecondary} strokeWidth={2} />
               <TextInput
                 style={[styles.searchInput, { color: theme.text }]}
                 placeholder="Mot-clé, quartier, villa, piscine, titre foncier..."
@@ -356,11 +352,7 @@ export default function ExploreScreen() {
               />
               {searchQuery.length > 0 && (
                 <Pressable onPress={() => setSearchQuery('')}>
-                  <SymbolView
-                    name={{ ios: 'xmark.circle.fill', android: 'close', web: 'close' }}
-                    size={18}
-                    tintColor={theme.textSecondary}
-                  />
+                  <XCircle size={18} color={theme.textSecondary} strokeWidth={2} />
                 </Pressable>
               )}
             </View>
@@ -492,11 +484,18 @@ export default function ExploreScreen() {
             <Pressable
               onPress={() => setShowMoreFilters((v) => !v)}
               style={[styles.advancedToggle, { borderColor: theme.cardBorder }]}>
-              <Text style={{ color: theme.primary, fontSize: 13, fontWeight: '800' }}>
-                {showMoreFilters
-                  ? '▲ Masquer les critères avancés'
-                  : `▼ Critères avancés (Budget, Surface, Chambres, Commodités)`}
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+                {showMoreFilters ? (
+                  <ChevronUp size={16} color={theme.primary} strokeWidth={2.4} />
+                ) : (
+                  <ChevronDown size={16} color={theme.primary} strokeWidth={2.4} />
+                )}
+                <Text style={{ color: theme.primary, fontSize: 13, fontWeight: '800', flex: 1 }}>
+                  {showMoreFilters
+                    ? 'Masquer les critères avancés'
+                    : 'Critères avancés (Budget, Surface, Chambres, Commodités)'}
+                </Text>
+              </View>
               {activeFiltersCount > 0 && (
                 <View style={[styles.countPill, { backgroundColor: theme.primary }]}>
                   <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '800' }}>

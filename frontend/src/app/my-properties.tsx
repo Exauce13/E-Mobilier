@@ -1,4 +1,5 @@
 import { router } from 'expo-router';
+import { MapPin } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -238,10 +239,13 @@ export default function MyPropertiesScreen() {
                   </View>
                 </View>
 
-                <Text style={[styles.loc, { color: theme.textSecondary }]}>
-                  📍 {[item.quartier, item.arrondissement, item.commune].filter(Boolean).join(', ')} •{' '}
-                  {item.surface} m²
-                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                  <MapPin size={13} color={theme.primary} strokeWidth={2.2} />
+                  <Text style={[styles.loc, { color: theme.textSecondary, flex: 1 }]}>
+                    {[item.quartier, item.arrondissement, item.commune].filter(Boolean).join(', ')} •{' '}
+                    {item.surface} m²
+                  </Text>
+                </View>
                 <Text style={[styles.price, { color: theme.primary }]}>
                   {formatFcfa(item.prix)}
                   {item.transaction_type === 'location' ? '/mois' : ''}

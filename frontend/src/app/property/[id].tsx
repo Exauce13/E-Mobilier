@@ -1,7 +1,20 @@
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
 import * as WebBrowser from 'expo-web-browser';
+import {
+  Calendar,
+  Droplets,
+  FileText,
+  Heart,
+  Home,
+  Lock,
+  Mail,
+  MapPin,
+  Phone,
+  Route,
+  Sparkles,
+  Unlock,
+} from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -145,9 +158,8 @@ export default function PropertyDetailScreen() {
   }, [property, storageBaseUrl]);
 
   const propertyTitle = property
-    ? `${property.type === 'parcelle' ? 'Parcelle' : property.type === 'chambre' ? 'Chambre' : 'Maison'} ${
-        property.transaction_type === 'location' ? 'à louer' : 'à vendre'
-      } — ${property.commune}`
+    ? `${property.type === 'parcelle' ? 'Parcelle' : property.type === 'chambre' ? 'Chambre' : 'Maison'} ${property.transaction_type === 'location' ? 'à louer' : 'à vendre'
+    } — ${property.commune}`
     : 'Détail du bien';
 
   const fullAddress = property
@@ -167,14 +179,11 @@ export default function PropertyDetailScreen() {
             onPress={handleToggleFavorite}
             style={styles.favHeaderBtn}
             hitSlop={8}>
-            <SymbolView
-              name={{
-                ios: isFavorite ? 'heart.fill' : 'heart',
-                android: isFavorite ? 'favorite' : 'favorite_border',
-                web: isFavorite ? 'favorite' : 'favorite_border',
-              }}
+            <Heart
               size={20}
-              tintColor={isFavorite ? '#EF4444' : '#FFFFFF'}
+              color={isFavorite ? '#EF4444' : '#FFFFFF'}
+              fill={isFavorite ? '#EF4444' : 'transparent'}
+              strokeWidth={2.2}
             />
           </Pressable>
         }
@@ -284,9 +293,12 @@ export default function PropertyDetailScreen() {
                     </View>
                   </View>
 
-                  <Text style={[styles.locationTitle, { color: theme.text }]}>
-                    📍 {fullAddress}
-                  </Text>
+                  <View style={styles.inlineIconRow}>
+                    <MapPin size={16} color={theme.primary} strokeWidth={2.2} />
+                    <Text style={[styles.locationTitle, { color: theme.text, flex: 1 }]}>
+                      {fullAddress}
+                    </Text>
+                  </View>
 
                   <View style={styles.specsGrid}>
                     <SpecBadge label="Type" value={property.type.toUpperCase()} theme={theme} />
@@ -300,20 +312,26 @@ export default function PropertyDetailScreen() {
                   </View>
 
                   {property.accessibilite && (
-                    <Text style={[styles.detailLine, { color: theme.textSecondary }]}>
-                      🛣️ Accessibilité :{' '}
-                      <Text style={{ color: theme.text, fontWeight: '700' }}>
-                        {property.accessibilite}
+                    <View style={styles.inlineIconRow}>
+                      <Route size={15} color={theme.primary} strokeWidth={2} />
+                      <Text style={[styles.detailLine, { color: theme.textSecondary, flex: 1 }]}>
+                        Accessibilité :{' '}
+                        <Text style={{ color: theme.text, fontWeight: '700' }}>
+                          {property.accessibilite}
+                        </Text>
                       </Text>
-                    </Text>
+                    </View>
                   )}
                   {property.eau_courant && (
-                    <Text style={[styles.detailLine, { color: theme.textSecondary }]}>
-                      💧 Eau & Électricité :{' '}
-                      <Text style={{ color: theme.text, fontWeight: '700' }}>
-                        {property.eau_courant}
+                    <View style={styles.inlineIconRow}>
+                      <Droplets size={15} color={theme.primary} strokeWidth={2} />
+                      <Text style={[styles.detailLine, { color: theme.textSecondary, flex: 1 }]}>
+                        Eau & Électricité :{' '}
+                        <Text style={{ color: theme.text, fontWeight: '700' }}>
+                          {property.eau_courant}
+                        </Text>
                       </Text>
-                    </Text>
+                    </View>
                   )}
                   {property.description && (
                     <View style={{ gap: 4, marginTop: 4 }}>
@@ -331,11 +349,18 @@ export default function PropertyDetailScreen() {
                     styles.card,
                     { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder },
                   ]}>
-                  <Text style={[styles.sectionTitle, { color: theme.text }]}>
-                    {property.is_unlocked
-                      ? '🔓 Coordonnées & Documents Débloqués'
-                      : '🔒 Coordonnées & Documents Justificatifs'}
-                  </Text>
+                  <View style={styles.inlineIconRow}>
+                    {property.is_unlocked ? (
+                      <Unlock size={17} color={theme.primary} strokeWidth={2.2} />
+                    ) : (
+                      <Lock size={17} color={theme.gold} strokeWidth={2.2} />
+                    )}
+                    <Text style={[styles.sectionTitle, { color: theme.text, flex: 1 }]}>
+                      {property.is_unlocked
+                        ? 'Coordonnées & Documents Débloqués'
+                        : 'Coordonnées & Documents Justificatifs'}
+                    </Text>
+                  </View>
                   <Text style={[styles.detailLine, { color: theme.textSecondary }]}>
                     {property.location_details ||
                       'Repères exacts et documents légaux disponibles après déblocage.'}
@@ -350,17 +375,21 @@ export default function PropertyDetailScreen() {
                       </Text>
                       {property.user.telephone ? (
                         <Pressable
-                          onPress={() => Linking.openURL(`tel:${property.user!.telephone}`)}>
+                          onPress={() => Linking.openURL(`tel:${property.user!.telephone}`)}
+                          style={styles.inlineIconRow}>
+                          <Phone size={14} color={theme.primary} strokeWidth={2.2} />
                           <Text style={[styles.contactLine, { color: theme.primary }]}>
-                            📞 {property.user.telephone}
+                            {property.user.telephone}
                           </Text>
                         </Pressable>
                       ) : null}
                       {property.user.email ? (
                         <Pressable
-                          onPress={() => Linking.openURL(`mailto:${property.user!.email}`)}>
+                          onPress={() => Linking.openURL(`mailto:${property.user!.email}`)}
+                          style={styles.inlineIconRow}>
+                          <Mail size={14} color={theme.textSecondary} strokeWidth={2} />
                           <Text style={[styles.contactLine, { color: theme.textSecondary }]}>
-                            ✉️ {property.user.email}
+                            {property.user.email}
                           </Text>
                         </Pressable>
                       ) : null}
@@ -382,8 +411,9 @@ export default function PropertyDetailScreen() {
                             key={doc.id}
                             onPress={() => docUrl && WebBrowser.openBrowserAsync(docUrl)}
                             style={[styles.docRow, { borderColor: theme.cardBorder }]}>
+                            <FileText size={16} color={theme.primary} strokeWidth={2} />
                             <Text style={{ color: theme.text, fontWeight: '700', flex: 1 }}>
-                              📄 {(doc.document_type || doc.type || 'Document').toUpperCase()}
+                              {(doc.document_type || doc.type || 'Document').toUpperCase()}
                             </Text>
                             <Text style={{ color: theme.primary, fontWeight: '800', fontSize: 12 }}>
                               Ouvrir
@@ -413,7 +443,10 @@ export default function PropertyDetailScreen() {
               <View style={[styles.sideCol, isDesktop && { flex: 1 }]}>
                 {/* 3 Core Property Actions Card */}
                 <View style={[styles.actionsPanel, { backgroundColor: theme.navy }]}>
-                  <Text style={styles.panelEyebrow}>✦ ACTIONS SUR CE BIEN</Text>
+                  <View style={styles.inlineIconRow}>
+                    <Sparkles size={13} color="#FDE68A" strokeWidth={2.2} />
+                    <Text style={styles.panelEyebrow}>ACTIONS SUR CE BIEN</Text>
+                  </View>
                   <Text style={styles.panelTitle}>Intéressé par cette propriété ?</Text>
                   <Text style={styles.panelDesc}>
                     Enregistrez vos coordonnées (Nom, Prénom, Téléphone, E-mail) pour demander une
@@ -424,20 +457,23 @@ export default function PropertyDetailScreen() {
                     <Pressable
                       onPress={() => openActionModal('demande_visite')}
                       style={[styles.goldActionBtn, { backgroundColor: '#F59E0B' }]}>
-                      <Text style={styles.goldActionText}>🏠 Demander une visite</Text>
+                      <Home size={16} color="#0F172A" strokeWidth={2.2} />
+                      <Text style={styles.goldActionText}>Demander une visite</Text>
                     </Pressable>
 
                     <Pressable
                       onPress={() => openActionModal('rendez_vous')}
                       style={[styles.primaryActionBtn, { backgroundColor: theme.primary }]}>
-                      <Text style={styles.primaryBtnText}>📅 Prendre un rendez-vous</Text>
+                      <Calendar size={16} color="#FFFFFF" strokeWidth={2.2} />
+                      <Text style={styles.primaryBtnText}>Prendre un rendez-vous</Text>
                     </Pressable>
 
                     <Pressable
                       onPress={() => openActionModal('contact')}
                       style={styles.outlineActionBtn}>
+                      <Mail size={16} color="#FFFFFF" strokeWidth={2.2} />
                       <Text style={styles.outlineActionText}>
-                        ✉️ Contacter le propriétaire / l'agent
+                        Contacter le propriétaire / l'agent
                       </Text>
                     </Pressable>
                   </View>
@@ -614,21 +650,25 @@ const styles = StyleSheet.create({
   contactName: { fontSize: 15, fontWeight: '800' },
   contactLine: { fontSize: 13, fontWeight: '700' },
   docHeader: { fontSize: 13, fontWeight: '800' },
-  docRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 10, padding: 10 },
+  docRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 10, padding: 10, gap: 8 },
+  inlineIconRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   actionsPanel: { borderRadius: 22, padding: 20, gap: 12 },
   panelEyebrow: { color: '#FDE68A', fontSize: 11, fontWeight: '800', letterSpacing: 0.7 },
   panelTitle: { color: '#FFFFFF', fontSize: 20, fontWeight: '900' },
   panelDesc: { color: '#CBD5E1', fontSize: 13, lineHeight: 19 },
   actionStack: { gap: 10, marginTop: 4 },
-  goldActionBtn: { borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
+  goldActionBtn: { borderRadius: 14, paddingVertical: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   goldActionText: { color: '#0F172A', fontSize: 15, fontWeight: '900' },
-  primaryActionBtn: { borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
+  primaryActionBtn: { borderRadius: 14, paddingVertical: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   outlineActionBtn: {
     borderRadius: 14,
     borderWidth: 1.5,
     borderColor: 'rgba(255,255,255,0.3)',
     paddingVertical: 13,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
   },
   outlineActionText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
   paidVisitBox: {

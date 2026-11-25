@@ -1,5 +1,14 @@
 import { router } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
+import {
+  ArrowLeft,
+  Check,
+  Eye,
+  EyeOff,
+  Lock,
+  Mail,
+  Phone,
+  User,
+} from 'lucide-react-native';
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
@@ -136,11 +145,7 @@ export function RegisterView({
               pressed && { opacity: 0.7 },
             ]}
             hitSlop={10}>
-            <SymbolView
-              name={{ ios: 'arrow.left', android: 'arrow_back', web: 'arrow_back' }}
-              size={20}
-              tintColor={theme.text}
-            />
+            <ArrowLeft size={20} color={theme.text} strokeWidth={2.2} />
           </Pressable>
         </View>
 
@@ -185,11 +190,7 @@ export function RegisterView({
               },
             ]}>
             <View style={styles.inputIcon}>
-              <SymbolView
-                name={{ ios: 'person.fill', android: 'person', web: 'person' }}
-                size={19}
-                tintColor={theme.textSecondary}
-              />
+              <User size={18} color={theme.textSecondary} strokeWidth={2} />
             </View>
             <TextInput
               style={[styles.input, { color: theme.text }]}
@@ -211,7 +212,7 @@ export function RegisterView({
               },
             ]}>
             <View style={[styles.prefixBadge, { backgroundColor: theme.tagBackground }]}>
-              <Text style={styles.flag}>🇧🇯</Text>
+              <Phone size={14} color={theme.primary} strokeWidth={2.2} />
               <Text style={[styles.prefix, { color: theme.text }]}>+229</Text>
             </View>
             <TextInput
@@ -235,11 +236,7 @@ export function RegisterView({
               },
             ]}>
             <View style={styles.inputIcon}>
-              <SymbolView
-                name={{ ios: 'envelope.fill', android: 'mail', web: 'mail' }}
-                size={18}
-                tintColor={theme.textSecondary}
-              />
+              <Mail size={18} color={theme.textSecondary} strokeWidth={2} />
             </View>
             <TextInput
               style={[styles.input, { color: theme.text }]}
@@ -263,11 +260,7 @@ export function RegisterView({
               },
             ]}>
             <View style={styles.inputIcon}>
-              <SymbolView
-                name={{ ios: 'lock.fill', android: 'lock', web: 'lock' }}
-                size={19}
-                tintColor={theme.textSecondary}
-              />
+              <Lock size={18} color={theme.textSecondary} strokeWidth={2} />
             </View>
             <TextInput
               style={[styles.input, { color: theme.text }]}
@@ -282,15 +275,11 @@ export function RegisterView({
               onPress={() => setShowPassword(!showPassword)}
               style={styles.eyeBtn}
               hitSlop={10}>
-              <SymbolView
-                name={{
-                  ios: showPassword ? 'eye.fill' : 'eye.slash.fill',
-                  android: showPassword ? 'visibility' : 'visibility_off',
-                  web: showPassword ? 'visibility' : 'visibility_off',
-                }}
-                size={20}
-                tintColor={theme.textSecondary}
-              />
+              {showPassword ? (
+                <Eye size={19} color={theme.textSecondary} strokeWidth={2} />
+              ) : (
+                <EyeOff size={19} color={theme.textSecondary} strokeWidth={2} />
+              )}
             </Pressable>
           </View>
 
@@ -322,11 +311,7 @@ export function RegisterView({
                 ]}>
                 {selectedRole === 'client_proprietaire' && (
                   <View style={[styles.checkBadge, { backgroundColor: theme.primary }]}>
-                    <SymbolView
-                      name={{ ios: 'checkmark', android: 'check', web: 'check' }}
-                      size={12}
-                      tintColor="#FFFFFF"
-                    />
+                    <Check size={12} color="#FFFFFF" strokeWidth={3} />
                   </View>
                 )}
                 <Text
@@ -364,11 +349,7 @@ export function RegisterView({
                 ]}>
                 {selectedRole === 'agent_immobilier' && (
                   <View style={[styles.checkBadge, { backgroundColor: theme.primary }]}>
-                    <SymbolView
-                      name={{ ios: 'checkmark', android: 'check', web: 'check' }}
-                      size={12}
-                      tintColor="#FFFFFF"
-                    />
+                    <Check size={12} color="#FFFFFF" strokeWidth={3} />
                   </View>
                 )}
                 <Text
@@ -396,13 +377,7 @@ export function RegisterView({
                   backgroundColor: acceptedTerms ? theme.primary : theme.cardBackground,
                 },
               ]}>
-              {acceptedTerms && (
-                <SymbolView
-                  name={{ ios: 'checkmark', android: 'check', web: 'check' }}
-                  size={14}
-                  tintColor="#FFFFFF"
-                />
-              )}
+              {acceptedTerms && <Check size={14} color="#FFFFFF" strokeWidth={3} />}
             </View>
             <Text style={[styles.termsText, { color: theme.text }]}>
               J'accepte les{' '}

@@ -1,4 +1,19 @@
 import { router } from 'expo-router';
+import {
+  Building2,
+  Calendar,
+  Check,
+  Clock,
+  Inbox,
+  Lock,
+  Mail,
+  MapPin,
+  Phone,
+  Sparkles,
+  Tag,
+  Users,
+  X,
+} from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -179,7 +194,10 @@ export default function AgentDashboardScreen() {
           ]}>
           <View style={[styles.innerWrap, { maxWidth: 760 }]}>
             <View style={[styles.heroCard, { backgroundColor: theme.navy }]}>
-              <Text style={styles.heroEyebrow}>✦ PORTAIL PROFESSIONNEL E-MOBILIER</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Sparkles size={13} color="#FDE68A" strokeWidth={2.2} />
+                <Text style={styles.heroEyebrow}>PORTAIL PROFESSIONNEL E-MOBILIER</Text>
+              </View>
               <Text style={styles.heroTitle}>
                 Développez votre activité d'agent immobilier au Bénin
               </Text>
@@ -203,9 +221,9 @@ export default function AgentDashboardScreen() {
 
             <View style={styles.benefitsGrid}>
               {[
-                { icon: '🏷️', title: 'Tarif Agent 100 F CFA', desc: 'Publication accélérée avec suivi de modération en temps réel.' },
-                { icon: '📅', title: 'Visites & Rendez-vous', desc: 'Centralisez toutes les demandes de visite et rendez-vous sur vos biens.' },
-                { icon: '👥', title: 'Fichier Clients CRM', desc: 'Retrouvez automatiquement l’historique de vos contacts et prospects.' },
+                { Icon: Tag, title: 'Tarif Agent 100 F CFA', desc: 'Publication accélérée avec suivi de modération en temps réel.' },
+                { Icon: Calendar, title: 'Visites & Rendez-vous', desc: 'Centralisez toutes les demandes de visite et rendez-vous sur vos biens.' },
+                { Icon: Users, title: 'Fichier Clients CRM', desc: 'Retrouvez automatiquement l’historique de vos contacts et prospects.' },
               ].map((b) => (
                 <View
                   key={b.title}
@@ -213,7 +231,7 @@ export default function AgentDashboardScreen() {
                     styles.benefitCard,
                     { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder },
                   ]}>
-                  <Text style={{ fontSize: 24 }}>{b.icon}</Text>
+                  <b.Icon size={22} color={theme.primary} strokeWidth={2.2} />
                   <Text style={[styles.benefitTitle, { color: theme.text }]}>{b.title}</Text>
                   <Text style={[styles.benefitDesc, { color: theme.textSecondary }]}>{b.desc}</Text>
                 </View>
@@ -268,10 +286,20 @@ export default function AgentDashboardScreen() {
                   <View
                     style={[
                       styles.kycPill,
-                      { backgroundColor: user?.is_verifed ? '#065F46' : '#78350F' },
+                      {
+                        backgroundColor: user?.is_verifed ? '#065F46' : '#78350F',
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 4,
+                      },
                     ]}>
+                    {user?.is_verifed ? (
+                      <Check size={12} color="#FFFFFF" strokeWidth={2.8} />
+                    ) : (
+                      <Clock size={12} color="#FFFFFF" strokeWidth={2.4} />
+                    )}
                     <Text style={styles.kycPillText}>
-                      {user?.is_verifed ? '✓ KYC Agréé' : '⏳ KYC en cours'}
+                      {user?.is_verifed ? 'KYC Agréé' : 'KYC en cours'}
                     </Text>
                   </View>
                 </View>
@@ -315,8 +343,8 @@ export default function AgentDashboardScreen() {
                 }}>
                 {feedback.text}
               </Text>
-              <Pressable onPress={() => setFeedback(null)}>
-                <Text style={{ fontWeight: '800', color: '#64748B' }}>✕</Text>
+              <Pressable onPress={() => setFeedback(null)} hitSlop={8}>
+                <X size={16} color="#64748B" strokeWidth={2.2} />
               </Pressable>
             </View>
           )}
@@ -328,25 +356,25 @@ export default function AgentDashboardScreen() {
                 label: 'Biens gérés',
                 value: kpis?.total_biens ?? 0,
                 sub: `${kpis?.biens_publies ?? 0} publiés`,
-                icon: '🏘️',
+                Icon: Building2,
               },
               {
                 label: 'En modération',
                 value: kpis?.biens_en_attente ?? 0,
                 sub: `${kpis?.biens_conclus ?? 0} conclus`,
-                icon: '⏳',
+                Icon: Clock,
               },
               {
                 label: 'Demandes & Visites',
                 value: (kpis?.total_demandes ?? 0) + (kpis?.total_visites ?? 0),
                 sub: `${kpis?.demandes_nouvelles ?? 0} nouvelles`,
-                icon: '📩',
+                Icon: Inbox,
               },
               {
                 label: 'Clients & Prospects',
                 value: kpis?.total_clients ?? 0,
                 sub: 'Contacts enregistrés',
-                icon: '👥',
+                Icon: Users,
               },
             ].map((item) => (
               <View
@@ -359,7 +387,7 @@ export default function AgentDashboardScreen() {
                     width: isMobile ? '47.5%' : '23.5%',
                   },
                 ]}>
-                <Text style={{ fontSize: 20 }}>{item.icon}</Text>
+                <item.Icon size={20} color={theme.primary} strokeWidth={2.2} />
                 <Text style={[styles.kpiValue, { color: theme.primary }]}>{item.value}</Text>
                 <Text style={[styles.kpiLabel, { color: theme.text }]}>{item.label}</Text>
                 <Text style={[styles.kpiSub, { color: theme.textSecondary }]}>{item.sub}</Text>
@@ -501,9 +529,12 @@ export default function AgentDashboardScreen() {
                               </View>
                             </View>
 
-                            <Text style={{ color: theme.textSecondary, fontSize: 13 }}>
-                              📍 {[prop.quartier, prop.arrondissement, prop.commune].filter(Boolean).join(', ')}
-                            </Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                              <MapPin size={13} color={theme.primary} strokeWidth={2.2} />
+                              <Text style={{ color: theme.textSecondary, fontSize: 13, flex: 1 }}>
+                                {[prop.quartier, prop.arrondissement, prop.commune].filter(Boolean).join(', ')}
+                              </Text>
+                            </View>
                             <Text style={{ color: theme.primary, fontSize: 17, fontWeight: '900' }}>
                               {formatFcfa(prop.prix)}
                               {prop.transaction_type === 'location' ? '/mois' : ''}
@@ -583,9 +614,20 @@ export default function AgentDashboardScreen() {
                               <Text style={[styles.cardTitle, { color: theme.text }]}>
                                 {getInquiryTypeLabel(inq.type)} — {inq.prenom} {inq.nom}
                               </Text>
-                              <Text style={{ color: theme.textSecondary, fontSize: 12, marginTop: 2 }}>
-                                📞 {inq.telephone} • ✉️ {inq.email}
-                              </Text>
+                              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 3 }}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                  <Phone size={12} color={theme.textSecondary} strokeWidth={2} />
+                                  <Text style={{ color: theme.textSecondary, fontSize: 12 }}>
+                                    {inq.telephone}
+                                  </Text>
+                                </View>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                  <Mail size={12} color={theme.textSecondary} strokeWidth={2} />
+                                  <Text style={{ color: theme.textSecondary, fontSize: 12 }}>
+                                    {inq.email}
+                                  </Text>
+                                </View>
+                              </View>
                             </View>
                             <View style={[styles.statusBadge, { backgroundColor: st.bg }]}>
                               <Text style={{ color: st.text, fontSize: 11, fontWeight: '800' }}>
@@ -606,10 +648,13 @@ export default function AgentDashboardScreen() {
                           ) : null}
 
                           {inq.scheduled_date ? (
-                            <Text style={{ color: theme.primary, fontSize: 13, fontWeight: '700' }}>
-                              📅 Souhaité le {new Date(inq.scheduled_date).toLocaleString('fr-FR')}
-                              {inq.meeting_mode ? ` (${inq.meeting_mode.replace('_', ' ')})` : ''}
-                            </Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                              <Calendar size={14} color={theme.primary} strokeWidth={2.2} />
+                              <Text style={{ color: theme.primary, fontSize: 13, fontWeight: '700' }}>
+                                Souhaité le {new Date(inq.scheduled_date).toLocaleString('fr-FR')}
+                                {inq.meeting_mode ? ` (${inq.meeting_mode.replace('_', ' ')})` : ''}
+                              </Text>
+                            </View>
                           ) : null}
 
                           {inq.message ? (
@@ -682,9 +727,20 @@ export default function AgentDashboardScreen() {
                               </Text>
                             </View>
                           </View>
-                          <Text style={{ color: theme.textSecondary, fontSize: 12 }}>
-                            📅 {new Date(v.scheduled_date).toLocaleString('fr-FR')} • 🔒 Coordonnées encadrées par E-Mobilier
-                          </Text>
+                          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                              <Calendar size={13} color={theme.textSecondary} strokeWidth={2} />
+                              <Text style={{ color: theme.textSecondary, fontSize: 12 }}>
+                                {new Date(v.scheduled_date).toLocaleString('fr-FR')}
+                              </Text>
+                            </View>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                              <Lock size={13} color={theme.textSecondary} strokeWidth={2} />
+                              <Text style={{ color: theme.textSecondary, fontSize: 12 }}>
+                                Coordonnées encadrées par E-Mobilier
+                              </Text>
+                            </View>
+                          </View>
                         </View>
                       );
                     })
@@ -741,12 +797,18 @@ export default function AgentDashboardScreen() {
                               </View>
                             </View>
 
-                            <Text style={{ color: theme.text, fontSize: 13, fontWeight: '600' }}>
-                              📞 {cl.telephone}
-                            </Text>
-                            <Text style={{ color: theme.textSecondary, fontSize: 13 }}>
-                              ✉️ {cl.email}
-                            </Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                              <Phone size={14} color={theme.primary} strokeWidth={2.2} />
+                              <Text style={{ color: theme.text, fontSize: 13, fontWeight: '600' }}>
+                                {cl.telephone}
+                              </Text>
+                            </View>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                              <Mail size={14} color={theme.textSecondary} strokeWidth={2} />
+                              <Text style={{ color: theme.textSecondary, fontSize: 13 }}>
+                                {cl.email}
+                              </Text>
+                            </View>
 
                             <View style={styles.actionBtns}>
                               <Pressable

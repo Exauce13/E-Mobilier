@@ -7,7 +7,7 @@ import { useThemeMode } from '@/context/theme-context';
 export default function AppTabs() {
   const { colorScheme } = useThemeMode();
   const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
-  const { isAuthenticated, isAgentMobilier } = useAuth();
+  const { isAuthenticated } = useAuth();
 
   return (
     <NativeTabs
@@ -47,16 +47,6 @@ export default function AppTabs() {
           />
         </NativeTabs.Trigger>
       )}
-
-      <NativeTabs.Trigger name="profile">
-        <NativeTabs.Trigger.Label>
-          {isAuthenticated ? (isAgentMobilier ? 'Agent' : 'Client') : 'Compte'}
-        </NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon
-          src={require('@/assets/images/tabIcons/profile.png')}
-          renderingMode="template"
-        />
-      </NativeTabs.Trigger>
     </NativeTabs>
   );
 }

@@ -1,4 +1,4 @@
-import { SymbolView } from 'expo-symbols';
+import { Calendar, Home, Mail, X } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -47,10 +47,10 @@ type FieldErrors = Partial<
   Record<'nom' | 'prenom' | 'telephone' | 'email' | 'scheduled_date' | 'message', string>
 >;
 
-const ACTION_TABS: Array<{ key: PropertyActionTab; label: string; icon: string }> = [
-  { key: 'demande_visite', label: 'Demande de visite', icon: '🏠' },
-  { key: 'rendez_vous', label: 'Prendre RDV', icon: '📅' },
-  { key: 'contact', label: 'Contacter', icon: '✉️' },
+const ACTION_TABS: Array<{ key: PropertyActionTab; label: string }> = [
+  { key: 'demande_visite', label: 'Demande de visite' },
+  { key: 'rendez_vous', label: 'Prendre RDV' },
+  { key: 'contact', label: 'Contacter' },
 ];
 
 const MEETING_MODES: Array<{ key: InquiryMeetingMode; label: string }> = [
@@ -233,11 +233,7 @@ export function PropertyActionModal({
               onPress={onClose}
               style={[styles.closeBtn, { backgroundColor: theme.backgroundElement }]}
               hitSlop={8}>
-              <SymbolView
-                name={{ ios: 'xmark', android: 'close', web: 'close' }}
-                size={18}
-                tintColor={theme.text}
-              />
+              <X size={18} color={theme.text} strokeWidth={2.2} />
             </Pressable>
           </View>
 
@@ -249,6 +245,7 @@ export function PropertyActionModal({
             <View style={styles.tabsRow}>
               {ACTION_TABS.map((tab) => {
                 const active = actionType === tab.key;
+                const iconColor = active ? '#FFFFFF' : theme.primary;
                 return (
                   <Pressable
                     key={tab.key}
@@ -265,7 +262,13 @@ export function PropertyActionModal({
                         borderColor: active ? theme.primary : theme.cardBorder,
                       },
                     ]}>
-                    <Text style={{ fontSize: 13 }}>{tab.icon}</Text>
+                    {tab.key === 'demande_visite' ? (
+                      <Home size={14} color={iconColor} strokeWidth={2.2} />
+                    ) : tab.key === 'rendez_vous' ? (
+                      <Calendar size={14} color={iconColor} strokeWidth={2.2} />
+                    ) : (
+                      <Mail size={14} color={iconColor} strokeWidth={2.2} />
+                    )}
                     <Text
                       style={{
                         color: active ? '#FFFFFF' : theme.text,

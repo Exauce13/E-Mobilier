@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { SymbolView } from 'expo-symbols';
+import { Check, CheckCircle2, Eye, Heart, MapPin } from 'lucide-react-native';
 import React from 'react';
 import {
   Platform,
@@ -86,14 +86,11 @@ export function PropertyCard({
             ]}
             onPress={() => onToggleFavorite(property.id)}
             hitSlop={6}>
-            <SymbolView
-              name={{
-                ios: property.isFavorite ? 'heart.fill' : 'heart',
-                android: property.isFavorite ? 'favorite' : 'favorite_border',
-                web: property.isFavorite ? 'favorite' : 'favorite_border',
-              }}
+            <Heart
               size={18}
-              tintColor={property.isFavorite ? '#EF4444' : '#FFFFFF'}
+              color={property.isFavorite ? '#EF4444' : '#FFFFFF'}
+              fill={property.isFavorite ? '#EF4444' : 'transparent'}
+              strokeWidth={2.2}
             />
           </Pressable>
         ) : null}
@@ -101,7 +98,8 @@ export function PropertyCard({
         {/* Unlocked / Price pill overlay */}
         {property.isUnlocked ? (
           <View style={styles.unlockedPill}>
-            <Text style={styles.unlockedPillText}>✓ Débloqué</Text>
+            <Check size={12} color="#FFFFFF" strokeWidth={3} />
+            <Text style={styles.unlockedPillText}>Débloqué</Text>
           </View>
         ) : null}
       </Pressable>
@@ -109,11 +107,7 @@ export function PropertyCard({
       {/* Content */}
       <View style={styles.contentContainer}>
         <View style={styles.locationRow}>
-          <SymbolView
-            name={{ ios: 'mappin.and.ellipse', android: 'location_on', web: 'location_on' }}
-            size={13}
-            tintColor={theme.primary}
-          />
+          <MapPin size={13} color={theme.primary} strokeWidth={2.2} />
           <Text numberOfLines={1} style={[styles.locationText, { color: theme.textSecondary }]}>
             {property.location.fullAddress || property.location.commune}
           </Text>
@@ -162,15 +156,11 @@ export function PropertyCard({
               pressed && styles.actionButtonPressed,
             ]}
             onPress={() => onPressDetails(property)}>
-            <SymbolView
-              name={{
-                ios: property.isUnlocked ? 'checkmark.circle.fill' : 'eye.fill',
-                android: property.isUnlocked ? 'check_circle' : 'visibility',
-                web: property.isUnlocked ? 'check_circle' : 'visibility',
-              }}
-              size={15}
-              tintColor={property.isUnlocked ? theme.badgeGreenText : '#FFFFFF'}
-            />
+            {property.isUnlocked ? (
+              <CheckCircle2 size={15} color={theme.badgeGreenText} strokeWidth={2.2} />
+            ) : (
+              <Eye size={15} color="#FFFFFF" strokeWidth={2.2} />
+            )}
             <Text
               numberOfLines={1}
               style={[
@@ -286,6 +276,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   unlockedPillText: {
     color: '#FFFFFF',
