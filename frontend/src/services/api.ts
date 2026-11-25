@@ -159,6 +159,7 @@ export interface AuthResponseData {
     photo_url?: string | null;
     role: 'client_proprietaire' | 'agent_immobilier';
     roles?: string[];
+    is_financial_owner?: boolean;
     is_verifed: boolean;
     statut?: string;
     zone_id?: number | null;
