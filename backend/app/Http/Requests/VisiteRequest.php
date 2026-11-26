@@ -60,7 +60,8 @@ class VisiteRequest extends FormRequest
         return [
             'property_id' => ['required', 'integer', 'exists:proprietes,id'],
             'scheduled_date' => ['required', 'date', 'after:now'],
-            'kkiapay_transaction_id' => ['required', 'string'],
+            'kkiapay_transaction_id' => ['required_without:payment_reference', 'nullable', 'string'],
+            'payment_reference' => ['required_without:kkiapay_transaction_id', 'nullable', 'string'],
         ];
     }
 

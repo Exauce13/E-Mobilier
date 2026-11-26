@@ -71,7 +71,7 @@ export interface BackendProperty {
   location_details?: string | null;
   accessibilite?: string | null;
   eau_courant?: string | null;
-  surface: number | string;
+  surface?: number | string | null;
   nombres_chambres?: number | null;
   avance_mois?: number | null;
   prix: number | string;
@@ -162,21 +162,50 @@ export type PaymentOperationType =
   | 'publication_agent';
 
 export interface KkiapayWidgetConfig {
+  gateway?: string;
   public_key: string | null;
   amount: number;
+  currency?: string;
   reason: string;
   sandbox: boolean;
   theme?: string;
+  script_url?: string;
   callback?: string;
+  metadata?: Record<string, any>;
 }
 
 export interface PaymentInitData {
+  payment_id?: number;
   reference: string;
   montant_officiel: number;
   devise: string;
+  status?: string;
+  normalized_status?: 'pending' | 'success' | 'failed' | 'cancelled' | 'expired';
+  expires_at?: string;
   type_operation: PaymentOperationType;
   gateway: string;
   widget_config: KkiapayWidgetConfig;
+}
+
+export interface PaymentStatusItem {
+  id: number;
+  reference: string;
+  gateway_transaction_id?: string | null;
+  payment_type: string;
+  amount: number;
+  currency: string;
+  gateway_fees?: number;
+  payment_method?: string | null;
+  status: 'pending' | 'successful' | 'failed' | 'cancelled' | 'expired' | string;
+  normalized_status: 'pending' | 'success' | 'failed' | 'cancelled' | 'expired' | string;
+  gateway_status?: string | null;
+  property_id?: number | null;
+  related_entity_id?: number | null;
+  is_consumed?: boolean;
+  failure_reason?: string | null;
+  verified_at?: string | null;
+  expires_at?: string | null;
+  created_at?: string | null;
 }
 
 export interface PaymentReceiptData {

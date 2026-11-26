@@ -64,21 +64,71 @@ class VisitController extends Controller
         }
 
         // Frais obligatoires de visite physique (centralisés en BDD)
-        $fraisVisite = $this->settings->getTarifs()['visite'];
-        $transactionId = $request->input('kkiapay_transaction_id');
+        $fraisVisite = (int) $this->settings->getTarifs()['visite'];
+        $paymentReference = trim((string) ($request->input('payment_reference') ?: $request->input('reference') ?: ''));
+        $transactionId = trim((string) ($request->input('kkiapay_transaction_id') ?: $request->input('transaction_id') ?: ''));
 
-        // Vérification de la transaction Kkiapay de 500 FCFA
-        $verification = $this->kkiapayService->verifyTransaction($transactionId, $fraisVisite);
+        // Rechercher un paiement déjà confirmé en base ou réconcilier S2S auprès de Kkiapay
+        $candidatePayment = null;
+        if ($paymentReference !== '') {
+            $candidatePayment = Paiement::where('transaction_reference', $paymentReference)->first();
+        }
+        if (! $candidatePayment && $transactionId !== '') {
+            $candidatePayment = Paiement::where('gateway_transaction_id', $transactionId)
+                ->orWhere('transaction_reference', $transactionId)
+                ->first();
+        }
 
-        if (! $verification['success']) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Le paiement des frais de visite de ' . $fraisVisite . ' FCFA via Kkiapay est obligatoire avant que votre demande ne soit enregistrée : ' . $verification['message'],
-            ], 422);
+        if (! $candidatePayment || $candidatePayment->status !== 'successful') {
+            if ($transactionId === '') {
+                return response()->json([
+                    'success' => false,
+                    'message' => "Le paiement des frais de visite de {$fraisVisite} FCFA via Kkiapay est obligatoire avant que votre demande ne soit enregistrée.",
+                ], 402);
+            }
+
+            $reconcile = app(\App\Http\Controllers\Api\Finance\PaymentController::class)->reconcilePayment(
+                app(\App\Services\Gateways\PaymentGatewayManager::class)->gateway(),
+                $transactionId,
+                ['reference' => $paymentReference ?: null],
+                $request->ip(),
+                $user,
+                false
+            );
+
+            if (empty($reconcile['success']) || empty($reconcile['paiement'])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Le paiement des frais de visite de ' . $fraisVisite . ' FCFA via Kkiapay est obligatoire avant que votre demande ne soit enregistrée : ' . ($reconcile['message'] ?? 'Paiement non confirmé.'),
+                ], $reconcile['status_code'] ?? 422);
+            }
+
+            $candidatePayment = $reconcile['paiement'];
         }
 
         try {
-            $result = DB::transaction(function () use ($user, $propriete, $request, $fraisVisite, $verification, $transactionId) {
+            $result = DB::transaction(function () use ($user, $propriete, $request, $fraisVisite, $candidatePayment) {
+                $lockedPayment = Paiement::where('id', $candidatePayment->id)->lockForUpdate()->first();
+
+                if (! $lockedPayment || $lockedPayment->status !== 'successful') {
+                    return ['error' => ['status' => 402, 'message' => 'Paiement non confirmé côté serveur.']];
+                }
+                if ($lockedPayment->user_id !== $user->id) {
+                    return ['error' => ['status' => 403, 'message' => 'Ce paiement appartient à un autre utilisateur.']];
+                }
+                if ($lockedPayment->payment_type !== 'visit_fee') {
+                    return ['error' => ['status' => 422, 'message' => 'Ce paiement ne correspond pas à des frais de visite physique.']];
+                }
+                if ($lockedPayment->property_id !== null && (int) $lockedPayment->property_id !== (int) $propriete->id) {
+                    return ['error' => ['status' => 422, 'message' => 'Ce paiement a été initié pour un autre bien immobilier.']];
+                }
+                if ((int) round((float) $lockedPayment->amount) !== $fraisVisite) {
+                    return ['error' => ['status' => 422, 'message' => "Montant payé différent des frais de visite officiels ({$fraisVisite} FCFA)."]];
+                }
+                if ($lockedPayment->related_entity_id !== null) {
+                    return ['error' => ['status' => 409, 'message' => 'Cette transaction Kkiapay a déjà été utilisée pour une autre visite.']];
+                }
+
                 // RÈGLE MONOPOLE E-MOBILIER :
                 // Si le bien a été posté par un Agent immobilier, l'agent est assigné comme target_agent_id.
                 // Si le bien a été posté par un simple Client, target_agent_id = null : E-Mobilier gère la visite en direct,
@@ -98,44 +148,25 @@ class VisitController extends Controller
                     'is_fee_paid' => true,
                 ]);
 
-                // 2. Enregistrement ou liaison de la preuve de paiement dans la table paiements
-                $transactionRef = $verification['transaction_id'] ?? $transactionId;
-                $existingPaiement = Paiement::where('transaction_reference', $transactionRef)
-                    ->where('user_id', $user->id)
-                    ->where('payment_type', 'visit_fee')
-                    ->whereNull('related_entity_id')
-                    ->first();
-
-                if ($existingPaiement) {
-                    $existingPaiement->update([
-                        'property_id' => $propriete->id,
-                        'related_entity_id' => $visite->id,
-                        'amount' => $fraisVisite,
-                        'status' => 'successful',
-                    ]);
-                    $paiement = $existingPaiement->fresh();
-                } else {
-                    if (Paiement::where('transaction_reference', $transactionRef)->exists()) {
-                        $transactionRef .= '-VISIT-' . uniqid();
-                    }
-
-                    $paiement = Paiement::create([
-                        'user_id' => $user->id,
-                        'property_id' => $propriete->id,
-                        'transaction_reference' => $transactionRef,
-                        'payment_type' => 'visit_fee',
-                        'related_entity_id' => $visite->id,
-                        'amount' => $fraisVisite,
-                        'payment_method' => 'kkiapay',
-                        'status' => 'successful',
-                    ]);
-                }
+                // 2. Liaison atomique du paiement confirmé à cette visite
+                $lockedPayment->update([
+                    'property_id' => $propriete->id,
+                    'payment_type' => 'visit_fee',
+                    'related_entity_id' => $visite->id,
+                ]);
 
                 return [
                     'visite' => $visite,
-                    'paiement' => $paiement,
+                    'paiement' => $lockedPayment->fresh(),
                 ];
             });
+
+            if (! empty($result['error'])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $result['error']['message'],
+                ], $result['error']['status']);
+            }
 
             $visite = $result['visite'];
             $paiement = $result['paiement'];

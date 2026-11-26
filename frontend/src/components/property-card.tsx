@@ -166,10 +166,10 @@ export function PropertyCard({
                 { color: property.isUnlocked ? theme.badgeGreenText : '#FFFFFF' },
               ]}>
               {property.isUnlocked
-                ? 'Voir la fiche complète'
+                ? 'Voir les détails'
                 : property.unlockFee > 0
-                ? `Débloquer les détails (${property.unlockFee} F)`
-                : 'Voir & débloquer la fiche'}
+                ? `Voir les détails (${property.unlockFee} F)`
+                : 'Voir les détails'}
             </Text>
           </Pressable>
         </View>
@@ -205,11 +205,13 @@ const styles = StyleSheet.create({
   imageContainer: {
     position: 'relative',
     width: '100%',
-    height: 205,
+    aspectRatio: 16 / 10,
+    minHeight: 170,
     backgroundColor: '#E2E8F0',
   },
   imageContainerCompact: {
-    height: 185,
+    aspectRatio: 16 / 10,
+    minHeight: 155,
   },
   image: {
     width: '100%',
@@ -219,7 +221,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 12,
     left: 12,
+    right: 60,
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 6,
   },
   badge: {
@@ -247,12 +251,12 @@ const styles = StyleSheet.create({
   },
   favoriteButton: {
     position: 'absolute',
-    top: 12,
-    right: 12,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(15, 23, 42, 0.52)',
+    top: 10,
+    right: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(15, 23, 42, 0.56)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -336,6 +340,7 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     flex: 1,
+    minHeight: 44,
     paddingVertical: 11,
     paddingHorizontal: 12,
     borderRadius: 12,

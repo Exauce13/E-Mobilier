@@ -81,6 +81,9 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
     Route::post('/kkiapay/verify', [PaymentController::class, 'verify']);
     Route::post('/paiements/initier', [PaymentController::class, 'initier']);
     Route::post('/paiements/verifier', [PaymentController::class, 'verify']);
+    Route::get('/mes-paiements', [PaymentController::class, 'mesPaiements']);
+    Route::get('/paiements/{ref}/statut', [PaymentController::class, 'statut']);
+    Route::post('/paiements/{ref}/annuler', [PaymentController::class, 'annuler']);
     Route::get('/paiements/{ref}/recu', [PaymentController::class, 'recu']);
 
     // Gestion des propriétés et annonces (Client, Agent mobilier, Admin)

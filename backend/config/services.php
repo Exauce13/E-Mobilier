@@ -36,13 +36,15 @@ return [
     ],
 
     'kkiapay' => [
-        'sandbox' => env('KKIAPAY_SANDBOX', true),
-        'base_url' => env('KKIAPAY_BASE_URL', 'https://api-sandbox.kkiapay.me'),
-        'public_key' => env('KKIAPAY_PUBLIC_KEY', '05d022e0b35311f1ad5611a76aeee288'),
-        'private_key' => env('KKIAPAY_PRIVATE_KEY', 'tpk_05d022e2b35311f1ad5611a76aeee288'),
-        'secret_key' => env('KKIAPAY_SECRET_KEY', 'tsk_05d049f0b35311f1ad5611a76aeee288'),
+        'sandbox' => filter_var(env('KKIAPAY_SANDBOX', true), FILTER_VALIDATE_BOOLEAN),
+        'base_url' => env('KKIAPAY_BASE_URL'),
+        'public_key' => env('KKIAPAY_PUBLIC_KEY'),
+        'private_key' => env('KKIAPAY_PRIVATE_KEY'),
+        'secret_key' => env('KKIAPAY_SECRET_KEY'),
+        'webhook_secret' => env('KKIAPAY_WEBHOOK_SECRET', env('KKIAPAY_SECRET_KEY')),
         'widget_script' => env('KKIAPAY_WIDGET_SCRIPT', 'https://cdn.kkiapay.me/k.js'),
-        'theme' => env('KKIAPAY_THEME', '#0095ff'),
+        'theme' => env('KKIAPAY_THEME', '#0E7C5B'),
+        'callback_url' => env('KKIAPAY_CALLBACK_URL', ''),
     ],
 
 ];

@@ -1,9 +1,10 @@
 import { router } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
+import { ArrowLeft } from 'lucide-react-native';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Spacing } from '@/constants/theme';
+import { useResponsive } from '@/hooks/use-responsive';
 import { useTheme } from '@/hooks/use-theme';
 
 interface ScreenHeaderProps {
@@ -15,72 +16,81 @@ interface ScreenHeaderProps {
 
 export function ScreenHeader({ title, subtitle, rightAction, onBack }: ScreenHeaderProps) {
   const theme = useTheme();
+  const { isSmallMobile, horizontalPadding, contentMaxWidth } = useResponsive();
 
   return (
     <View
       style={[
-        styles.header,
+        styles.headerOuter,
         {
           backgroundColor: theme.navy,
           borderBottomColor: 'rgba(255,255,255,0.08)',
+          paddingHorizontal: isSmallMobile ? 10 : horizontalPadding,
         },
       ]}>
-      <Pressable
-        onPress={
-          onBack ||
-          (() => {
-            if (router.canGoBack()) {
-              router.back();
-            } else {
-              router.replace('/' as any);
-            }
-          })
-        }
-        hitSlop={10}
-        style={styles.backBtn}>
-        <SymbolView
-          name={{ ios: 'chevron.left', android: 'arrow_back', web: 'arrow_back' }}
-          size={20}
-          tintColor="#FFFFFF"
-        />
-      </Pressable>
+      <View style={[styles.headerInner, { maxWidth: contentMaxWidth }]}>
+        <Pressable
+          accessibilityLabel="Retour"
+          onPress={
+            onBack ||
+            (() => {
+              if (router.canGoBack()) {
+                router.back();
+              } else {
+                router.replace('/' as any);
+              }
+            })
+          }
+          hitSlop={10}
+          style={styles.backBtn}>
+          <ArrowLeft size={20} color="#FFFFFF" strokeWidth={2.2} />
+        </Pressable>
 
-      <View style={styles.titleWrap}>
-        <Text numberOfLines={1} style={styles.title}>
-          {title}
-        </Text>
-        {subtitle ? (
-          <Text numberOfLines={1} style={styles.subtitle}>
-            {subtitle}
+        <View style={styles.titleWrap}>
+          <Text
+            numberOfLines={1}
+            style={[styles.title, isSmallMobile && { fontSize: 15 }]}>
+            {title}
           </Text>
-        ) : null}
-      </View>
+          {subtitle ? (
+            <Text numberOfLines={1} style={styles.subtitle}>
+              {subtitle}
+            </Text>
+          ) : null}
+        </View>
 
-      {rightAction ? <View style={styles.right}>{rightAction}</View> : <View style={styles.spacer} />}
+        {rightAction ? <View style={styles.right}>{rightAction}</View> : <View style={styles.spacer} />}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  header: {
+  headerOuter: {
+    borderBottomWidth: 1,
+    paddingVertical: Spacing.two + 2,
+    alignItems: 'center',
+    width: '100%',
+  },
+  headerInner: {
+    width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.three,
-    borderBottomWidth: 1,
     gap: Spacing.two,
+    minHeight: 40,
   },
   backBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: 'rgba(255,255,255,0.12)',
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   titleWrap: { flex: 1, minWidth: 0 },
   title: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
   subtitle: { color: '#CBD5E1', fontSize: 12, marginTop: 1 },
-  right: { alignItems: 'flex-end', flexShrink: 0 },
-  spacer: { width: 36, flexShrink: 0 },
+  right: { alignItems: 'flex-end', flexShrink: 0, maxWidth: '45%' },
+  spacer: { width: 40, flexShrink: 0 },
 });

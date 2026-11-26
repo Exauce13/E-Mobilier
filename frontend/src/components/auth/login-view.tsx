@@ -1,4 +1,13 @@
-import { SymbolView } from 'expo-symbols';
+import {
+  ArrowLeft,
+  Eye,
+  EyeOff,
+  Home,
+  KeyRound,
+  Lock,
+  Mail,
+  ShieldCheck,
+} from 'lucide-react-native';
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
@@ -14,6 +23,7 @@ import {
 
 import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
+import { useResponsive } from '@/hooks/use-responsive';
 import { useTheme } from '@/hooks/use-theme';
 
 interface LoginViewProps {
@@ -28,6 +38,7 @@ export function LoginView({
   onBack,
 }: LoginViewProps): React.JSX.Element {
   const theme = useTheme();
+  const { isSmallMobile, isMobile } = useResponsive();
   const { login, verifyTwoFactorOtp, resendTwoFactorOtp } = useAuth();
 
   const [loginMode, setLoginMode] = useState<'phone' | 'email'>('phone');
@@ -175,10 +186,20 @@ export function LoginView({
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       style={styles.keyboardContainer}>
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          isSmallMobile && { paddingHorizontal: 14, paddingTop: Spacing.three },
+          !isMobile && styles.scrollContentDesktop,
+        ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}>
-        
+        <View
+          style={[
+            !isMobile && [
+              styles.desktopCard,
+              { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder },
+            ],
+          ]}>
         {/* Optional Back Button */}
         {onBack && (
           <View style={styles.topBar}>
@@ -193,11 +214,7 @@ export function LoginView({
                 pressed && { opacity: 0.7 },
               ]}
               hitSlop={10}>
-              <SymbolView
-                name={{ ios: 'arrow.left', android: 'arrow_back', web: 'arrow_back' }}
-                size={20}
-                tintColor={theme.text}
-              />
+              <ArrowLeft size={20} color={theme.text} strokeWidth={2.2} />
             </Pressable>
           </View>
         )}
@@ -205,11 +222,11 @@ export function LoginView({
         {/* Brand Logo & Name */}
         <View style={styles.brandContainer}>
           <View style={[styles.logoIconCircle, { backgroundColor: theme.primaryLight }]}>
-            <SymbolView
-              name={step === 'otp' ? { ios: 'shield.lefthalf.filled.badge.checkmark', android: 'verified_user', web: 'verified_user' } : { ios: 'house.lodge.fill', android: 'home', web: 'home' }}
-              size={28}
-              tintColor={theme.primary}
-            />
+            {step === 'otp' ? (
+              <ShieldCheck size={26} color={theme.primary} strokeWidth={2.2} />
+            ) : (
+              <Home size={26} color={theme.primary} strokeWidth={2.2} />
+            )}
           </View>
           <Text style={[styles.brandTitle, { color: theme.primaryDark }]}>
             {step === 'otp' ? 'Sécurité Admin' : 'E-Mobilier'}
@@ -256,11 +273,7 @@ export function LoginView({
                 styles.otpInfoBox,
                 { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder },
               ]}>
-              <SymbolView
-                name={{ ios: 'lock.shield.fill', android: 'security', web: 'security' }}
-                size={22}
-                tintColor={theme.primary}
-              />
+              <ShieldCheck size={22} color={theme.primary} strokeWidth={2.2} />
               <Text style={[styles.otpInfoText, { color: theme.text }]}>
                 Un code de vérification à 6 chiffres a été expédié à destination de{' '}
                 <Text style={{ fontWeight: '700', color: theme.primaryDark }}>
@@ -276,7 +289,7 @@ export function LoginView({
                 onPress={() => setOtpCode(testOtpCode)}
                 style={[styles.testOtpBadge, { backgroundColor: '#FEF3C7', borderColor: '#F59E0B' }]}>
                 <Text style={styles.testOtpText}>
-                  🧪 Code de test détecté : <Text style={{ fontWeight: '800' }}>{testOtpCode}</Text> (cliquer pour insérer)
+                  Code de test détecté : <Text style={{ fontWeight: '800' }}>{testOtpCode}</Text> (cliquer pour insérer)
                 </Text>
               </Pressable>
             )}
@@ -294,14 +307,14 @@ export function LoginView({
                 },
               ]}>
               <View style={styles.iconPrefix}>
-                <SymbolView
-                  name={{ ios: 'key.fill', android: 'vpn_key', web: 'vpn_key' }}
-                  size={20}
-                  tintColor={theme.textSecondary}
-                />
+                <KeyRound size={19} color={theme.textSecondary} strokeWidth={2} />
               </View>
               <TextInput
-                style={[styles.otpInput, { color: theme.text }]}
+                style={[
+                  styles.otpInput,
+                  { color: theme.text },
+                  isSmallMobile && { fontSize: 18, letterSpacing: 5 },
+                ]}
                 placeholder="000000"
                 placeholderTextColor={theme.textSecondary}
                 keyboardType="numeric"
@@ -425,15 +438,10 @@ export function LoginView({
               ]}>
               {isEmailInput ? (
                 <View style={styles.iconPrefix}>
-                  <SymbolView
-                    name={{ ios: 'envelope.fill', android: 'mail', web: 'mail' }}
-                    size={20}
-                    tintColor={theme.textSecondary}
-                  />
+                  <Mail size={19} color={theme.textSecondary} strokeWidth={2} />
                 </View>
               ) : (
                 <View style={[styles.prefixBadge, { backgroundColor: theme.tagBackground }]}>
-                  <Text style={styles.flagEmoji}>🇧🇯</Text>
                   <Text style={[styles.prefixText, { color: theme.text }]}>+229</Text>
                 </View>
               )}
@@ -465,11 +473,7 @@ export function LoginView({
                 },
               ]}>
               <View style={styles.iconPrefix}>
-                <SymbolView
-                  name={{ ios: 'lock.fill', android: 'lock', web: 'lock' }}
-                  size={20}
-                  tintColor={theme.textSecondary}
-                />
+                <Lock size={19} color={theme.textSecondary} strokeWidth={2} />
               </View>
               <TextInput
                 style={[styles.textInput, { color: theme.text }]}
@@ -484,15 +488,11 @@ export function LoginView({
                 onPress={() => setShowPassword(!showPassword)}
                 style={styles.eyeButton}
                 hitSlop={10}>
-                <SymbolView
-                  name={{
-                    ios: showPassword ? 'eye.fill' : 'eye.slash.fill',
-                    android: showPassword ? 'visibility' : 'visibility_off',
-                    web: showPassword ? 'visibility' : 'visibility_off',
-                  }}
-                  size={20}
-                  tintColor={theme.textSecondary}
-                />
+                {showPassword ? (
+                  <Eye size={19} color={theme.textSecondary} strokeWidth={2} />
+                ) : (
+                  <EyeOff size={19} color={theme.textSecondary} strokeWidth={2} />
+                )}
               </Pressable>
             </View>
 
@@ -523,7 +523,7 @@ export function LoginView({
             <Text style={[styles.footerLink, { color: theme.primary }]}>S'inscrire</Text>
           </Pressable>
         </View>
-
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -534,12 +534,25 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
     paddingHorizontal: Spacing.four,
-    paddingTop: Spacing.five,
+    paddingTop: Spacing.four,
     paddingBottom: Spacing.six,
-    maxWidth: 480,
+    maxWidth: 500,
     width: '100%',
     alignSelf: 'center',
+  },
+  scrollContentDesktop: {
+    paddingVertical: Spacing.five,
+  },
+  desktopCard: {
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: 28,
+    ...Platform.select({
+      web: { boxShadow: '0 12px 32px rgba(15, 23, 42, 0.08)' } as any,
+    }),
   },
   topBar: {
     flexDirection: 'row',

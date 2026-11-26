@@ -2,8 +2,13 @@ import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import React from 'react';
+import { Platform } from 'react-native';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
+
+if (Platform.OS === 'web') {
+  require('@/global.css');
+}
 import { AuthModal } from '@/components/auth/auth-modal';
 import { AuthProvider } from '@/context/auth-context';
 import { PlatformConfigProvider } from '@/context/platform-config-context';

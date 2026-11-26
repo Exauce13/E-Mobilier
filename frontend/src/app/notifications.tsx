@@ -25,7 +25,7 @@ import { showMessage } from '@/utils/dialog';
 export default function NotificationsScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const { horizontalPadding } = useResponsive();
+  const { isMobile, horizontalPadding } = useResponsive();
   const { isAuthenticated, openAuthModal, refreshUnreadCount } = useAuth();
 
   const [items, setItems] = useState<NotificationInterneItem[]>([]);
@@ -155,7 +155,7 @@ export default function NotificationsScreen() {
               ) : null}
               <View style={[styles.tokenCard, { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder }]}>
                 <Text style={[styles.tokenTitle, { color: theme.text }]}>Jeton Push Appareil</Text>
-                <View style={styles.tokenRow}>
+                <View style={[styles.tokenRow, isMobile && { flexDirection: 'column' }]}>
                   <TextInput
                     style={[
                       styles.tokenInput,
@@ -166,12 +166,14 @@ export default function NotificationsScreen() {
                     value={pushTokenInput}
                     onChangeText={setPushTokenInput}
                   />
-                  <Pressable onPress={handleRegisterToken} style={[styles.tokenBtn, { backgroundColor: theme.navy }]}>
-                    <Text style={styles.tokenBtnText}>Activer</Text>
-                  </Pressable>
-                  <Pressable onPress={handleRevokeToken} style={[styles.tokenBtn, { backgroundColor: '#FEE2E2' }]}>
-                    <Text style={[styles.tokenBtnText, { color: '#B91C1C' }]}>Révoquer</Text>
-                  </Pressable>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <Pressable onPress={handleRegisterToken} style={[styles.tokenBtn, { backgroundColor: theme.navy, flex: isMobile ? 1 : undefined }]}>
+                      <Text style={styles.tokenBtnText}>Activer</Text>
+                    </Pressable>
+                    <Pressable onPress={handleRevokeToken} style={[styles.tokenBtn, { backgroundColor: '#FEE2E2', flex: isMobile ? 1 : undefined }]}>
+                      <Text style={[styles.tokenBtnText, { color: '#B91C1C' }]}>Révoquer</Text>
+                    </Pressable>
+                  </View>
                 </View>
               </View>
             </View>
@@ -237,8 +239,8 @@ const styles = StyleSheet.create({
   tokenCard: { borderRadius: 16, borderWidth: 1, padding: Spacing.three, gap: 8, marginBottom: Spacing.two },
   tokenTitle: { fontSize: 13, fontWeight: '800' },
   tokenRow: { flexDirection: 'row', gap: 8 },
-  tokenInput: { flex: 1, borderRadius: 10, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 8, fontSize: 13 },
-  tokenBtn: { paddingHorizontal: 14, borderRadius: 10, justifyContent: 'center' },
+  tokenInput: { flex: 1, minHeight: 42, borderRadius: 10, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 8, fontSize: 13 },
+  tokenBtn: { paddingHorizontal: 14, minHeight: 42, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
   tokenBtnText: { color: '#FFFFFF', fontWeight: '800', fontSize: 12 },
   card: { borderRadius: 16, borderWidth: 1, padding: Spacing.three, gap: 4 },
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },

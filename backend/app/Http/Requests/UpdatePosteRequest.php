@@ -54,6 +54,14 @@ class UpdatePosteRequest extends FormRequest
             $mergeData['is_negotiable'] = filter_var($this->input('is_negotiable'), FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? false;
         }
 
+        if ($this->has('commune') && is_string($this->input('commune'))) {
+            $mergeData['commune'] = trim($this->input('commune'));
+        }
+
+        if ($this->has('surface') && $this->input('surface') === '') {
+            $mergeData['surface'] = null;
+        }
+
         $type = $mergeData['type'] ?? $this->input('type');
         $transactionType = $mergeData['transaction_type'] ?? $this->input('transaction_type');
 
@@ -80,13 +88,13 @@ class UpdatePosteRequest extends FormRequest
         return [
             'type' => ['sometimes', 'string', 'in:parcelle,maison,chambre'],
             'transaction_type' => ['sometimes', 'string', 'in:vente,location'],
-            'commune' => ['sometimes', 'string', 'max:255'],
+            'commune' => ['sometimes', 'string', 'min:2', 'max:255'],
             'arrondissement' => ['sometimes', 'string', 'max:255'],
             'quartier' => ['sometimes', 'string', 'max:255'],
             'location_details' => ['nullable', 'string', 'max:1000'],
             'accessibilite' => ['sometimes', 'string', 'max:255'],
             'eau_courant' => ['sometimes', 'string', 'max:255'],
-            'surface' => ['sometimes', 'numeric', 'min:1'],
+            'surface' => ['sometimes', 'nullable', 'numeric', 'min:1'],
             'nombres_chambres' => ['nullable', 'integer', 'min:0'],
             'avance_mois' => ['nullable', 'integer', 'min:0'],
             'prix' => ['sometimes', 'numeric', 'min:0'],

@@ -26,11 +26,19 @@ class Paiement extends Model
         'user_id',
         'property_id',
         'transaction_reference',
+        'gateway_transaction_id',
         'payment_type',
         'related_entity_id',
         'amount',
+        'currency',
+        'gateway_fees',
         'payment_method',
         'status',
+        'gateway_status',
+        'verified_at',
+        'expires_at',
+        'failure_reason',
+        'gateway_payload',
     ];
 
     /**
@@ -42,8 +50,26 @@ class Paiement extends Model
     {
         return [
             'amount' => 'decimal:2',
+            'gateway_fees' => 'decimal:2',
             'related_entity_id' => 'integer',
+            'verified_at' => 'datetime',
+            'expires_at' => 'datetime',
+            'gateway_payload' => 'array',
         ];
+    }
+
+    public function getNormalizedStatusAttribute(): string
+    {
+        return $this->status === 'successful' ? 'success' : (string) $this->status;
+    }
+
+    public function isConsumed(): bool
+    {
+        if (in_array($this->payment_type, ['agent_post', 'owner_post_submission'], true)) {
+            return $this->property_id !== null || $this->related_entity_id !== null;
+        }
+
+        return $this->related_entity_id !== null;
     }
 
     /**

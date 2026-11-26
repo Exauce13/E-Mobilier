@@ -1,12 +1,13 @@
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
+import { Bell, LogOut, Menu, X } from 'lucide-react-native';
 import React, { useState } from 'react';
 import {
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  useWindowDimensions,
   View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -32,6 +33,7 @@ import {
   SuperAdminSettingsSection,
 } from '@/components/super-admin/super-admin-sections';
 import { useAuth } from '@/context/auth-context';
+import { useResponsive } from '@/hooks/use-responsive';
 
 const PAGE_META: Record<SuperAdminPageKey, { title: string; subtitle: string }> = {
   dashboard: { title: 'Tableau de bord', subtitle: 'Vue globale des opérations et de la trésorerie' },
@@ -81,9 +83,9 @@ export function SuperAdminPrincipalPortal({
 }: {
   initialPage?: SuperAdminPageKey;
 }) {
-  const { width } = useWindowDimensions();
+  const { width, isSmallMobile, isDesktop, contentMaxWidth, horizontalPadding } = useResponsive();
   const insets = useSafeAreaInsets();
-  const isDesktop = width >= 900;
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const { user, unreadNotificationsCount, isFinancialOwner, logout } = useAuth();
   const safeInitialPage: SuperAdminPageKey =
@@ -93,6 +95,7 @@ export function SuperAdminPrincipalPortal({
   const [equipeSubTab, setEquipeSubTab] = useState<'governance' | 'kyc'>('governance');
 
   const meta = PAGE_META[activePage];
+  const drawerWidth = Math.min(300, Math.round(width * 0.86));
   const initials = (user?.name || 'JM')
     .split(' ')
     .map((n) => n[0])
@@ -176,14 +179,26 @@ export function SuperAdminPrincipalPortal({
         {/* Main Column */}
         <View style={styles.mainCol}>
           {/* Top Header */}
-          <View style={styles.topHeader}>
+          <View style={[styles.topHeader, isSmallMobile && { paddingHorizontal: 10, gap: 8 }]}>
+            {!isDesktop && (
+              <Pressable
+                accessibilityLabel="Ouvrir le menu administration"
+                onPress={() => setDrawerOpen(true)}
+                style={styles.mobileMenuBtn}
+                hitSlop={6}>
+                <Menu size={20} color={SA_COLORS.text} strokeWidth={2.2} />
+              </Pressable>
+            )}
+
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text numberOfLines={1} style={styles.headerTitle}>
+              <Text numberOfLines={1} style={[styles.headerTitle, isSmallMobile && { fontSize: 15 }]}>
                 {meta.title}
               </Text>
-              <Text numberOfLines={1} style={styles.headerSub}>
-                {meta.subtitle}
-              </Text>
+              {!isSmallMobile && (
+                <Text numberOfLines={1} style={styles.headerSub}>
+                  {meta.subtitle}
+                </Text>
+              )}
             </View>
 
             <View style={styles.headerRight}>
@@ -195,9 +210,11 @@ export function SuperAdminPrincipalPortal({
               )}
 
               <Pressable
+                accessibilityLabel="Notifications"
                 onPress={() => router.push('/notifications' as any)}
                 style={styles.notifBtn}>
-                <Text style={styles.notifBtnText}>Notifs</Text>
+                <Bell size={15} color={SA_COLORS.text} strokeWidth={2.2} />
+                {!isSmallMobile && <Text style={styles.notifBtnText}>Notifs</Text>}
                 {unreadNotificationsCount > 0 && (
                   <View style={styles.notifCount}>
                     <Text style={styles.notifCountText}>{unreadNotificationsCount}</Text>
@@ -216,6 +233,97 @@ export function SuperAdminPrincipalPortal({
               </Pressable>
             </View>
           </View>
+
+          {/* Mobile / Tablet Hamburger Drawer */}
+          <Modal
+            visible={drawerOpen}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setDrawerOpen(false)}>
+            <View style={styles.drawerOverlay}>
+              <Pressable style={styles.drawerBackdrop} onPress={() => setDrawerOpen(false)} />
+              <SafeAreaView edges={['top', 'bottom']} style={[styles.drawerPanel, { width: drawerWidth }]}>
+                <View style={styles.brandHeader}>
+                  <View style={styles.brandLogo}>
+                    <Text style={styles.brandLogoText}>EM</Text>
+                  </View>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text numberOfLines={1} style={styles.brandTitle}>E-Mobilier</Text>
+                    <Text numberOfLines={1} style={styles.brandRole}>Super Admin Principal</Text>
+                  </View>
+                  <Pressable onPress={() => setDrawerOpen(false)} style={styles.drawerCloseBtn} hitSlop={8}>
+                    <X size={18} color={SA_COLORS.text} strokeWidth={2.2} />
+                  </Pressable>
+                </View>
+
+                <ScrollView style={styles.navScroll} contentContainerStyle={{ padding: 12, gap: 4 }}>
+                  {NAV_GROUPS.map((group) => (
+                    <View key={`m-${group.section}`} style={{ marginBottom: 10 }}>
+                      <Text style={styles.navSectionTitle}>{group.section}</Text>
+                      {group.items
+                        .filter((item) => item.key !== 'finance' || isFinancialOwner)
+                        .map((item) => {
+                          const active = activePage === item.key;
+                          return (
+                            <Pressable
+                              key={`m-${item.key}`}
+                              onPress={() => {
+                                setActivePage(item.key);
+                                setDrawerOpen(false);
+                              }}
+                              style={[styles.navItem, active && styles.navItemActive]}>
+                              <Text style={[styles.navItemText, active && styles.navItemTextActive]}>
+                                {item.label}
+                              </Text>
+                              {item.tag && (
+                                <View style={styles.tagPill}>
+                                  <Text style={styles.tagPillText}>{item.tag}</Text>
+                                </View>
+                              )}
+                            </Pressable>
+                          );
+                        })}
+                    </View>
+                  ))}
+                </ScrollView>
+
+                <View style={styles.sidebarFooter}>
+                  <Pressable
+                    onPress={() => {
+                      setActivePage('profil');
+                      setDrawerOpen(false);
+                    }}
+                    style={styles.userFooterRow}>
+                    {user?.photo_url ? (
+                      <Image source={{ uri: user.photo_url }} style={styles.avatarSmallImg} contentFit="cover" />
+                    ) : (
+                      <View style={styles.avatarSmall}>
+                        <Text style={styles.avatarSmallText}>{initials}</Text>
+                      </View>
+                    )}
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text numberOfLines={1} style={styles.userFooterName}>
+                        {user?.name || 'Super Admin'}
+                      </Text>
+                      <Text numberOfLines={1} style={styles.userFooterLink}>
+                        Mon profil &amp; photo
+                      </Text>
+                    </View>
+                  </Pressable>
+
+                  <Pressable
+                    onPress={() => {
+                      setDrawerOpen(false);
+                      void logout();
+                    }}
+                    style={[styles.sidebarLogoutBtn, { flexDirection: 'row', justifyContent: 'center', gap: 6 }]}>
+                    <LogOut size={14} color={SA_COLORS.danger} strokeWidth={2.2} />
+                    <Text style={styles.sidebarLogoutText}>Se déconnecter</Text>
+                  </Pressable>
+                </View>
+              </SafeAreaView>
+            </View>
+          </Modal>
 
           {/* Mobile Horizontal Nav */}
           {!isDesktop && (
@@ -254,7 +362,11 @@ export function SuperAdminPrincipalPortal({
             style={styles.contentScroll}
             contentContainerStyle={[
               styles.contentContainer,
-              { paddingBottom: Math.max(insets.bottom, 24) + 24 },
+              {
+                maxWidth: Math.min(contentMaxWidth, 1280),
+                paddingHorizontal: horizontalPadding,
+                paddingBottom: Math.max(insets.bottom, 24) + 24,
+              },
             ]}
             showsVerticalScrollIndicator={false}>
             {activePage === 'dashboard' && <SuperAdminDashboardSection onNavigate={setActivePage} />}
@@ -481,10 +593,48 @@ const styles = StyleSheet.create({
   mobilePillActive: { backgroundColor: SA_COLORS.green },
   mobilePillText: { fontSize: 12, fontWeight: '600', color: '#334155' },
   mobilePillTextActive: { color: SA_COLORS.white, fontWeight: '700' },
+  mobileMenuBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: SA_COLORS.border,
+    backgroundColor: SA_COLORS.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  drawerOverlay: {
+    flex: 1,
+    flexDirection: 'row',
+    backgroundColor: 'rgba(15, 23, 42, 0.55)',
+  },
+  drawerBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  drawerPanel: {
+    height: '100%',
+    backgroundColor: SA_COLORS.white,
+    borderRightWidth: 1,
+    borderRightColor: SA_COLORS.border,
+    zIndex: 2,
+  },
+  drawerCloseBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: SA_COLORS.slateSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   contentScroll: { flex: 1 },
   contentContainer: {
-    padding: 16,
-    maxWidth: 1120,
+    paddingVertical: 16,
+    maxWidth: 1280,
     width: '100%',
     alignSelf: 'center',
   },

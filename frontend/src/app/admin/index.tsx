@@ -30,6 +30,7 @@ import {
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
+import { useResponsive } from '@/hooks/use-responsive';
 import { useTheme } from '@/hooks/use-theme';
 import { cguApi } from '@/services/api';
 import { showMessage } from '@/utils/dialog';
@@ -59,6 +60,7 @@ export default function AdminDashboardScreen() {
 function StandardAdminDashboard() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const { contentMaxWidth, horizontalPadding } = useResponsive();
   const { isAdminStaff, isSuperAdmin, hasAnyRole } = useAuth();
 
   const tabs = useMemo(() => {
@@ -161,7 +163,14 @@ function StandardAdminDashboard() {
 
       <ScrollView
         key={`${activeTab}-${refreshTick}`}
-        contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 28 }]}>
+        contentContainerStyle={[
+          styles.scroll,
+          {
+            maxWidth: contentMaxWidth,
+            paddingHorizontal: horizontalPadding,
+            paddingBottom: insets.bottom + 28,
+          },
+        ]}>
         {activeTab === 'metrics' && <MetricsSection onCharteRequired={handleCharteRequired} />}
         {activeTab === 'moderation' && <ModerationSection onCharteRequired={handleCharteRequired} />}
         {activeTab === 'catalogue' && <SuperAdminPostsSection />}
@@ -222,8 +231,8 @@ const styles = StyleSheet.create({
   charteBtnText: { color: '#0F172A', fontWeight: '800', fontSize: 12 },
   deniedBox: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: Spacing.five, gap: 8 },
   deniedTitle: { fontSize: 18, fontWeight: '800' },
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(15,23,42,0.7)', justifyContent: 'center', padding: Spacing.four },
-  modalCard: { borderRadius: 20, borderWidth: 1, padding: Spacing.four, gap: 12 },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(15,23,42,0.7)', justifyContent: 'center', alignItems: 'center', padding: Spacing.four },
+  modalCard: { width: '100%', maxWidth: 520, borderRadius: 20, borderWidth: 1, padding: Spacing.four, gap: 12 },
   modalTitle: { fontSize: 18, fontWeight: '900' },
   signBtn: { borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
   signBtnText: { color: '#FFFFFF', fontWeight: '800', fontSize: 14 },

@@ -62,9 +62,23 @@ class PosteRequest extends FormRequest
             $mergeData['is_negotiable'] = filter_var($this->input('is_negotiable'), FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? false;
         }
 
+        // Nettoyage de la commune en saisie libre
+        if ($this->has('commune') && is_string($this->input('commune'))) {
+            $mergeData['commune'] = trim($this->input('commune'));
+        }
+
+        // Normalisation de la superficie vide en null (notamment chambre en location)
+        if ($this->has('surface') && ($this->input('surface') === '' || $this->input('surface') === null)) {
+            $mergeData['surface'] = null;
+        }
+
         // Valeurs par défaut selon le type et le type de transaction
         $type = $mergeData['type'] ?? $this->input('type');
         $transactionType = $mergeData['transaction_type'] ?? $this->input('transaction_type');
+
+        if ($type === 'chambre' && $transactionType === 'location' && ! $this->filled('surface')) {
+            $mergeData['surface'] = null;
+        }
 
         if ($type === 'parcelle' && ! $this->has('nombres_chambres') && ! isset($mergeData['nombres_chambres'])) {
             $mergeData['nombres_chambres'] = 0;
@@ -95,21 +109,26 @@ class PosteRequest extends FormRequest
      */
     public function rules(): array
     {
+        $isChambreLocation = $this->input('type') === 'chambre' && $this->input('transaction_type') === 'location';
+
         return [
             // Identifiant de transaction Kkiapay
             'kkiapay_transaction_id' => ['nullable', 'string', 'max:255'],
             'transaction_reference' => ['nullable', 'string', 'max:255'],
+            'payment_reference' => ['nullable', 'string', 'max:255'],
 
             // Informations générales du bien
             'type' => ['required', 'string', 'in:parcelle,maison,chambre'],
             'transaction_type' => ['required', 'string', 'in:vente,location'],
-            'commune' => ['required', 'string', 'max:255'],
+            'commune' => ['required', 'string', 'min:2', 'max:255'],
             'arrondissement' => ['required', 'string', 'max:255'],
             'quartier' => ['required', 'string', 'max:255'],
             'location_details' => ['nullable', 'string', 'max:1000'],
             'accessibilite' => ['required', 'string', 'max:255'],
             'eau_courant' => ['required', 'string', 'max:255'],
-            'surface' => ['required', 'numeric', 'min:1'],
+            'surface' => $isChambreLocation
+                ? ['nullable', 'numeric', 'min:1']
+                : ['required', 'numeric', 'min:1'],
             'nombres_chambres' => ['nullable', 'integer', 'min:0'],
             'avance_mois' => ['nullable', 'integer', 'min:0'],
             'prix' => ['required', 'numeric', 'min:0'],

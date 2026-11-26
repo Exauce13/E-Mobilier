@@ -17,6 +17,7 @@ import {
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
@@ -175,7 +176,11 @@ export default function PropertyDetailScreen() {
           </Pressable>
         </View>
       ) : (
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={{ flex: 1 }}>
         <ScrollView
+          keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
           contentContainerStyle={[
             styles.scroll,
@@ -198,8 +203,9 @@ export default function PropertyDetailScreen() {
                     <>
                       <Image
                         source={{ uri: images[activePhotoIndex] || images[0] }}
-                        style={[styles.heroImg, isDesktop && { height: 390 }]}
+                        style={[styles.heroImg, isDesktop && styles.heroImgDesktop]}
                         contentFit="cover"
+                        transition={220}
                       />
                       {property.is_unlocked && images.length > 1 && (
                         <ScrollView
@@ -269,7 +275,9 @@ export default function PropertyDetailScreen() {
 
                   <View style={styles.specsGrid}>
                     <SpecBadge label="Type" value={property.type.toUpperCase()} theme={theme} />
-                    <SpecBadge label="Surface" value={`${property.surface} m²`} theme={theme} />
+                    {property.surface && Number(property.surface) > 0 ? (
+                      <SpecBadge label="Surface" value={`${property.surface} m²`} theme={theme} />
+                    ) : null}
                     {property.nombres_chambres ? (
                       <SpecBadge label="Chambres" value={`${property.nombres_chambres}`} theme={theme} />
                     ) : null}
@@ -540,6 +548,7 @@ export default function PropertyDetailScreen() {
             </View>
           </View>
         </ScrollView>
+        </KeyboardAvoidingView>
       )}
 
       {/* Unlock Checkout (50 FCFA / dynamique) */}
@@ -555,8 +564,8 @@ export default function PropertyDetailScreen() {
               : 'Règlement officiel pour accéder aux détails complets du bien.'
           }
           onClose={() => setUnlockCheckoutOpen(false)}
-          onSuccess={async ({ transactionId }) => {
-            const res = await proprietesApi.unlockDetails(property.id, transactionId);
+          onSuccess={async ({ transactionId, internalReference }) => {
+            const res = await proprietesApi.unlockDetails(property.id, transactionId, internalReference);
             if (!res.success || !res.data) {
               throw new Error(res.message || 'Échec du déblocage.');
             }
@@ -580,11 +589,12 @@ export default function PropertyDetailScreen() {
           }
           description={`Visite physique encadrée prévue le ${pendingVisitDate} pour le bien #${property.id}.`}
           onClose={() => setVisitCheckoutOpen(false)}
-          onSuccess={async ({ transactionId }) => {
+          onSuccess={async ({ transactionId, internalReference }) => {
             const res = await visitesApi.requestVisit({
               property_id: property.id,
               scheduled_date: pendingVisitDate.trim(),
               kkiapay_transaction_id: transactionId,
+              payment_reference: internalReference,
             });
             if (!res.success) {
               throw new Error(res.message || "Impossible d'enregistrer la visite.");
@@ -630,16 +640,17 @@ const styles = StyleSheet.create({
   mainCol: { gap: 14 },
   sideCol: { gap: 14 },
   galleryCard: { borderRadius: 20, borderWidth: 1, overflow: 'hidden' },
-  heroImg: { width: '100%', height: 260, backgroundColor: '#E2E8F0' },
+  heroImg: { width: '100%', aspectRatio: 16 / 10, minHeight: 195, maxHeight: 340, backgroundColor: '#E2E8F0' },
+  heroImgDesktop: { aspectRatio: 16 / 10, maxHeight: 440 },
   noMediaBox: { height: 220, alignItems: 'center', justifyContent: 'center' },
   thumbRow: { padding: 10, gap: 8 },
   thumbWrap: { borderRadius: 10, borderWidth: 2, overflow: 'hidden' },
-  thumbImg: { width: 64, height: 48 },
+  thumbImg: { width: 68, height: 50 },
   card: { borderRadius: 18, borderWidth: 1, padding: Spacing.four, gap: 10 },
   lockedCard: {
     borderRadius: 18,
     borderWidth: 1.5,
-    padding: Spacing.five,
+    padding: Spacing.four,
     alignItems: 'center',
     gap: 12,
   },
@@ -657,7 +668,7 @@ const styles = StyleSheet.create({
   pill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
   locationTitle: { fontSize: 15, fontWeight: '700' },
   specsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
-  specItem: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, minWidth: 85, gap: 2 },
+  specItem: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, minWidth: 85, flexGrow: 1, gap: 2 },
   sectionTitle: { fontSize: 16, fontWeight: '800' },
   detailLine: { fontSize: 13, lineHeight: 20 },
   description: { fontSize: 14, lineHeight: 21 },
@@ -704,6 +715,7 @@ const styles = StyleSheet.create({
   dateError: { color: '#FCA5A5', fontSize: 12, fontWeight: '700' },
   goldActionBtn: {
     borderRadius: 14,
+    minHeight: 48,
     paddingVertical: 14,
     paddingHorizontal: 16,
     flexDirection: 'row',
@@ -711,7 +723,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
   },
-  goldActionText: { color: '#0F172A', fontSize: 14, fontWeight: '900' },
-  primaryBtn: { borderRadius: 14, paddingVertical: 14, paddingHorizontal: 18, alignItems: 'center' },
-  primaryBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
+  goldActionText: { color: '#0F172A', fontSize: 14, fontWeight: '900', textAlign: 'center', flexShrink: 1 },
+  primaryBtn: { borderRadius: 14, minHeight: 48, paddingVertical: 14, paddingHorizontal: 18, alignItems: 'center', justifyContent: 'center' },
+  primaryBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800', textAlign: 'center' },
 });

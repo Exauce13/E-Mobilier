@@ -5,9 +5,12 @@ import {
   Building2,
   CalendarCheck,
   CreditCard,
+  FileText,
   Handshake,
   Home,
+  Menu,
   Moon,
+  PlusCircle,
   Search,
   ShieldCheck,
   Sparkles,
@@ -27,6 +30,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PropertyCard } from '@/components/property-card';
+import { MobileNavDrawer } from '@/components/ui/mobile-nav-drawer';
 import { BENIN_COMMUNES, FILTER_CATEGORIES } from '@/constants/locations';
 import { BottomTabInset } from '@/constants/theme';
 import { usePlatformConfig } from '@/context/platform-config-context';
@@ -48,10 +52,19 @@ export function LandingShowcase({ onOpenLogin, onOpenRegister }: LandingShowcase
   const { isDark, toggleTheme } = useThemeMode();
   const { config, tarifs } = usePlatformConfig();
   const insets = useSafeAreaInsets();
-  const { isMobile, isTablet, isDesktop, gridColumns, contentMaxWidth, horizontalPadding } =
-    useResponsive();
+  const {
+    isSmallMobile,
+    isMobile,
+    isTablet,
+    isDesktop,
+    gridColumns,
+    contentMaxWidth,
+    horizontalPadding,
+    getGridItemWidth,
+  } = useResponsive();
   const storageBaseUrl = useMemo(() => getStorageBaseUrl(), []);
 
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [quickQuery, setQuickQuery] = useState('');
   const [quickTransaction, setQuickTransaction] = useState<'tous' | 'location' | 'vente'>('tous');
   const [quickCommune, setQuickCommune] = useState('Toutes les communes');
@@ -117,8 +130,8 @@ export function LandingShowcase({ onOpenLogin, onOpenRegister }: LandingShowcase
     router.push(`/property/${property.id}` as any);
   };
 
-  const cardWidthPercent =
-    gridColumns === 3 ? '31.8%' : gridColumns === 2 ? '48.5%' : '100%';
+  const cardWidth = getGridItemWidth(gridColumns, 16);
+  const trustCellWidth = getGridItemWidth(isMobile ? 2 : 4, 12);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -134,26 +147,42 @@ export function LandingShowcase({ onOpenLogin, onOpenRegister }: LandingShowcase
           },
         ]}>
         <View style={[styles.headerInner, { maxWidth: contentMaxWidth }]}>
-          <Pressable onPress={() => router.push('/' as any)} style={styles.brandRow}>
-            <View style={styles.logoIcon}>
-              <Building2 size={20} color="#F59E0B" strokeWidth={2.2} />
-            </View>
-            <View style={styles.brandTextWrap}>
-              <View style={styles.brandTitleRow}>
-                <Text numberOfLines={1} style={styles.brandTitle}>
-                  E-Mobilier
-                </Text>
-                <View style={styles.flagBadge}>
-                  <Text style={styles.flagText}>BÉNIN</Text>
-                </View>
+          <View style={styles.headerLeftGroup}>
+            {!isDesktop && (
+              <Pressable
+                accessibilityLabel="Ouvrir le menu de navigation"
+                onPress={() => setMobileMenuOpen(true)}
+                style={({ pressed }) => [styles.menuHeaderBtn, pressed && { opacity: 0.78 }]}
+                hitSlop={6}>
+                <Menu size={20} color="#FFFFFF" strokeWidth={2.2} />
+              </Pressable>
+            )}
+
+            <Pressable onPress={() => router.push('/' as any)} style={styles.brandRow}>
+              <View style={styles.logoIcon}>
+                <Building2 size={isSmallMobile ? 18 : 20} color="#F59E0B" strokeWidth={2.2} />
               </View>
-              {!isMobile && (
-                <Text numberOfLines={1} style={styles.brandSubtitle}>
-                  Portail Immobilier Certifié
-                </Text>
-              )}
-            </View>
-          </Pressable>
+              <View style={styles.brandTextWrap}>
+                <View style={styles.brandTitleRow}>
+                  <Text
+                    numberOfLines={1}
+                    style={[styles.brandTitle, isSmallMobile && { fontSize: 15 }]}>
+                    E-Mobilier
+                  </Text>
+                  {!isSmallMobile && (
+                    <View style={styles.flagBadge}>
+                      <Text style={styles.flagText}>BÉNIN</Text>
+                    </View>
+                  )}
+                </View>
+                {!isMobile && (
+                  <Text numberOfLines={1} style={styles.brandSubtitle}>
+                    Portail Immobilier Certifié
+                  </Text>
+                )}
+              </View>
+            </Pressable>
+          </View>
 
           {/* Desktop Navigation Links */}
           {isDesktop && (
@@ -165,46 +194,106 @@ export function LandingShowcase({ onOpenLogin, onOpenRegister }: LandingShowcase
                 <Text style={styles.navLinkText}>Publier un bien</Text>
               </Pressable>
               <Pressable onPress={() => router.push('/cgu' as any)} style={styles.navLinkBtn}>
-                <Text style={styles.navLinkText}>CGU & Sécurité</Text>
+                <Text style={styles.navLinkText}>CGU &amp; Sécurité</Text>
               </Pressable>
             </View>
           )}
 
           {/* Header Actions */}
           <View style={styles.headerActions}>
-            <Pressable
-              onPress={() => {
-                void toggleTheme();
-              }}
-              style={({ pressed }) => [styles.themeHeaderBtn, pressed && { opacity: 0.75 }]}
-              hitSlop={6}>
-              {isDark ? (
-                <Moon size={16} color="#FDE68A" strokeWidth={2} />
-              ) : (
-                <Sun size={16} color="#FDE68A" strokeWidth={2} />
-              )}
-            </Pressable>
+            {!isSmallMobile && (
+              <Pressable
+                accessibilityLabel="Changer de thème"
+                onPress={() => {
+                  void toggleTheme();
+                }}
+                style={({ pressed }) => [styles.themeHeaderBtn, pressed && { opacity: 0.75 }]}
+                hitSlop={6}>
+                {isDark ? (
+                  <Moon size={16} color="#FDE68A" strokeWidth={2} />
+                ) : (
+                  <Sun size={16} color="#FDE68A" strokeWidth={2} />
+                )}
+              </Pressable>
+            )}
 
             <Pressable
               onPress={onOpenLogin}
-              style={({ pressed }) => [styles.loginHeaderBtn, pressed && { opacity: 0.75 }]}
+              style={({ pressed }) => [
+                styles.loginHeaderBtn,
+                isSmallMobile && { paddingHorizontal: 8 },
+                pressed && { opacity: 0.75 },
+              ]}
               hitSlop={6}>
               <Text numberOfLines={1} style={styles.loginHeaderText}>
                 Connexion
               </Text>
             </Pressable>
 
-            <Pressable
-              onPress={onOpenRegister}
-              style={({ pressed }) => [styles.registerHeaderBtn, pressed && { opacity: 0.85 }]}
-              hitSlop={6}>
-              <Text numberOfLines={1} style={styles.registerHeaderText}>
-                S'inscrire
-              </Text>
-            </Pressable>
+            {!isSmallMobile && (
+              <Pressable
+                onPress={onOpenRegister}
+                style={({ pressed }) => [styles.registerHeaderBtn, pressed && { opacity: 0.85 }]}
+                hitSlop={6}>
+                <Text numberOfLines={1} style={styles.registerHeaderText}>
+                  S'inscrire
+                </Text>
+              </Pressable>
+            )}
           </View>
         </View>
       </View>
+
+      {/* Mobile / Tablet Navigation Drawer */}
+      <MobileNavDrawer
+        visible={mobileMenuOpen}
+        onClose={() => setMobileMenuOpen(false)}
+        title="E-Mobilier Bénin"
+        subtitle="Portail Immobilier Certifié"
+        isDark={isDark}
+        onToggleTheme={() => {
+          void toggleTheme();
+        }}
+        items={[
+          {
+            key: 'home',
+            label: 'Accueil',
+            subtitle: 'Biens en vedette',
+            icon: <Home size={18} color={theme.primary} strokeWidth={2.2} />,
+            onPress: () => router.push('/' as any),
+          },
+          {
+            key: 'explore',
+            label: 'Rechercher un bien',
+            subtitle: 'Filtres par commune, prix, surface',
+            icon: <Search size={18} color={theme.primary} strokeWidth={2.2} />,
+            onPress: () => router.push('/explore' as any),
+          },
+          {
+            key: 'publish',
+            label: 'Publier un bien',
+            subtitle: 'Maison, parcelle ou chambre',
+            icon: <PlusCircle size={18} color={theme.primary} strokeWidth={2.2} />,
+            accent: true,
+            onPress: () => router.push('/publish' as any),
+          },
+          {
+            key: 'cgu',
+            label: 'CGU & Sécurité',
+            subtitle: 'Tarifs officiels et anti-contournement',
+            icon: <FileText size={18} color={theme.primary} strokeWidth={2.2} />,
+            onPress: () => router.push('/cgu' as any),
+          },
+        ]}
+        secondaryFooterAction={{
+          label: 'Se connecter',
+          onPress: onOpenLogin,
+        }}
+        footerAction={{
+          label: 'Créer un compte gratuit',
+          onPress: onOpenRegister,
+        }}
+      />
 
       <ScrollView
         contentContainerStyle={[
@@ -364,7 +453,7 @@ export function LandingShowcase({ onOpenLogin, onOpenRegister }: LandingShowcase
             ].map(({ Icon, value, label }) => (
               <View
                 key={label}
-                style={[styles.trustCell, { width: isMobile ? '47%' : '23%' }]}>
+                style={[styles.trustCell, { width: trustCellWidth }]}>
                 <View style={[styles.trustIconCircle, { backgroundColor: theme.primaryLight }]}>
                   <Icon size={20} color={theme.primary} strokeWidth={2} />
                 </View>
@@ -452,8 +541,8 @@ export function LandingShowcase({ onOpenLogin, onOpenRegister }: LandingShowcase
             </View>
           ) : (
             <View style={styles.cardsGrid}>
-              {displayedProperties.slice(0, 6).map((property) => (
-                <View key={property.id} style={{ width: cardWidthPercent as any }}>
+              {displayedProperties.slice(0, gridColumns === 4 ? 8 : 6).map((property) => (
+                <View key={property.id} style={{ width: cardWidth }}>
                   <PropertyCard
                     property={property}
                     onPressCard={handleOpenProperty}
@@ -591,6 +680,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 10,
+  },
+  headerLeftGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  menuHeaderBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 11,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
   brandRow: {
     flexDirection: 'row',

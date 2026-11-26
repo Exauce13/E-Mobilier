@@ -27,7 +27,7 @@ export default function UserProfileScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { horizontalPadding } = useResponsive();
-  const { user, isAuthenticated, openAuthModal, refreshProfile, logout } = useAuth();
+  const { user, isAuthenticated, isAgentMobilier, openAuthModal, refreshProfile, logout } = useAuth();
 
   const [name, setName] = useState(user?.nom || '');
   const [prenom, setPrenom] = useState(user?.prenom || '');
@@ -237,12 +237,14 @@ export default function UserProfileScreen() {
           <View style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder }]}>
             <Text style={[styles.sectionTitle, { color: theme.text }]}>Raccourcis compte</Text>
 
-            <Pressable
-              onPress={() => router.push('/transactions' as any)}
-              style={[styles.linkRow, { borderBottomColor: theme.cardBorder }]}>
-              <CreditCard size={17} color={theme.primary} strokeWidth={2.2} />
-              <Text style={[styles.linkLabel, { color: theme.text }]}>Paiements & Quittances officielles</Text>
-            </Pressable>
+            {!isAgentMobilier && (
+              <Pressable
+                onPress={() => router.push('/transactions' as any)}
+                style={[styles.linkRow, { borderBottomColor: theme.cardBorder }]}>
+                <CreditCard size={17} color={theme.primary} strokeWidth={2.2} />
+                <Text style={[styles.linkLabel, { color: theme.text }]}>Paiements &amp; Quittances officielles</Text>
+              </Pressable>
+            )}
 
             <Pressable
               onPress={() => router.push('/notifications' as any)}

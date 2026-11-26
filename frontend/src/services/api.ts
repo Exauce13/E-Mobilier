@@ -410,26 +410,35 @@ export const paiementsApi = {
   verifier: async (payload: {
     transactionId: string;
     reference?: string;
-    amount?: number;
   }): Promise<ApiResponse<any>> => {
     return apiRequest('/paiements/verifier', {
       method: 'POST',
       body: JSON.stringify({
         transactionId: payload.transactionId,
         reference: payload.reference,
-        amount: payload.amount,
       }),
     });
   },
 
-  verifierKkiapay: async (payload: {
-    transactionId: string;
-    amount?: number;
-  }): Promise<ApiResponse<any>> => {
-    return apiRequest('/kkiapay/verify', {
+  getStatut: async (ref: string): Promise<ApiResponse<import('@/types/api').PaymentStatusItem>> => {
+    return apiRequest(`/paiements/${encodeURIComponent(ref)}/statut`, { method: 'GET' });
+  },
+
+  annuler: async (ref: string, reason?: string): Promise<ApiResponse<import('@/types/api').PaymentStatusItem>> => {
+    return apiRequest(`/paiements/${encodeURIComponent(ref)}/annuler`, {
       method: 'POST',
-      body: JSON.stringify(payload),
+      body: JSON.stringify(reason ? { reason } : {}),
     });
+  },
+
+  getMyPayments: async (filters?: {
+    status?: string;
+    payment_type?: string;
+    page?: number;
+    per_page?: number;
+  }): Promise<ApiResponse<PaginatedPayload<import('@/types/api').PaymentStatusItem>>> => {
+    const query = buildQuery(filters || {});
+    return apiRequest(`/mes-paiements${query}`, { method: 'GET' });
   },
 
   getRecu: async (ref: string): Promise<ApiResponse<PaymentReceiptData>> => {
@@ -463,8 +472,18 @@ export const proprietesApi = {
     return apiRequest(`/proprietes${query}`, { method: 'GET' });
   },
 
-  getMyProperties: async (page = 1): Promise<ApiResponse<PaginatedPayload<BackendProperty>>> => {
-    return apiRequest(`/mes-proprietes?page=${page}`, { method: 'GET' });
+  getMyProperties: async (
+    page = 1,
+    filters?: { status?: string; transaction_type?: string; search?: string; per_page?: number }
+  ): Promise<ApiResponse<PaginatedPayload<BackendProperty>>> => {
+    const query = buildQuery({
+      page,
+      status: filters?.status,
+      transaction_type: filters?.transaction_type,
+      search: filters?.search,
+      per_page: filters?.per_page,
+    });
+    return apiRequest(`/mes-proprietes${query}`, { method: 'GET' });
   },
 
   getById: async (id: number | string): Promise<ApiResponse<BackendProperty>> => {
@@ -497,12 +516,14 @@ export const proprietesApi = {
 
   unlockDetails: async (
     id: number | string,
-    transactionId: string
+    transactionId: string,
+    paymentReference?: string
   ): Promise<ApiResponse<BackendProperty>> => {
     return apiRequest(`/proprietes/${id}/debloquer`, {
       method: 'POST',
       body: JSON.stringify({
         kkiapay_transaction_id: transactionId,
+        ...(paymentReference ? { payment_reference: paymentReference } : {}),
       }),
     });
   },
@@ -572,6 +593,7 @@ export const visitesApi = {
     property_id: number | string;
     scheduled_date: string;
     kkiapay_transaction_id: string;
+    payment_reference?: string;
   }): Promise<ApiResponse<{ visite: VisiteBackendItem; paiement: any }>> => {
     return apiRequest('/visites', {
       method: 'POST',

@@ -8,7 +8,7 @@ import { useThemeMode } from '@/context/theme-context';
 export default function AppTabs() {
   const { colorScheme } = useThemeMode();
   const colors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
-  const { isAuthenticated, isSuperAdminPrincipal } = useAuth();
+  const { isAuthenticated, isSuperAdminPrincipal, isAgentMobilier } = useAuth();
 
   if (isAuthenticated && isSuperAdminPrincipal) {
     return <Slot />;
@@ -43,7 +43,15 @@ export default function AppTabs() {
         />
       </NativeTabs.Trigger>
 
-      {isAuthenticated && (
+      {isAuthenticated && isAgentMobilier ? (
+        <NativeTabs.Trigger name="agent-space">
+          <NativeTabs.Trigger.Label>Espace Agent</NativeTabs.Trigger.Label>
+          <NativeTabs.Trigger.Icon
+            src={require('@/assets/images/tabIcons/explore.png')}
+            renderingMode="template"
+          />
+        </NativeTabs.Trigger>
+      ) : isAuthenticated ? (
         <NativeTabs.Trigger name="visits">
           <NativeTabs.Trigger.Label>Visites</NativeTabs.Trigger.Label>
           <NativeTabs.Trigger.Icon
@@ -51,7 +59,7 @@ export default function AppTabs() {
             renderingMode="template"
           />
         </NativeTabs.Trigger>
-      )}
+      ) : null}
     </NativeTabs>
   );
 }

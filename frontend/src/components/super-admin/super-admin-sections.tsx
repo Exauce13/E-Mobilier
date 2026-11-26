@@ -1626,12 +1626,12 @@ const styles = StyleSheet.create({
   kpiGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   kpiCard: {
     flex: 1,
-    minWidth: 165,
+    minWidth: 132,
     backgroundColor: SA_COLORS.white,
     borderWidth: 1,
     borderColor: SA_COLORS.border,
     borderRadius: 16,
-    padding: 16,
+    padding: 14,
     gap: 4,
   },
   kpiLabel: { fontSize: 12, fontWeight: '600', color: SA_COLORS.muted },
@@ -1664,6 +1664,7 @@ const styles = StyleSheet.create({
   },
   listDividerRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: 10,

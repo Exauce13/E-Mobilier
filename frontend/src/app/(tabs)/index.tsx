@@ -1,20 +1,25 @@
-import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import {
   ArrowRight,
   Bell,
+  Briefcase,
   Building2,
   Calendar,
+  ChevronLeft,
+  ChevronRight,
+  FileText,
   LogOut,
+  Menu,
   Moon,
   PlusCircle,
   Search,
   Settings,
   Sparkles,
   Sun,
+  User,
   X,
 } from 'lucide-react-native';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Platform,
@@ -31,6 +36,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { LandingShowcase } from '@/components/home/landing-showcase';
 import { PropertyCard } from '@/components/property-card';
 import { SuperAdminPrincipalPortal } from '@/components/super-admin/super-admin-portal';
+import { MobileNavDrawer, type MobileNavItem } from '@/components/ui/mobile-nav-drawer';
 import { FILTER_CATEGORIES } from '@/constants/locations';
 import { BottomTabInset, Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
@@ -45,6 +51,27 @@ import {
   PropertyCategory,
   PropertyItem,
 } from '@/types/property';
+
+const FEED_PER_PAGE = 12;
+
+function buildPaginationSlots(current: number, total: number): (number | 'ellipsis')[] {
+  if (total <= 5) {
+    return Array.from({ length: total }, (_, i) => i + 1);
+  }
+  const pages = new Set<number>([1, total, current]);
+  if (current > 1) pages.add(current - 1);
+  if (current < total) pages.add(current + 1);
+  const sorted = Array.from(pages).sort((a, b) => a - b);
+
+  const slots: (number | 'ellipsis')[] = [];
+  for (let i = 0; i < sorted.length; i++) {
+    if (i > 0 && sorted[i] - sorted[i - 1] > 1) {
+      slots.push('ellipsis');
+    }
+    slots.push(sorted[i]);
+  }
+  return slots;
+}
 
 export default function HomeScreen() {
   const { isAuthenticated, isSuperAdminPrincipal, openAuthModal } = useAuth();
@@ -62,14 +89,23 @@ export default function HomeScreen() {
     return <SuperAdminPrincipalPortal initialPage="dashboard" />;
   }
 
-  return <AuthenticatedCatalog />;
+  return <AuthenticatedPropertyFeed />;
 }
 
-function AuthenticatedCatalog() {
+function AuthenticatedPropertyFeed() {
   const theme = useTheme();
   const { isDark, toggleTheme } = useThemeMode();
   const insets = useSafeAreaInsets();
-  const { isMobile, gridColumns, contentMaxWidth, horizontalPadding } = useResponsive();
+  const {
+    isSmallMobile,
+    isMobile,
+    isDesktop,
+    gridColumns,
+    contentMaxWidth,
+    horizontalPadding,
+    getGridItemWidth,
+  } = useResponsive();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const {
     user,
     logout,
@@ -80,18 +116,20 @@ function AuthenticatedCatalog() {
     isClient,
   } = useAuth();
   const storageBaseUrl = useMemo(() => getStorageBaseUrl(), []);
+  const scrollRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
 
   const [selectedCategory, setSelectedCategory] = useState<PropertyCategory>('tous');
   const [selectedTransaction, setSelectedTransaction] = useState<'tous' | 'location' | 'vente'>('tous');
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+
   const [properties, setProperties] = useState<PropertyItem[]>([]);
-  const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
   const [page, setPage] = useState(1);
   const [lastPage, setLastPage] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [pageLoading, setPageLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
@@ -99,73 +137,70 @@ function AuthenticatedCatalog() {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  useEffect(() => {
-    void favoritesStorage.getAll().then(setFavoriteIds);
-  }, []);
-
-  const fetchFeed = useCallback(
-    async (targetPage: number, replace: boolean) => {
+  const fetchFeedPage = useCallback(
+    async (targetPage: number, mode: 'initial' | 'paginate' | 'refresh' = 'initial') => {
       setErrorMsg(null);
-      const favs = await favoritesStorage.getAll();
-      setFavoriteIds(favs);
+      if (mode === 'initial') setLoading(true);
+      if (mode === 'paginate') setPageLoading(true);
 
-      const res = await proprietesApi.getFeed({
-        type: selectedCategory === 'tous' ? undefined : selectedCategory,
-        transaction_type: selectedTransaction === 'tous' ? undefined : selectedTransaction,
-        search: debouncedSearch || undefined,
-        page: targetPage,
-        per_page: 18,
-      });
+      try {
+        const favs = await favoritesStorage.getAll();
+        const res = await proprietesApi.getFeed({
+          type: selectedCategory === 'tous' ? undefined : selectedCategory,
+          transaction_type: selectedTransaction === 'tous' ? undefined : selectedTransaction,
+          search: debouncedSearch || undefined,
+          page: targetPage,
+          per_page: FEED_PER_PAGE,
+        });
 
-      if (!res.success || !res.data) {
-        if (replace) {
+        if (!res.success || !res.data) {
           setProperties([]);
+          setTotalItems(0);
+          setLastPage(1);
+          setErrorMsg(res.message || 'Impossible de charger le feed des biens immobiliers.');
+          return;
         }
-        setErrorMsg(res.message || 'Impossible de charger les annonces.');
-        return;
+
+        const mapped = (res.data.data || []).map((p: BackendProperty) =>
+          mapBackendPropertyToItem(p, storageBaseUrl, favs)
+        );
+
+        setProperties(mapped);
+        setPage(res.data.current_page || targetPage);
+        setLastPage(res.data.last_page || 1);
+        setTotalItems(res.data.total ?? mapped.length);
+      } catch {
+        setErrorMsg('Erreur de connexion au serveur. Veuillez réessayer.');
+      } finally {
+        if (mode === 'initial') setLoading(false);
+        if (mode === 'paginate') setPageLoading(false);
       }
-
-      const mapped = (res.data.data || []).map((p: BackendProperty) =>
-        mapBackendPropertyToItem(p, storageBaseUrl, favs)
-      );
-
-      setPage(res.data.current_page || targetPage);
-      setLastPage(res.data.last_page || 1);
-      setProperties((prev) => (replace ? mapped : [...prev, ...mapped]));
     },
     [selectedCategory, selectedTransaction, debouncedSearch, storageBaseUrl]
   );
 
+  // Recharge systématiquement page 1 à chaque changement de filtre / recherche
   useEffect(() => {
-    let active = true;
-    const load = async () => {
-      setLoading(true);
-      await fetchFeed(1, true);
-      if (active) setLoading(false);
-    };
-    void load();
+    void fetchFeedPage(1, 'initial');
     void refreshUnreadCount();
-    return () => {
-      active = false;
-    };
-  }, [fetchFeed, refreshUnreadCount]);
+  }, [fetchFeedPage, refreshUnreadCount]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([fetchFeed(1, true), refreshUnreadCount()]);
+    await Promise.all([fetchFeedPage(page, 'refresh'), refreshUnreadCount()]);
     setRefreshing(false);
   };
 
-  const handleLoadMore = async () => {
-    if (loadingMore || loading || page >= lastPage) return;
-    setLoadingMore(true);
-    await fetchFeed(page + 1, false);
-    setLoadingMore(false);
+  const handleGoToPage = async (targetPage: number) => {
+    if (pageLoading || loading || targetPage < 1 || targetPage > lastPage || targetPage === page) {
+      return;
+    }
+    await fetchFeedPage(targetPage, 'paginate');
+    scrollRef.current?.scrollTo({ y: 0, animated: true });
   };
 
   const handleToggleFavorite = async (id: string) => {
     const next = await favoritesStorage.toggle(id);
-    setFavoriteIds(next);
     setProperties((prev) =>
       prev.map((item) => (item.id === id ? { ...item, isFavorite: next.has(id) } : item))
     );
@@ -175,12 +210,138 @@ function AuthenticatedCatalog() {
     router.push(`/property/${property.id}` as any);
   };
 
-  const cardWidthPercent =
-    gridColumns === 3 ? '31.8%' : gridColumns === 2 ? '48.5%' : '100%';
+  const handleResetFilters = () => {
+    setSelectedCategory('tous');
+    setSelectedTransaction('tous');
+    setSearchQuery('');
+  };
+
+  const paginationSlots = useMemo(() => buildPaginationSlots(page, lastPage), [page, lastPage]);
+
+  const cardWidth = getGridItemWidth(gridColumns, 16);
+
+  const mobileNavItems = useMemo<MobileNavItem[]>(() => {
+    const list: MobileNavItem[] = [
+      {
+        key: 'publish',
+        label: 'Publier un bien',
+        subtitle: 'Déposer une annonce immobilière',
+        icon: <PlusCircle size={18} color={theme.primary} strokeWidth={2.2} />,
+        accent: true,
+        onPress: () => router.push('/publish' as any),
+      },
+      {
+        key: 'explore',
+        label: 'Recherche avancée',
+        subtitle: 'Commune, budget, surface, chambres',
+        icon: <Search size={18} color={theme.primary} strokeWidth={2.2} />,
+        onPress: () => router.push('/explore' as any),
+      },
+    ];
+
+    if (isAgentMobilier) {
+      list.push({
+        key: 'agent-space',
+        label: 'Espace Agent',
+        subtitle: 'Mes biens, mes visites, mon profil',
+        icon: <Briefcase size={18} color={theme.primary} strokeWidth={2.2} />,
+        onPress: () => router.push('/agent-space' as any),
+      });
+    } else {
+      list.push({
+        key: 'my-properties',
+        label: 'Mes annonces',
+        subtitle: 'Gérer mes biens publiés',
+        icon: <Building2 size={18} color={theme.primary} strokeWidth={2.2} />,
+        onPress: () => router.push('/my-properties' as any),
+      });
+      if (isClient) {
+        list.push({
+          key: 'search-requests',
+          label: 'Mes recherches',
+          subtitle: 'Alertes & demandes sur mesure',
+          icon: <ArrowRight size={18} color={theme.primary} strokeWidth={2.2} />,
+          onPress: () => router.push('/search-requests' as any),
+        });
+      }
+      list.push(
+        {
+          key: 'visits',
+          label: 'Mes visites',
+          subtitle: 'Suivi de mes visites physiques',
+          icon: <Calendar size={18} color={theme.primary} strokeWidth={2.2} />,
+          onPress: () => router.push('/visits' as any),
+        },
+        {
+          key: 'transactions',
+          label: 'Paiements & Reçus',
+          subtitle: 'Quittances officielles Kkiapay',
+          icon: <Sparkles size={18} color={theme.primary} strokeWidth={2.2} />,
+          onPress: () => router.push('/transactions' as any),
+        },
+        {
+          key: 'profile',
+          label: 'Mon Profil',
+          subtitle: 'Informations personnelles & photo',
+          icon: <User size={18} color={theme.primary} strokeWidth={2.2} />,
+          onPress: () => router.push('/profile' as any),
+        }
+      );
+    }
+
+    list.push({
+      key: 'notifications',
+      label: 'Notifications',
+      subtitle: 'Alertes en temps réel',
+      badge: unreadNotificationsCount || undefined,
+      icon: <Bell size={18} color={theme.primary} strokeWidth={2.2} />,
+      onPress: () => router.push('/notifications' as any),
+    });
+
+    if (isAdminStaff) {
+      list.push({
+        key: 'admin',
+        label: 'Back-Office Admin',
+        subtitle: 'Modération, visites & gouvernance',
+        icon: <Settings size={18} color="#D97706" strokeWidth={2.2} />,
+        onPress: () => router.push('/admin' as any),
+      });
+    }
+
+    list.push({
+      key: 'cgu',
+      label: 'CGU & Tarifs',
+      subtitle: 'Conditions générales d’utilisation',
+      icon: <FileText size={18} color={theme.textSecondary} strokeWidth={2.2} />,
+      onPress: () => router.push('/cgu' as any),
+    });
+
+    return list;
+  }, [isAgentMobilier, isClient, isAdminStaff, unreadNotificationsCount, theme.primary, theme.textSecondary]);
 
   return (
     <SafeAreaView edges={['top']} style={[styles.container, { backgroundColor: theme.background }]}>
+      <MobileNavDrawer
+        visible={mobileMenuOpen}
+        onClose={() => setMobileMenuOpen(false)}
+        title="E-Mobilier"
+        subtitle={user?.name || 'Mon espace'}
+        items={mobileNavItems}
+        isDark={isDark}
+        onToggleTheme={() => {
+          void toggleTheme();
+        }}
+        footerAction={{
+          label: 'Se déconnecter',
+          danger: true,
+          onPress: () => {
+            void logout();
+          },
+        }}
+      />
+
       <ScrollView
+        ref={scrollRef}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={theme.primary} />
@@ -189,45 +350,66 @@ function AuthenticatedCatalog() {
           styles.scrollContent,
           {
             paddingHorizontal: horizontalPadding,
-            paddingBottom: BottomTabInset + insets.bottom + 84,
+            paddingBottom: BottomTabInset + insets.bottom + 88,
           },
         ]}>
         <View style={[styles.innerWrap, { maxWidth: contentMaxWidth }]}>
           {/* Top Navigation Bar */}
           <View style={styles.brandRow}>
-            <View style={styles.brandTitleGroup}>
-              <View style={styles.titleWithFlag}>
-                <Building2 size={20} color={theme.primary} strokeWidth={2.2} />
-                <Text numberOfLines={1} style={[styles.brandName, { color: theme.primary }]}>
-                  E-Mobilier
-                </Text>
-                <View style={[styles.flagChip, { backgroundColor: theme.backgroundElement }]}>
-                  <Text style={[styles.flagText, { color: theme.text }]}>BÉNIN</Text>
-                </View>
-              </View>
-              <Text numberOfLines={1} style={[styles.brandSubtitle, { color: theme.textSecondary }]}>
-                Bonjour {user?.prenom || user?.name?.split(' ')[0] || 'Bienvenue'} • Catalogue certifié
-              </Text>
-            </View>
-
-            <View style={styles.headerActions}>
+            {!isDesktop && (
               <Pressable
-                onPress={() => {
-                  void toggleTheme();
-                }}
+                accessibilityLabel="Ouvrir le menu"
+                onPress={() => setMobileMenuOpen(true)}
                 style={[
                   styles.iconCircleBtn,
                   { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder },
                 ]}
                 hitSlop={6}>
-                {isDark ? (
-                  <Moon size={17} color={theme.text} strokeWidth={2} />
-                ) : (
-                  <Sun size={17} color={theme.text} strokeWidth={2} />
-                )}
+                <Menu size={19} color={theme.text} strokeWidth={2.2} />
               </Pressable>
+            )}
+
+            <View style={styles.brandTitleGroup}>
+              <View style={styles.titleWithFlag}>
+                <Building2 size={isSmallMobile ? 18 : 20} color={theme.primary} strokeWidth={2.2} />
+                <Text
+                  numberOfLines={1}
+                  style={[styles.brandName, { color: theme.primary }, isSmallMobile && { fontSize: 18 }]}>
+                  E-Mobilier
+                </Text>
+                {!isSmallMobile && (
+                  <View style={[styles.flagChip, { backgroundColor: theme.backgroundElement }]}>
+                    <Text style={[styles.flagText, { color: theme.text }]}>FEED</Text>
+                  </View>
+                )}
+              </View>
+              <Text numberOfLines={1} style={[styles.brandSubtitle, { color: theme.textSecondary }]}>
+                Bonjour {user?.prenom || user?.name?.split(' ')[0] || 'Bienvenue'} • Biens immobiliers publiés
+              </Text>
+            </View>
+
+            <View style={styles.headerActions}>
+              {!isSmallMobile && (
+                <Pressable
+                  accessibilityLabel="Changer de thème"
+                  onPress={() => {
+                    void toggleTheme();
+                  }}
+                  style={[
+                    styles.iconCircleBtn,
+                    { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder },
+                  ]}
+                  hitSlop={6}>
+                  {isDark ? (
+                    <Moon size={17} color={theme.text} strokeWidth={2} />
+                  ) : (
+                    <Sun size={17} color={theme.text} strokeWidth={2} />
+                  )}
+                </Pressable>
+              )}
 
               <Pressable
+                accessibilityLabel="Notifications"
                 onPress={() => router.push('/notifications' as any)}
                 style={[
                   styles.iconCircleBtn,
@@ -244,104 +426,131 @@ function AuthenticatedCatalog() {
                 )}
               </Pressable>
 
-              <Pressable
-                onPress={() => {
-                  void logout();
-                }}
-                style={[
-                  styles.logoutPill,
-                  { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder },
-                ]}
-                hitSlop={6}>
-                <LogOut size={15} color="#DC2626" strokeWidth={2} />
-                {!isMobile && (
+              {isDesktop && (
+                <Pressable
+                  onPress={() => {
+                    void logout();
+                  }}
+                  style={[
+                    styles.logoutPill,
+                    { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder },
+                  ]}
+                  hitSlop={6}>
+                  <LogOut size={15} color="#DC2626" strokeWidth={2} />
                   <Text style={styles.logoutPillText}>Déconnexion</Text>
-                )}
-              </Pressable>
+                </Pressable>
+              )}
             </View>
           </View>
 
-          {/* Compact Modern Hero */}
-          <View style={[styles.heroBanner, { backgroundColor: theme.navy }]}>
-            <View style={{ flex: 1, gap: 6 }}>
-              <View style={styles.heroBadgeRow}>
-                <Sparkles size={13} color="#FDE68A" strokeWidth={2.2} />
-                <Text style={styles.heroBadge}>CATALOGUE IMMOBILIER EN TEMPS RÉEL</Text>
-              </View>
-              <Text style={[styles.heroTitle, !isMobile && { fontSize: 24 }]}>
-                Trouvez le bien idéal ou publiez votre annonce
+          {/* Compact Role-Aware Action Strip (Desktop: full horizontal bar | Mobile/Tablet: concise 2-CTA strip + Hamburger menu) */}
+          <View style={[styles.quickStrip, { backgroundColor: theme.navy }]}>
+            <Pressable
+              onPress={() => router.push('/publish' as any)}
+              style={[
+                styles.quickActionBtn,
+                { backgroundColor: theme.primary },
+                isMobile && { flex: 1, justifyContent: 'center' },
+              ]}>
+              <PlusCircle size={15} color="#FFFFFF" strokeWidth={2.2} />
+              <Text numberOfLines={1} style={styles.quickActionText}>
+                Publier un bien
               </Text>
-              <Text style={styles.heroSub}>
-                Explorez nos biens vérifiés à louer ou à vendre, suivez vos annonces et planifiez vos visites.
-              </Text>
-            </View>
+            </Pressable>
 
-            <View style={styles.quickNavGrid}>
-              <Pressable
-                onPress={() => router.push('/publish' as any)}
-                style={[styles.quickActionBtn, { backgroundColor: theme.primary }]}>
-                <PlusCircle size={15} color="#FFFFFF" strokeWidth={2.2} />
-                <Text style={styles.quickActionText}>Publier une annonce</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => router.push('/explore' as any)}
-                style={[styles.quickActionBtn, styles.quickActionOutline]}>
-                <Search size={15} color="#FFFFFF" strokeWidth={2} />
-                <Text style={styles.quickActionText}>Recherche avancée</Text>
-              </Pressable>
-              {isAgentMobilier ? (
+            {isDesktop ? (
+              <>
                 <Pressable
-                  onPress={() => router.push('/agent' as any)}
+                  onPress={() => router.push('/explore' as any)}
                   style={[styles.quickActionBtn, styles.quickActionOutline]}>
-                  <Building2 size={15} color="#FDE68A" strokeWidth={2} />
-                  <Text style={[styles.quickActionText, { color: '#FDE68A' }]}>Espace Agent</Text>
+                  <Search size={15} color="#FFFFFF" strokeWidth={2} />
+                  <Text style={styles.quickActionText}>Filtres avancés</Text>
                 </Pressable>
-              ) : (
-                <Pressable
-                  onPress={() => router.push('/my-properties' as any)}
-                  style={[styles.quickActionBtn, styles.quickActionOutline]}>
-                  <Building2 size={15} color="#FFFFFF" strokeWidth={2} />
-                  <Text style={styles.quickActionText}>Mes annonces</Text>
-                </Pressable>
-              )}
-              {isClient && (
-                <Pressable
-                  onPress={() => router.push('/search-requests' as any)}
-                  style={[styles.quickActionBtn, styles.quickActionOutline]}>
-                  <ArrowRight size={15} color="#FFFFFF" strokeWidth={2} />
-                  <Text style={styles.quickActionText}>Mes recherches</Text>
-                </Pressable>
-              )}
+
+                {isAgentMobilier ? (
+                  <Pressable
+                    onPress={() => router.push('/agent-space' as any)}
+                    style={[styles.quickActionBtn, styles.quickActionOutline]}>
+                    <Briefcase size={15} color="#FDE68A" strokeWidth={2} />
+                    <Text style={[styles.quickActionText, { color: '#FDE68A' }]}>Espace Agent</Text>
+                  </Pressable>
+                ) : (
+                  <>
+                    <Pressable
+                      onPress={() => router.push('/my-properties' as any)}
+                      style={[styles.quickActionBtn, styles.quickActionOutline]}>
+                      <Building2 size={15} color="#FFFFFF" strokeWidth={2} />
+                      <Text style={styles.quickActionText}>Mes annonces</Text>
+                    </Pressable>
+                    {isClient && (
+                      <Pressable
+                        onPress={() => router.push('/search-requests' as any)}
+                        style={[styles.quickActionBtn, styles.quickActionOutline]}>
+                        <ArrowRight size={15} color="#FFFFFF" strokeWidth={2} />
+                        <Text style={styles.quickActionText}>Mes recherches</Text>
+                      </Pressable>
+                    )}
+                    <Pressable
+                      onPress={() => router.push('/visits' as any)}
+                      style={[styles.quickActionBtn, styles.quickActionOutline]}>
+                      <Calendar size={15} color="#FFFFFF" strokeWidth={2} />
+                      <Text style={styles.quickActionText}>Mes visites</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => router.push('/transactions' as any)}
+                      style={[styles.quickActionBtn, styles.quickActionOutline]}>
+                      <Sparkles size={15} color="#FFFFFF" strokeWidth={2} />
+                      <Text style={styles.quickActionText}>Paiements &amp; Reçus</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => router.push('/profile' as any)}
+                      style={[styles.quickActionBtn, styles.quickActionOutline]}>
+                      <User size={15} color="#FFFFFF" strokeWidth={2} />
+                      <Text style={styles.quickActionText}>Mon Profil</Text>
+                    </Pressable>
+                  </>
+                )}
+
+                {isAdminStaff && (
+                  <Pressable
+                    onPress={() => router.push('/admin' as any)}
+                    style={[styles.quickActionBtn, styles.quickActionOutline]}>
+                    <Settings size={15} color="#FDE68A" strokeWidth={2} />
+                    <Text style={[styles.quickActionText, { color: '#FDE68A' }]}>Back-Office Admin</Text>
+                  </Pressable>
+                )}
+              </>
+            ) : isAdminStaff ? (
               <Pressable
-                onPress={() => router.push('/visits' as any)}
-                style={[styles.quickActionBtn, styles.quickActionOutline]}>
-                <Calendar size={15} color="#FFFFFF" strokeWidth={2} />
-                <Text style={styles.quickActionText}>Mes visites</Text>
+                onPress={() => router.push('/admin' as any)}
+                style={[styles.quickActionBtn, styles.quickActionOutline, isMobile && { flex: 1, justifyContent: 'center' }]}>
+                <Settings size={15} color="#FDE68A" strokeWidth={2} />
+                <Text numberOfLines={1} style={[styles.quickActionText, { color: '#FDE68A' }]}>
+                  Admin
+                </Text>
               </Pressable>
+            ) : isAgentMobilier ? (
               <Pressable
-                onPress={() => router.push('/transactions' as any)}
-                style={[styles.quickActionBtn, styles.quickActionOutline]}>
-                <Sparkles size={15} color="#FFFFFF" strokeWidth={2} />
-                <Text style={styles.quickActionText}>Paiements &amp; Reçus</Text>
+                onPress={() => router.push('/agent-space' as any)}
+                style={[styles.quickActionBtn, styles.quickActionOutline, isMobile && { flex: 1, justifyContent: 'center' }]}>
+                <Briefcase size={15} color="#FDE68A" strokeWidth={2} />
+                <Text numberOfLines={1} style={[styles.quickActionText, { color: '#FDE68A' }]}>
+                  Espace Agent
+                </Text>
               </Pressable>
+            ) : (
               <Pressable
                 onPress={() => router.push('/profile' as any)}
-                style={[styles.quickActionBtn, styles.quickActionOutline]}>
-                <Settings size={15} color="#FFFFFF" strokeWidth={2} />
-                <Text style={styles.quickActionText}>Mon Profil</Text>
+                style={[styles.quickActionBtn, styles.quickActionOutline, isMobile && { flex: 1, justifyContent: 'center' }]}>
+                <User size={15} color="#FFFFFF" strokeWidth={2} />
+                <Text numberOfLines={1} style={styles.quickActionText}>
+                  Mon Profil
+                </Text>
               </Pressable>
-              {isAdminStaff && (
-                <Pressable
-                  onPress={() => router.push('/admin' as any)}
-                  style={[styles.quickActionBtn, styles.quickActionOutline]}>
-                  <Settings size={15} color="#FDE68A" strokeWidth={2} />
-                  <Text style={[styles.quickActionText, { color: '#FDE68A' }]}>Admin</Text>
-                </Pressable>
-              )}
-            </View>
+            )}
           </View>
 
-          {/* Search & Filters Bar */}
+          {/* Search & Quick Category / Transaction Filters */}
           <View
             style={[
               styles.filterCard,
@@ -355,7 +564,7 @@ function AuthenticatedCatalog() {
               <Search size={18} color={theme.textSecondary} strokeWidth={2} />
               <TextInput
                 style={[styles.searchInput, { color: theme.text }]}
-                placeholder="Rechercher commune, quartier, villa, parcelle..."
+                placeholder="Rechercher par commune, quartier, maison, parcelle, chambre..."
                 placeholderTextColor={theme.textSecondary}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
@@ -399,16 +608,17 @@ function AuthenticatedCatalog() {
                 })}
               </ScrollView>
 
-              <View style={[styles.txSegmented, { backgroundColor: theme.backgroundElement }]}>
+              <View style={[styles.txSegmented, { backgroundColor: theme.backgroundElement }, isMobile && { width: '100%' }]}>
                 {(['tous', 'location', 'vente'] as const).map((tr) => {
                   const active = selectedTransaction === tr;
-                  const label = tr === 'tous' ? 'Tous' : tr === 'location' ? 'Louer' : 'Vendre';
+                  const label = tr === 'tous' ? 'Tous' : tr === 'location' ? 'Location' : 'Vente';
                   return (
                     <Pressable
                       key={tr}
                       onPress={() => setSelectedTransaction(tr)}
                       style={[
                         styles.txBtn,
+                        isMobile && { flex: 1, alignItems: 'center' },
                         active && { backgroundColor: theme.cardBackground },
                       ]}>
                       <Text
@@ -426,71 +636,47 @@ function AuthenticatedCatalog() {
             </View>
           </View>
 
-          {/* Featured Horizontal Carousel */}
-          {properties.length > 1 && (
-            <View style={styles.featuredBlock}>
-              <View style={styles.resultsRow}>
-                <Text style={[styles.sectionTitle, { color: theme.text }]}>
-                  Propriétés en vedette
-                </Text>
-                <Pressable
-                  onPress={() => router.push('/explore' as any)}
-                  style={styles.inlineLinkRow}>
-                  <Text style={[styles.resultsLink, { color: theme.primary }]}>
-                    Filtres avancés
-                  </Text>
-                  <ArrowRight size={14} color={theme.primary} strokeWidth={2.2} />
-                </Pressable>
-              </View>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.featuredContent}>
-                {properties.slice(0, 6).map((item) => (
-                  <Pressable
-                    key={`featured-${item.id}`}
-                    onPress={() => handleOpenProperty(item)}
-                    style={[
-                      styles.featuredCard,
-                      { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder },
-                    ]}>
-                    <Image source={item.image} style={styles.featuredImage} contentFit="cover" />
-                    <View style={styles.featuredCardBody}>
-                      <Text numberOfLines={1} style={[styles.featuredTitle, { color: theme.text }]}>
-                        {item.title}
-                      </Text>
-                      <Text
-                        numberOfLines={1}
-                        style={[styles.featuredLocation, { color: theme.textSecondary }]}>
-                        {item.location.commune}
-                        {item.location.quartier ? ` • ${item.location.quartier}` : ''}
-                      </Text>
-                      <Text numberOfLines={1} style={[styles.featuredPrice, { color: theme.primary }]}>
-                        {item.priceFormatted}
-                      </Text>
-                    </View>
-                  </Pressable>
-                ))}
-              </ScrollView>
-            </View>
-          )}
-
-          {/* Main Responsive Grid */}
+          {/* Feed Heading & Counter */}
           <View style={styles.resultsRow}>
             <Text style={[styles.sectionTitle, { color: theme.text }]}>
-              {selectedCategory === 'tous' ? 'Tous les biens disponibles' : `Catégorie : ${selectedCategory}`}
+              {selectedCategory === 'tous'
+                ? 'Feed des biens immobiliers publiés'
+                : `Biens publiés — ${selectedCategory}`}
             </Text>
             <Text style={[styles.resultsCount, { color: theme.textSecondary }]}>
-              {properties.length} bien{properties.length > 1 ? 's' : ''}
+              {totalItems} bien{totalItems > 1 ? 's' : ''}
+              {lastPage > 1 ? ` • Page ${page}/${lastPage}` : ''}
             </Text>
           </View>
 
+          {/* Feed Content States */}
           {loading ? (
             <View style={styles.emptyContainer}>
               <ActivityIndicator size="large" color={theme.primary} />
               <Text style={[styles.emptySubtitle, { color: theme.textSecondary }]}>
-                Chargement du catalogue E-Mobilier...
+                Chargement des biens immobiliers publiés...
               </Text>
+            </View>
+          ) : errorMsg ? (
+            <View
+              style={[
+                styles.emptyContainer,
+                {
+                  backgroundColor: theme.cardBackground,
+                  borderColor: '#FECACA',
+                  borderWidth: 1,
+                  borderRadius: 20,
+                },
+              ]}>
+              <Text style={[styles.emptyTitle, { color: '#B91C1C' }]}>
+                Erreur de chargement du feed
+              </Text>
+              <Text style={[styles.emptySubtitle, { color: theme.textSecondary }]}>{errorMsg}</Text>
+              <Pressable
+                onPress={() => void fetchFeedPage(page, 'initial')}
+                style={[styles.retryBtn, { backgroundColor: theme.primary }]}>
+                <Text style={styles.retryText}>Réessayer</Text>
+              </Pressable>
             </View>
           ) : properties.length === 0 ? (
             <View
@@ -504,29 +690,42 @@ function AuthenticatedCatalog() {
                 },
               ]}>
               <Text style={[styles.emptyTitle, { color: theme.text }]}>
-                {errorMsg ? 'Erreur de chargement' : 'Aucun bien ne correspond'}
+                Aucun bien immobilier disponible
               </Text>
               <Text style={[styles.emptySubtitle, { color: theme.textSecondary }]}>
-                {errorMsg || 'Essayez d’autres filtres ou déposez une demande de recherche personnalisée.'}
+                {selectedCategory !== 'tous' || selectedTransaction !== 'tous' || debouncedSearch
+                  ? 'Aucun bien publié ne correspond à vos filtres actuels.'
+                  : "Aucun bien n'est publié dans le catalogue pour le moment."}
               </Text>
-              <View style={{ flexDirection: 'row', gap: 10, marginTop: 6 }}>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center', marginTop: 6 }}>
+                {(selectedCategory !== 'tous' || selectedTransaction !== 'tous' || debouncedSearch) && (
+                  <Pressable
+                    onPress={handleResetFilters}
+                    style={[styles.retryBtn, { backgroundColor: theme.primary }]}>
+                    <Text style={styles.retryText}>Réinitialiser les filtres</Text>
+                  </Pressable>
+                )}
                 <Pressable
-                  onPress={handleRefresh}
-                  style={[styles.retryBtn, { backgroundColor: theme.primary }]}>
-                  <Text style={styles.retryText}>Actualiser</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => router.push('/search-requests' as any)}
+                  onPress={() => void fetchFeedPage(1, 'initial')}
                   style={[styles.retryBtn, { backgroundColor: theme.navy }]}>
-                  <Text style={styles.retryText}>Déposer une demande</Text>
+                  <Text style={styles.retryText}>Actualiser</Text>
                 </Pressable>
               </View>
             </View>
           ) : (
             <>
-              <View style={styles.cardsGrid}>
+              {pageLoading && (
+                <View style={styles.pageLoaderRow}>
+                  <ActivityIndicator size="small" color={theme.primary} />
+                  <Text style={{ color: theme.textSecondary, fontSize: 13, fontWeight: '600' }}>
+                    Chargement de la page...
+                  </Text>
+                </View>
+              )}
+
+              <View style={[styles.cardsGrid, pageLoading && { opacity: 0.6 }]}>
                 {properties.map((item) => (
-                  <View key={item.id} style={{ width: cardWidthPercent as any }}>
+                  <View key={item.id} style={{ width: cardWidth }}>
                     <PropertyCard
                       property={item}
                       onPressCard={handleOpenProperty}
@@ -537,19 +736,84 @@ function AuthenticatedCatalog() {
                 ))}
               </View>
 
-              {page < lastPage && (
-                <Pressable
-                  onPress={handleLoadMore}
-                  disabled={loadingMore}
-                  style={[styles.loadMoreBtn, { borderColor: theme.primary }]}>
-                  {loadingMore ? (
-                    <ActivityIndicator color={theme.primary} />
-                  ) : (
-                    <Text style={{ color: theme.primary, fontWeight: '800', fontSize: 14 }}>
-                      Charger plus d'annonces
-                    </Text>
-                  )}
-                </Pressable>
+              {/* Backend-Connected Page-by-Page Pagination */}
+              {lastPage > 1 && (
+                <View
+                  style={[
+                    styles.paginationCard,
+                    { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder },
+                  ]}>
+                  <Text style={[styles.paginationInfo, { color: theme.textSecondary }]}>
+                    Page {page} sur {lastPage} ({totalItems} bien{totalItems > 1 ? 's' : ''} au total)
+                  </Text>
+
+                  <View style={styles.paginationControls}>
+                    <Pressable
+                      accessibilityLabel="Page précédente"
+                      onPress={() => void handleGoToPage(page - 1)}
+                      disabled={page <= 1 || pageLoading}
+                      style={[
+                        styles.pageNavBtn,
+                        {
+                          borderColor: theme.cardBorder,
+                          backgroundColor: theme.backgroundElement,
+                          opacity: page <= 1 || pageLoading ? 0.45 : 1,
+                        },
+                      ]}>
+                      <ChevronLeft size={16} color={theme.text} strokeWidth={2.3} />
+                      {!isSmallMobile && <Text style={[styles.pageNavText, { color: theme.text }]}>Précédent</Text>}
+                    </Pressable>
+
+                    <View style={styles.pageNumbersRow}>
+                      {paginationSlots.map((slot, idx) =>
+                        slot === 'ellipsis' ? (
+                          <Text
+                            key={`dots-${idx}`}
+                            style={{ color: theme.textSecondary, paddingHorizontal: 4, fontWeight: '700' }}>
+                            …
+                          </Text>
+                        ) : (
+                          <Pressable
+                            key={`page-${slot}`}
+                            onPress={() => void handleGoToPage(slot)}
+                            disabled={pageLoading}
+                            style={[
+                              styles.pageNumberBtn,
+                              {
+                                backgroundColor: slot === page ? theme.primary : theme.backgroundElement,
+                                borderColor: slot === page ? theme.primary : theme.cardBorder,
+                              },
+                            ]}>
+                            <Text
+                              style={{
+                                color: slot === page ? '#FFFFFF' : theme.text,
+                                fontSize: 13,
+                                fontWeight: '800',
+                              }}>
+                              {slot}
+                            </Text>
+                          </Pressable>
+                        )
+                      )}
+                    </View>
+
+                    <Pressable
+                      accessibilityLabel="Page suivante"
+                      onPress={() => void handleGoToPage(page + 1)}
+                      disabled={page >= lastPage || pageLoading}
+                      style={[
+                        styles.pageNavBtn,
+                        {
+                          borderColor: theme.cardBorder,
+                          backgroundColor: theme.backgroundElement,
+                          opacity: page >= lastPage || pageLoading ? 0.45 : 1,
+                        },
+                      ]}>
+                      {!isSmallMobile && <Text style={[styles.pageNavText, { color: theme.text }]}>Suivant</Text>}
+                      <ChevronRight size={16} color={theme.text} strokeWidth={2.3} />
+                    </Pressable>
+                  </View>
+                </View>
               )}
             </>
           )}
@@ -562,7 +826,7 @@ function AuthenticatedCatalog() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scrollContent: { paddingTop: Spacing.two },
-  innerWrap: { width: '100%', alignSelf: 'center', gap: 16 },
+  innerWrap: { width: '100%', alignSelf: 'center', gap: 14 },
   brandRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -609,16 +873,9 @@ const styles = StyleSheet.create({
   },
   logoutPillText: { color: '#DC2626', fontSize: 12, fontWeight: '800' },
 
-  heroBanner: {
-    borderRadius: 22,
-    padding: 20,
-    gap: 14,
-  },
-  heroBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  heroBadge: { color: '#FDE68A', fontSize: 11, fontWeight: '800', letterSpacing: 0.7 },
-  heroTitle: { color: '#FFFFFF', fontSize: 20, fontWeight: '900' },
-  heroSub: { color: '#CBD5E1', fontSize: 13, lineHeight: 19 },
-  quickNavGrid: {
+  quickStrip: {
+    borderRadius: 18,
+    padding: 12,
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
@@ -627,9 +884,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 7,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 12,
+    paddingHorizontal: 13,
+    paddingVertical: 9,
+    borderRadius: 11,
   },
   quickActionOutline: {
     backgroundColor: 'rgba(255,255,255,0.1)',
@@ -684,44 +941,76 @@ const styles = StyleSheet.create({
     borderRadius: 9,
   },
 
-  featuredBlock: { gap: 10 },
-  featuredContent: { gap: 12, paddingBottom: 4 },
-  featuredCard: {
-    width: 248,
-    borderRadius: 16,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
-  featuredImage: { width: '100%', height: 132 },
-  featuredCardBody: { padding: 12, gap: 3 },
-  featuredTitle: { fontSize: 14, fontWeight: '800' },
-  featuredLocation: { fontSize: 12 },
-  featuredPrice: { fontSize: 14, fontWeight: '900', marginTop: 2 },
-
   resultsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
   },
-  inlineLinkRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   sectionTitle: { fontSize: 18, fontWeight: '900' },
   resultsCount: { fontSize: 13, fontWeight: '600' },
-  resultsLink: { fontSize: 13, fontWeight: '800' },
+  pageLoaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 6,
+  },
   cardsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 16,
   },
-  loadMoreBtn: {
-    borderWidth: 1.5,
-    borderRadius: 14,
-    paddingVertical: 13,
+  paginationCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 14,
+    gap: 10,
     alignItems: 'center',
-    marginTop: 4,
+    marginTop: 6,
+  },
+  paginationInfo: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  paginationControls: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  pageNavBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  pageNavText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  pageNumbersRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  pageNumberBtn: {
+    minWidth: 36,
+    height: 36,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
   },
   emptyContainer: { alignItems: 'center', paddingVertical: 40, paddingHorizontal: 20, gap: 10 },
-  emptyTitle: { fontSize: 17, fontWeight: '800' },
-  emptySubtitle: { fontSize: 14, textAlign: 'center' },
+  emptyTitle: { fontSize: 17, fontWeight: '800', textAlign: 'center' },
+  emptySubtitle: { fontSize: 14, textAlign: 'center', maxWidth: 460 },
   retryBtn: { paddingHorizontal: 16, paddingVertical: 11, borderRadius: 12 },
   retryText: { color: '#FFFFFF', fontWeight: '700', fontSize: 13 },
 });

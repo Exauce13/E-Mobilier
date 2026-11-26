@@ -279,8 +279,8 @@ export default function MyPropertiesScreen() {
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
                   <MapPin size={13} color={theme.primary} strokeWidth={2.2} />
                   <Text style={[styles.loc, { color: theme.textSecondary, flex: 1 }]}>
-                    {[item.quartier, item.arrondissement, item.commune].filter(Boolean).join(', ')} •{' '}
-                    {item.surface} m²
+                    {[item.quartier, item.arrondissement, item.commune].filter(Boolean).join(', ')}
+                    {item.surface && Number(item.surface) > 0 ? ` • ${item.surface} m²` : ''}
                   </Text>
                 </View>
                 <Text style={[styles.price, { color: theme.primary }]}>
@@ -400,17 +400,19 @@ export default function MyPropertiesScreen() {
                 value={editQuartier}
                 onChangeText={setEditQuartier}
               />
-              <TextInput
-                style={[
-                  styles.input,
-                  { color: theme.text, borderColor: theme.cardBorder, backgroundColor: theme.backgroundElement },
-                ]}
-                placeholder="Surface (m²)"
-                placeholderTextColor={theme.textSecondary}
-                keyboardType="numeric"
-                value={editSurface}
-                onChangeText={setEditSurface}
-              />
+              {!(editing?.type === 'chambre' && editing?.transaction_type === 'location') && (
+                <TextInput
+                  style={[
+                    styles.input,
+                    { color: theme.text, borderColor: theme.cardBorder, backgroundColor: theme.backgroundElement },
+                  ]}
+                  placeholder="Surface (m²)"
+                  placeholderTextColor={theme.textSecondary}
+                  keyboardType="numeric"
+                  value={editSurface}
+                  onChangeText={setEditSurface}
+                />
+              )}
               <TextInput
                 style={[
                   styles.input,

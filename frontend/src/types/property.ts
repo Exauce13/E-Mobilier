@@ -101,7 +101,7 @@ export function mapBackendPropertyToItem(
   if (prop.nombres_chambres && prop.nombres_chambres > 0) {
     tags.push(`${prop.nombres_chambres} ch`);
   }
-  if (prop.surface) {
+  if (prop.surface && Number(prop.surface) > 0) {
     tags.push(`${Math.round(Number(prop.surface))} m²`);
   }
   if (prop.eau_courant) {

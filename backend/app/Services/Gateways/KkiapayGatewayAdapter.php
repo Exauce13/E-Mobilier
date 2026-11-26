@@ -13,15 +13,64 @@ class KkiapayGatewayAdapter implements PaymentGatewayInterface
     protected ?string $publicKey;
     protected ?string $privateKey;
     protected ?string $secretKey;
+    protected ?string $webhookSecret;
     protected bool $sandbox;
 
     public function __construct()
     {
-        $this->sandbox = (bool) config('services.kkiapay.sandbox', env('KKIAPAY_SANDBOX', true));
-        $this->baseUrl = rtrim((string) config('services.kkiapay.base_url', env('KKIAPAY_BASE_URL', 'https://api-sandbox.kkiapay.me')), '/');
-        $this->publicKey = config('services.kkiapay.public_key', env('KKIAPAY_PUBLIC_KEY'));
-        $this->privateKey = config('services.kkiapay.private_key', env('KKIAPAY_PRIVATE_KEY'));
-        $this->secretKey = config('services.kkiapay.secret_key', env('KKIAPAY_SECRET_KEY'));
+        $this->sandbox = filter_var(config('services.kkiapay.sandbox', true), FILTER_VALIDATE_BOOLEAN);
+        $configuredBaseUrl = trim((string) config('services.kkiapay.base_url', ''));
+        $defaultBaseUrl = $this->sandbox ? 'https://api-sandbox.kkiapay.me' : 'https://api.kkiapay.me';
+
+        // Verrou Sandbox strict : en mode Sandbox, aucun appel ne peut être routé vers la production (api.kkiapay.me).
+        if ($this->sandbox && ($configuredBaseUrl === '' || str_contains(strtolower($configuredBaseUrl), 'api.kkiapay.me'))) {
+            if ($configuredBaseUrl !== '' && str_contains(strtolower($configuredBaseUrl), 'api.kkiapay.me')) {
+                Log::warning('[KKIAPAY_SANDBOX] KKIAPAY_BASE_URL pointait vers la production alors que KKIAPAY_SANDBOX=true. Forçage vers https://api-sandbox.kkiapay.me.');
+            }
+            $this->baseUrl = 'https://api-sandbox.kkiapay.me';
+        } else {
+            $this->baseUrl = rtrim($configuredBaseUrl !== '' ? $configuredBaseUrl : $defaultBaseUrl, '/');
+        }
+
+        $this->publicKey = $this->cleanEnvValue(config('services.kkiapay.public_key'));
+        $this->privateKey = $this->cleanEnvValue(config('services.kkiapay.private_key'));
+        $this->secretKey = $this->cleanEnvValue(config('services.kkiapay.secret_key'));
+        $this->webhookSecret = $this->cleanEnvValue(config('services.kkiapay.webhook_secret')) ?: $this->secretKey;
+    }
+
+    public function isSandbox(): bool
+    {
+        return $this->sandbox;
+    }
+
+    public function getBaseUrl(): string
+    {
+        return $this->baseUrl;
+    }
+
+    /**
+     * Vérifie que des clés de production (pk_ / sk_) ne sont pas utilisées par erreur en mode Sandbox.
+     * Les clés serveur Sandbox Kkiapay utilisent les préfixes tpk_ (Test Private Key) et tsk_ (Test Secret Key).
+     */
+    protected function hasSandboxKeyMismatch(): bool
+    {
+        if (! $this->sandbox) {
+            return false;
+        }
+        $priv = (string) $this->privateKey;
+        $sec = (string) $this->secretKey;
+
+        return str_starts_with($priv, 'pk_') || str_starts_with($sec, 'sk_');
+    }
+
+    protected function cleanEnvValue(mixed $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+        $clean = trim((string) $value, " \t\n\r\0\x0B\"'");
+
+        return $clean !== '' ? $clean : null;
     }
 
     public function getName(): string
@@ -31,191 +80,300 @@ class KkiapayGatewayAdapter implements PaymentGatewayInterface
 
     public function getWidgetConfig(int $amount, string $reason, array $metadata = []): array
     {
+        // IMPORTANT : Seule la clé publique est transmise au frontend. Jamais private_key ni secret_key.
         return [
             'gateway' => $this->getName(),
             'public_key' => $this->publicKey,
             'amount' => $amount,
+            'currency' => 'XOF',
             'reason' => $reason,
             'sandbox' => $this->sandbox,
-            'theme' => config('services.kkiapay.theme', '#0095ff'),
+            'theme' => $this->cleanEnvValue(config('services.kkiapay.theme')) ?: '#0E7C5B',
+            'script_url' => $this->cleanEnvValue(config('services.kkiapay.widget_script')) ?: 'https://cdn.kkiapay.me/k.js',
+            'callback' => $this->cleanEnvValue(config('services.kkiapay.callback_url')) ?: '',
             'metadata' => $metadata,
         ];
     }
 
+    /**
+     * Vérification serveur-à-serveur officielle auprès de Kkiapay :
+     * POST {baseUrl}/api/v1/transactions/status
+     * En-têtes d'authentification : x-api-key (public), x-private-key (private), x-secret-key (secret).
+     *
+     * AUCUN contournement ni fallback hors-ligne ne valide une transaction non confirmée par Kkiapay.
+     */
     public function verifyTransaction(string $transactionId, int $expectedAmount = 0): array
     {
         $transactionId = trim($transactionId);
 
-        if (empty($transactionId)) {
-            return [
-                'success' => false,
-                'amount' => 0,
-                'fee' => 0,
-                'net' => 0,
-                'transaction_id' => '',
-                'payment_method' => null,
-                'message' => 'L\'identifiant de transaction KKiaPay est requis.',
-                'raw' => [],
-            ];
+        if ($transactionId === '') {
+            return $this->failureResult('', 'INVALID_REQUEST', 'L\'identifiant de transaction KKiaPay est requis.', 422);
         }
 
-        // Mode test / environnement de simulation
-        if (app()->environment('testing') || str_starts_with($transactionId, 'TEST_') || str_starts_with($transactionId, 'MOCK_') || str_starts_with($transactionId, 'PAY-')) {
-            $amount = $expectedAmount > 0 ? (float) $expectedAmount : 500.0;
-            $fee = round($amount * 0.015, 2); // 1.5% commission opérateur standard
-            $net = $amount - $fee;
+        if (empty($this->publicKey) || empty($this->privateKey) || empty($this->secretKey)) {
+            Log::error('[KKIAPAY] Clés API serveur incomplètes dans la configuration.');
 
-            return [
-                'success' => true,
-                'amount' => $amount,
-                'fee' => $fee,
-                'net' => $net,
-                'transaction_id' => $transactionId,
-                'payment_method' => 'MTN_MOMO',
-                'message' => 'Transaction validée avec succès (Simulation Test).',
-                'raw' => [
-                    'status' => 'SUCCESS',
-                    'transactionId' => $transactionId,
-                    'amount' => $amount,
-                    'source' => 'MOBILE_MONEY',
-                ],
-            ];
+            return $this->failureResult(
+                $transactionId,
+                'MISCONFIGURED',
+                'La configuration serveur KKiaPay est incomplète (clés API manquantes).',
+                500
+            );
+        }
+
+        if ($this->hasSandboxKeyMismatch()) {
+            Log::error('[KKIAPAY_SANDBOX] Clés Live (pk_/sk_) détectées alors que KKIAPAY_SANDBOX=true. Vérification bloquée.');
+
+            return $this->failureResult(
+                $transactionId,
+                'MISCONFIGURED',
+                'Incohérence de configuration : utilisez exclusivement des clés API Sandbox (tpk_ / tsk_) lorsque KKIAPAY_SANDBOX=true.',
+                500
+            );
         }
 
         try {
-            $apiKey = $this->secretKey ?: $this->privateKey ?: $this->publicKey;
-
             $response = Http::withHeaders([
                 'Accept' => 'application/json',
                 'Content-Type' => 'application/json',
-                'x-api-key' => $apiKey,
+                'x-api-key' => $this->publicKey,
+                'x-private-key' => $this->privateKey,
+                'x-secret-key' => $this->secretKey,
             ])
-            ->timeout(12)
-            ->post("{$this->baseUrl}/api/v1/transactions/verify", [
-                'transactionId' => $transactionId,
-            ]);
+                ->timeout(15)
+                ->post("{$this->baseUrl}/api/v1/transactions/status", [
+                    'transactionId' => $transactionId,
+                ]);
+
+            $httpStatus = $response->status();
+            $data = $response->json();
+            if (! is_array($data)) {
+                $data = [];
+            }
 
             if ($response->successful()) {
-                $data = $response->json();
-                $status = strtoupper($data['status'] ?? '');
-                $amount = (float) ($data['amount'] ?? 0);
-                $fee = round($amount * 0.015, 2);
-                $net = $amount - $fee;
+                $status = strtoupper(trim((string) ($data['status'] ?? $data['state'] ?? '')));
+                $amount = isset($data['amount']) ? (float) $data['amount'] : 0.0;
+                $fee = isset($data['fees']) ? (float) $data['fees'] : round($amount * 0.015, 2);
+                $net = max(0.0, $amount - $fee);
+                $currency = strtoupper(trim((string) ($data['currency'] ?? 'XOF')));
+                $resolvedTxId = (string) ($data['transactionId'] ?? $data['transaction_id'] ?? $transactionId);
+                $paymentMethod = $data['source_common_name'] ?? $data['source'] ?? 'MOBILE_MONEY';
+                $stateData = $this->extractStateReference($data);
 
                 if ($status === 'SUCCESS') {
-                    if ($expectedAmount > 0 && $amount < $expectedAmount) {
+                    if ($currency !== 'XOF') {
                         return [
                             'success' => false,
+                            'gateway_status' => 'INVALID_CURRENCY',
+                            'http_status' => 422,
                             'amount' => $amount,
+                            'currency' => $currency,
                             'fee' => $fee,
                             'net' => $net,
-                            'transaction_id' => $transactionId,
-                            'payment_method' => $data['source'] ?? null,
-                            'message' => "Anomalie financière : montant payé ({$amount} FCFA) inférieur au montant attendu ({$expectedAmount} FCFA).",
+                            'transaction_id' => $resolvedTxId,
+                            'state_data' => $stateData,
+                            'payment_method' => $paymentMethod,
+                            'message' => "Devise invalide retournée par KKiaPay ({$currency} au lieu de XOF).",
+                            'raw' => $data,
+                        ];
+                    }
+
+                    if ($expectedAmount > 0 && (int) round($amount) !== $expectedAmount) {
+                        return [
+                            'success' => false,
+                            'gateway_status' => 'AMOUNT_MISMATCH',
+                            'http_status' => 422,
+                            'amount' => $amount,
+                            'currency' => $currency,
+                            'fee' => $fee,
+                            'net' => $net,
+                            'transaction_id' => $resolvedTxId,
+                            'state_data' => $stateData,
+                            'payment_method' => $paymentMethod,
+                            'message' => "Anomalie financière : montant payé ({$amount} FCFA) différent du montant officiel attendu ({$expectedAmount} FCFA).",
                             'raw' => $data,
                         ];
                     }
 
                     return [
                         'success' => true,
+                        'gateway_status' => 'SUCCESS',
+                        'http_status' => 200,
                         'amount' => $amount,
+                        'currency' => $currency,
                         'fee' => $fee,
                         'net' => $net,
-                        'transaction_id' => $transactionId,
-                        'payment_method' => $data['source'] ?? 'MOBILE_MONEY',
-                        'message' => 'Paiement confirmé par l\'agrégateur KKiaPay.',
+                        'transaction_id' => $resolvedTxId,
+                        'state_data' => $stateData,
+                        'payment_method' => $paymentMethod,
+                        'message' => 'Paiement vérifié et confirmé par les serveurs KKiaPay.',
                         'raw' => $data,
                     ];
                 }
 
+                if ($status === 'PENDING' || $status === 'PROCESSING') {
+                    return [
+                        'success' => false,
+                        'gateway_status' => 'PENDING',
+                        'http_status' => 202,
+                        'amount' => $amount,
+                        'currency' => $currency,
+                        'fee' => 0.0,
+                        'net' => 0.0,
+                        'transaction_id' => $resolvedTxId,
+                        'state_data' => $stateData,
+                        'payment_method' => $paymentMethod,
+                        'message' => 'Le paiement est encore en attente de confirmation auprès de votre opérateur Mobile Money.',
+                        'raw' => $data,
+                    ];
+                }
+
+                $rawReasonCode = strtoupper(trim((string) (
+                    $data['failureCode']
+                    ?? (is_array($data['reason'] ?? null) ? ($data['reason']['code'] ?? '') : '')
+                    ?? ''
+                )));
+                $rawReasonMessage = trim((string) (
+                    $data['failureMessage']
+                    ?? (is_array($data['reason'] ?? null) ? ($data['reason']['message'] ?? '') : '')
+                    ?? (is_string($data['reason'] ?? null) ? $data['reason'] : '')
+                    ?? ''
+                ));
+
+                $mappedStatus = match (true) {
+                    in_array($status, ['CANCELLED', 'CANCELED', 'ABORTED'], true) => 'CANCELLED',
+                    in_array($rawReasonCode, ['INSUFFICIENT_FUND', 'INSUFFICIENT_FUNDS'], true)
+                        || in_array($status, ['INSUFFICIENT_FUND', 'INSUFFICIENT_FUNDS'], true) => 'INSUFFICIENT_FUND',
+                    in_array($rawReasonCode, ['PAYMENT_REFUSED', 'DECLINED', 'REFUSED', 'TRANSACTION_DECLINED'], true)
+                        || in_array($status, ['PAYMENT_REFUSED', 'DECLINED', 'REFUSED'], true) => 'PAYMENT_REFUSED',
+                    in_array($rawReasonCode, ['PROCESSING_ERROR'], true)
+                        || $status === 'PROCESSING_ERROR' => 'PROCESSING_ERROR',
+                    in_array($status, ['REVERTED', 'REFUNDED'], true) => 'REVERTED',
+                    default => ($status !== '' ? ($status === 'FAILURE' ? 'FAILED' : $status) : 'FAILED'),
+                };
+
+                $friendlyMessage = $rawReasonMessage !== ''
+                    ? $rawReasonMessage
+                    : match ($mappedStatus) {
+                        'INSUFFICIENT_FUND' => 'Paiement refusé par KKiaPay : solde Mobile Money insuffisant.',
+                        'PAYMENT_REFUSED' => 'Paiement refusé par l\'opérateur ou la banque.',
+                        'PROCESSING_ERROR' => 'Erreur de traitement Mobile Money lors de la transaction KKiaPay.',
+                        'CANCELLED' => 'Transaction annulée avant confirmation.',
+                        'REVERTED' => 'Transaction annulée ou remboursée par KKiaPay.',
+                        default => "La transaction KKiaPay n'a pas abouti (statut : {$mappedStatus}).",
+                    };
+
                 return [
                     'success' => false,
+                    'gateway_status' => $mappedStatus,
+                    'failure_code' => $rawReasonCode ?: $mappedStatus,
+                    'http_status' => 422,
                     'amount' => $amount,
-                    'fee' => 0,
-                    'net' => 0,
-                    'transaction_id' => $transactionId,
-                    'payment_method' => $data['source'] ?? null,
-                    'message' => "La transaction n'est pas validée (Statut : {$status}).",
+                    'currency' => $currency,
+                    'fee' => 0.0,
+                    'net' => 0.0,
+                    'transaction_id' => $resolvedTxId,
+                    'state_data' => $stateData,
+                    'payment_method' => $paymentMethod,
+                    'message' => $friendlyMessage,
                     'raw' => $data,
                 ];
             }
 
-            return [
-                'success' => false,
-                'amount' => 0,
-                'fee' => 0,
-                'net' => 0,
-                'transaction_id' => $transactionId,
-                'payment_method' => null,
-                'message' => 'Échec de vérification auprès des serveurs KKiaPay.',
-                'raw' => $response->json() ?? [],
-            ];
-        } catch (Exception $e) {
-            Log::error('Exception vérification KKiaPay : ' . $e->getMessage(), ['transaction_id' => $transactionId]);
-
-            // En sandbox local sans sortie internet
-            if ($this->sandbox && app()->environment('local')) {
-                $amount = $expectedAmount > 0 ? (float) $expectedAmount : 500.0;
-                $fee = round($amount * 0.015, 2);
-                return [
-                    'success' => true,
-                    'amount' => $amount,
-                    'fee' => $fee,
-                    'net' => $amount - $fee,
+            if ($httpStatus === 404 || $httpStatus === 400) {
+                Log::warning('[KKIAPAY] Transaction introuvable ou invalide', [
+                    'http_status' => $httpStatus,
                     'transaction_id' => $transactionId,
-                    'payment_method' => 'SANDBOX_FALLBACK',
-                    'message' => 'Paiement validé (Fallback Sandbox).',
-                    'raw' => ['sandbox_fallback' => true],
-                ];
+                    'body' => substr($response->body(), 0, 500),
+                ]);
+
+                return $this->failureResult(
+                    $transactionId,
+                    'NOT_FOUND',
+                    'Transaction introuvable ou invalide auprès de KKiaPay.',
+                    422,
+                    $data
+                );
             }
 
-            return [
-                'success' => false,
-                'amount' => 0,
-                'fee' => 0,
-                'net' => 0,
+            if ($httpStatus === 401 || $httpStatus === 403) {
+                Log::error('[KKIAPAY] Authentification API rejetée', [
+                    'http_status' => $httpStatus,
+                    'transaction_id' => $transactionId,
+                    'body' => substr($response->body(), 0, 300),
+                ]);
+
+                return $this->failureResult(
+                    $transactionId,
+                    'AUTH_ERROR',
+                    'Clés API serveur KKiaPay refusées par la passerelle.',
+                    502,
+                    $data
+                );
+            }
+
+            Log::error('[KKIAPAY] Passerelle indisponible lors de la vérification', [
+                'http_status' => $httpStatus,
                 'transaction_id' => $transactionId,
-                'payment_method' => null,
-                'message' => 'Le service de paiement est temporairement indisponible.',
-                'raw' => [],
-            ];
+                'body' => substr($response->body(), 0, 300),
+            ]);
+
+            return $this->failureResult(
+                $transactionId,
+                'UNAVAILABLE',
+                "Les serveurs KKiaPay sont temporairement indisponibles (HTTP {$httpStatus}). Votre paiement reste en attente et pourra être revérifié sans repayer.",
+                503,
+                $data
+            );
+        } catch (Exception $e) {
+            Log::error('[KKIAPAY] Exception réseau lors de la vérification : ' . $e->getMessage(), [
+                'transaction_id' => $transactionId,
+            ]);
+
+            return $this->failureResult(
+                $transactionId,
+                'UNAVAILABLE',
+                'Impossible de joindre les serveurs KKiaPay pour confirmer la transaction. Veuillez réessayer la vérification.',
+                503
+            );
         }
     }
 
     public function initiatePayout(string $beneficiaryAccount, float $amount, string $reference, array $metadata = []): array
     {
-        // En mode test / sandbox : simulation immédiate
-        if ($this->sandbox || app()->environment(['testing', 'local'])) {
+        if (app()->environment('testing')) {
             return [
                 'success' => true,
                 'payout_id' => 'PAYOUT_KKIAPAY_' . time(),
                 'status' => 'PENDING_OPERATOR',
-                'message' => "Ordre de virement de {$amount} FCFA vers {$beneficiaryAccount} transmis à KKiaPay (Simulation).",
+                'message' => "Ordre de virement de {$amount} FCFA vers {$beneficiaryAccount} transmis à KKiaPay (Test).",
                 'raw' => [
                     'reference' => $reference,
                     'beneficiary' => $beneficiaryAccount,
                     'amount' => $amount,
-                    'simulation' => true,
                 ],
             ];
         }
 
-        // Appel API de décaissement réel KKiaPay
         try {
-            $apiKey = $this->secretKey ?: $this->privateKey;
             $response = Http::withHeaders([
                 'Accept' => 'application/json',
-                'x-api-key' => $apiKey,
+                'Content-Type' => 'application/json',
+                'x-api-key' => $this->publicKey,
+                'x-private-key' => $this->privateKey,
+                'x-secret-key' => $this->secretKey,
             ])
-            ->timeout(15)
-            ->post("{$this->baseUrl}/api/v1/payout", [
-                'amount' => (int) $amount,
-                'destination' => $beneficiaryAccount,
-                'reference' => $reference,
-            ]);
+                ->timeout(15)
+                ->post("{$this->baseUrl}/api/v1/payout", [
+                    'amount' => (int) $amount,
+                    'destination' => $beneficiaryAccount,
+                    'reference' => $reference,
+                ]);
 
             if ($response->successful()) {
-                $data = $response->json();
+                $data = $response->json() ?? [];
+
                 return [
                     'success' => true,
                     'payout_id' => $data['transaction_id'] ?? $data['id'] ?? null,
@@ -234,6 +392,7 @@ class KkiapayGatewayAdapter implements PaymentGatewayInterface
             ];
         } catch (Exception $e) {
             Log::error('Exception Payout KKiaPay : ' . $e->getMessage(), ['reference' => $reference]);
+
             return [
                 'success' => false,
                 'payout_id' => null,
@@ -244,22 +403,100 @@ class KkiapayGatewayAdapter implements PaymentGatewayInterface
         }
     }
 
+    /**
+     * Vérification officielle de l'authenticité des webhooks KKiaPay.
+     * Documentation officielle KKiaPay : header HTTP `x-kkiapay-secret` comparé en temps constant
+     * au secret configuré sur le tableau de bord KKiaPay (`KKIAPAY_WEBHOOK_SECRET`).
+     * Supporte également `x-kkiapay-signature` (HMAC-SHA256) si fourni.
+     */
     public function verifyWebhookSignature(array $payload, array $headers): bool
     {
-        // En environnement de test
-        if (app()->environment('testing')) {
-            return true;
+        if (empty($this->webhookSecret)) {
+            Log::error('[KKIAPAY_WEBHOOK] Aucun secret webhook configuré (KKIAPAY_WEBHOOK_SECRET / KKIAPAY_SECRET_KEY).');
+
+            return false;
         }
 
-        // Vérification HMAC-SHA256
-        $signature = $headers['x-kkiapay-signature'][0] ?? $headers['x-kkiapay-signature'] ?? null;
-        if (! $signature || ! $this->secretKey) {
-            // Si pas de signature envoyée en sandbox local
-            return $this->sandbox;
+        $normalized = [];
+        foreach ($headers as $k => $v) {
+            $normalized[strtolower((string) $k)] = is_array($v) ? ($v[0] ?? null) : $v;
         }
 
-        $computed = hash_hmac('sha256', json_encode($payload), $this->secretKey);
-        return hash_equals($computed, $signature);
+        // Mécanisme officiel KKiaPay : en-tête x-kkiapay-secret
+        $receivedSecret = $normalized['x-kkiapay-secret'] ?? null;
+        if (is_string($receivedSecret) && $receivedSecret !== '') {
+            return hash_equals($this->webhookSecret, $receivedSecret);
+        }
+
+        // Support complémentaire : signature HMAC-SHA256
+        $signature = $normalized['x-kkiapay-signature'] ?? null;
+        if (is_string($signature) && $signature !== '') {
+            $rawBody = $normalized['__raw_body__'] ?? json_encode($payload);
+            $computed = hash_hmac('sha256', (string) $rawBody, $this->webhookSecret);
+
+            return hash_equals($computed, $signature);
+        }
+
+        return false;
+    }
+
+    protected function extractStateReference(array $data): ?string
+    {
+        $candidates = [
+            $data['state'] ?? null,
+            $data['stateData'] ?? null,
+            $data['data'] ?? null,
+            $data['partnerId'] ?? null,
+        ];
+
+        foreach ($candidates as $candidate) {
+            if (is_string($candidate)) {
+                $trimmed = trim($candidate);
+                if ($trimmed !== '') {
+                    // Si la chaîne est un JSON contenant reference / reference_interne
+                    if (str_starts_with($trimmed, '{')) {
+                        $decoded = json_decode($trimmed, true);
+                        if (is_array($decoded)) {
+                            $ref = $decoded['reference'] ?? $decoded['reference_interne'] ?? null;
+                            if (is_string($ref) && trim($ref) !== '') {
+                                return trim($ref);
+                            }
+                        }
+                    }
+
+                    return $trimmed;
+                }
+            } elseif (is_array($candidate)) {
+                $ref = $candidate['reference'] ?? $candidate['reference_interne'] ?? null;
+                if (is_string($ref) && trim($ref) !== '') {
+                    return trim($ref);
+                }
+            }
+        }
+
+        return null;
+    }
+
+    protected function failureResult(
+        string $transactionId,
+        string $gatewayStatus,
+        string $message,
+        int $httpStatus,
+        array $raw = []
+    ): array {
+        return [
+            'success' => false,
+            'gateway_status' => $gatewayStatus,
+            'http_status' => $httpStatus,
+            'amount' => 0.0,
+            'currency' => 'XOF',
+            'fee' => 0.0,
+            'net' => 0.0,
+            'transaction_id' => $transactionId,
+            'state_data' => null,
+            'payment_method' => null,
+            'message' => $message,
+            'raw' => $raw,
+        ];
     }
 }
-

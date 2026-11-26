@@ -33,7 +33,7 @@ import {
 } from 'react-native';
 
 import { KkiapayCheckoutModal } from '@/components/kkiapay-checkout-modal';
-import { BENIN_COMMUNES, QUARTIERS_BY_COMMUNE } from '@/constants/locations';
+import { QUARTIERS_BY_COMMUNE } from '@/constants/locations';
 import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
 import { usePlatformConfig } from '@/context/platform-config-context';
@@ -81,6 +81,7 @@ type PickedDocument = {
 type PublishFieldErrors = Partial<
   Record<
     | 'transaction'
+    | 'commune'
     | 'arrondissement'
     | 'quartier'
     | 'accessibilite'
@@ -150,7 +151,7 @@ async function appendFileToFormData(
 
 export function PublishPropertyForm({ mode, bottomPadding = 40 }: PublishPropertyFormProps) {
   const theme = useTheme();
-  const { twoColLayout, horizontalPadding } = useResponsive();
+  const { isSmallMobile, twoColLayout, horizontalPadding, getGridItemWidth } = useResponsive();
   const { isAuthenticated, openAuthModal, isAgentMobilier, isAdminStaff } = useAuth();
   const { tarifs } = usePlatformConfig();
 
@@ -168,7 +169,7 @@ export function PublishPropertyForm({ mode, bottomPadding = 40 }: PublishPropert
 
   const [propertyType, setPropertyType] = useState<'parcelle' | 'maison' | 'chambre'>('maison');
   const [transactionType, setTransactionType] = useState<'location' | 'vente'>('location');
-  const [commune, setCommune] = useState('Cotonou');
+  const [commune, setCommune] = useState('');
   const [arrondissement, setArrondissement] = useState('');
   const [quartier, setQuartier] = useState('');
   const [locationDetails, setLocationDetails] = useState('');
@@ -193,7 +194,13 @@ export function PublishPropertyForm({ mode, bottomPadding = 40 }: PublishPropert
   const [submitting, setSubmitting] = useState(false);
   const [checkoutVisible, setCheckoutVisible] = useState(false);
 
-  const quartiersSuggestions = (QUARTIERS_BY_COMMUNE[commune] || []).filter((q) => q !== 'Tous');
+  const isSurfaceHidden = propertyType === 'chambre' && transactionType === 'location';
+  const matchedCommuneKey = Object.keys(QUARTIERS_BY_COMMUNE).find(
+    (k) => k.toLowerCase() === commune.trim().toLowerCase()
+  );
+  const quartiersSuggestions = matchedCommuneKey
+    ? (QUARTIERS_BY_COMMUNE[matchedCommuneKey] || []).filter((q) => q !== 'Tous')
+    : [];
 
   const photosCount = medias.filter((m) => m.kind === 'image').length;
   const videosCount = medias.filter((m) => m.kind === 'video').length;
@@ -203,7 +210,12 @@ export function PublishPropertyForm({ mode, bottomPadding = 40 }: PublishPropert
     if (nextType === 'parcelle' && transactionType === 'location') {
       setTransactionType('vente');
     }
-    setErrors((prev) => ({ ...prev, transaction: undefined }));
+    if (nextType === 'chambre' && transactionType === 'location') {
+      setSurface('');
+      setErrors((prev) => ({ ...prev, transaction: undefined, surface: undefined }));
+    } else {
+      setErrors((prev) => ({ ...prev, transaction: undefined }));
+    }
   };
 
   const pickAssets = async (kind: 'image' | 'video') => {
@@ -347,6 +359,9 @@ export function PublishPropertyForm({ mode, bottomPadding = 40 }: PublishPropert
     if (propertyType === 'parcelle' && transactionType === 'location') {
       next.transaction = 'Une parcelle ne peut pas être mise en location. Sélectionnez « Vendre ».';
     }
+    if (!commune.trim() || commune.trim().length < 2) {
+      next.commune = 'La commune est obligatoire (au moins 2 caractères).';
+    }
     if (!arrondissement.trim()) {
       next.arrondissement = "L'arrondissement est obligatoire.";
     }
@@ -359,7 +374,7 @@ export function PublishPropertyForm({ mode, bottomPadding = 40 }: PublishPropert
     if (!eauCourant.trim()) {
       next.eauCourant = "L'accès eau/électricité est obligatoire.";
     }
-    if (!surface.trim() || Number(surface) < 1) {
+    if (!isSurfaceHidden && (!surface.trim() || Number(surface) < 1)) {
       next.surface = 'Indiquez une surface valide (> 0 m²).';
     }
     if (!prix.trim() || Number(prix) <= 0) {
@@ -382,20 +397,22 @@ export function PublishPropertyForm({ mode, bottomPadding = 40 }: PublishPropert
     return next;
   };
 
-  const submitPropertyToBackend = async (kkiapayTxId?: string) => {
+  const submitPropertyToBackend = async (kkiapayTxId?: string, paymentReference?: string) => {
     setSubmitting(true);
     setGlobalError(null);
     try {
       const formData = new FormData();
       formData.append('type', propertyType);
       formData.append('transaction_type', transactionType);
-      formData.append('commune', commune);
+      formData.append('commune', commune.trim());
       formData.append('arrondissement', arrondissement.trim());
       formData.append('quartier', quartier.trim());
       if (locationDetails.trim()) formData.append('location_details', locationDetails.trim());
       formData.append('accessibilite', accessibilite.trim());
       formData.append('eau_courant', eauCourant.trim());
-      formData.append('surface', String(Number(surface)));
+      if (!isSurfaceHidden && surface.trim()) {
+        formData.append('surface', String(Number(surface)));
+      }
       formData.append(
         'nombres_chambres',
         propertyType === 'parcelle' ? '0' : String(Number(chambres) || 0)
@@ -413,6 +430,7 @@ export function PublishPropertyForm({ mode, bottomPadding = 40 }: PublishPropert
           : description.trim();
       if (finalDescription) formData.append('description', finalDescription);
       if (kkiapayTxId) formData.append('kkiapay_transaction_id', kkiapayTxId);
+      if (paymentReference) formData.append('payment_reference', paymentReference);
 
       for (const m of medias) {
         const field = m.kind === 'video' ? 'videos[]' : 'photos[]';
@@ -607,7 +625,13 @@ export function PublishPropertyForm({ mode, bottomPadding = 40 }: PublishPropert
                 <View style={styles.txCardsRow}>
                   <Pressable
                     disabled={propertyType === 'parcelle'}
-                    onPress={() => setTransactionType('location')}
+                    onPress={() => {
+                      setTransactionType('location');
+                      if (propertyType === 'chambre') {
+                        setSurface('');
+                        setErrors((prev) => ({ ...prev, surface: undefined }));
+                      }
+                    }}
                     style={[
                       styles.txChoiceCard,
                       {
@@ -707,31 +731,27 @@ export function PublishPropertyForm({ mode, bottomPadding = 40 }: PublishPropert
             ]}>
             <Text style={[styles.cardTitle, { color: theme.text }]}>2. Localisation du bien</Text>
 
-            <Text style={[styles.label, { color: theme.text }]}>Commune *</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rowWrap}>
-              {BENIN_COMMUNES.filter((c) => c !== 'Toutes les communes').map((c) => {
-                const active = commune === c;
-                return (
-                  <Pressable
-                    key={c}
-                    onPress={() => {
-                      setCommune(c);
-                      setQuartier('');
-                    }}
-                    style={[
-                      styles.pill,
-                      {
-                        backgroundColor: active ? theme.navy : theme.backgroundElement,
-                        borderColor: active ? theme.navy : theme.cardBorder,
-                      },
-                    ]}>
-                    <Text style={{ color: active ? '#FFFFFF' : theme.text, fontWeight: '700', fontSize: 12 }}>
-                      {c}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
+            <View style={styles.fieldGroup}>
+              <Text style={[styles.label, { color: theme.text }]}>Commune *</Text>
+              <TextInput
+                style={[
+                  styles.input,
+                  {
+                    color: theme.text,
+                    backgroundColor: theme.backgroundElement,
+                    borderColor: errors.commune ? '#DC2626' : theme.cardBorder,
+                  },
+                ]}
+                placeholder="Saisissez la commune (ex: Cotonou, Abomey-Calavi, Parakou, Bohicon...)"
+                placeholderTextColor={theme.textSecondary}
+                value={commune}
+                onChangeText={(v) => {
+                  setCommune(v);
+                  if (errors.commune) setErrors((p) => ({ ...p, commune: undefined }));
+                }}
+              />
+              {errors.commune ? <Text style={styles.fieldError}>{errors.commune}</Text> : null}
+            </View>
 
             {quartiersSuggestions.length > 0 && (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rowWrap}>
@@ -897,28 +917,30 @@ export function PublishPropertyForm({ mode, bottomPadding = 40 }: PublishPropert
             </View>
 
             <View style={twoColLayout ? styles.twoCol : styles.oneCol}>
-              <View style={styles.fieldGroup}>
-                <Text style={[styles.label, { color: theme.text }]}>Surface (m²) *</Text>
-                <TextInput
-                  style={[
-                    styles.input,
-                    {
-                      color: theme.text,
-                      backgroundColor: theme.backgroundElement,
-                      borderColor: errors.surface ? '#DC2626' : theme.cardBorder,
-                    },
-                  ]}
-                  placeholder="Ex: 300"
-                  placeholderTextColor={theme.textSecondary}
-                  keyboardType="numeric"
-                  value={surface}
-                  onChangeText={(v) => {
-                    setSurface(v);
-                    if (errors.surface) setErrors((p) => ({ ...p, surface: undefined }));
-                  }}
-                />
-                {errors.surface ? <Text style={styles.fieldError}>{errors.surface}</Text> : null}
-              </View>
+              {!isSurfaceHidden && (
+                <View style={styles.fieldGroup}>
+                  <Text style={[styles.label, { color: theme.text }]}>Surface (m²) *</Text>
+                  <TextInput
+                    style={[
+                      styles.input,
+                      {
+                        color: theme.text,
+                        backgroundColor: theme.backgroundElement,
+                        borderColor: errors.surface ? '#DC2626' : theme.cardBorder,
+                      },
+                    ]}
+                    placeholder="Ex: 300"
+                    placeholderTextColor={theme.textSecondary}
+                    keyboardType="numeric"
+                    value={surface}
+                    onChangeText={(v) => {
+                      setSurface(v);
+                      if (errors.surface) setErrors((p) => ({ ...p, surface: undefined }));
+                    }}
+                  />
+                  {errors.surface ? <Text style={styles.fieldError}>{errors.surface}</Text> : null}
+                </View>
+              )}
 
               {propertyType !== 'parcelle' && (
                 <View style={styles.fieldGroup}>
@@ -1107,7 +1129,11 @@ export function PublishPropertyForm({ mode, bottomPadding = 40 }: PublishPropert
                     key={`${m.uri}-${idx}`}
                     style={[
                       styles.previewCard,
-                      { borderColor: theme.cardBorder, backgroundColor: theme.backgroundElement },
+                      {
+                        width: getGridItemWidth(isSmallMobile ? 2 : twoColLayout ? 4 : 3, 10),
+                        borderColor: theme.cardBorder,
+                        backgroundColor: theme.backgroundElement,
+                      },
                     ]}>
                     {m.kind === 'image' ? (
                       <Image source={{ uri: m.uri }} style={styles.previewThumb} contentFit="cover" />
@@ -1279,9 +1305,9 @@ export function PublishPropertyForm({ mode, bottomPadding = 40 }: PublishPropert
             : 'Règlement officiel pour publier votre annonce immobilière.'
         }
         onClose={() => setCheckoutVisible(false)}
-        onSuccess={async ({ transactionId }) => {
+        onSuccess={async ({ transactionId, internalReference }) => {
           setCheckoutVisible(false);
-          await submitPropertyToBackend(transactionId);
+          await submitPropertyToBackend(transactionId, internalReference);
         }}
       />
     </KeyboardAvoidingView>
@@ -1395,14 +1421,13 @@ const styles = StyleSheet.create({
   uploadBtnText: { fontSize: 13, fontWeight: '800' },
   previewGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   previewCard: {
-    width: 124,
     borderRadius: 12,
     borderWidth: 1,
     padding: 6,
     gap: 4,
     alignItems: 'center',
   },
-  previewThumb: { width: '100%', height: 78, borderRadius: 8 },
+  previewThumb: { width: '100%', aspectRatio: 4 / 3, borderRadius: 8 },
   videoThumbPlaceholder: { alignItems: 'center', justifyContent: 'center', gap: 4 },
   videoTag: { color: '#FDE68A', fontSize: 10, fontWeight: '800' },
   previewName: { fontSize: 11, fontWeight: '600', width: '100%', textAlign: 'center' },
@@ -1457,5 +1482,5 @@ const styles = StyleSheet.create({
   },
   gateTitle: { fontSize: 20, fontWeight: '900', textAlign: 'center' },
   gateDesc: { fontSize: 14, textAlign: 'center', lineHeight: 21 },
-  gateBtns: { flexDirection: 'row', gap: 10, width: '100%', marginTop: 8 },
+  gateBtns: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, width: '100%', marginTop: 8 },
 });

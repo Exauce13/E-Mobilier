@@ -59,7 +59,20 @@ class PosteController extends Controller
             $query->where('transaction_type', $request->input('transaction_type'));
         }
 
-        $perPage = (int) $request->input('per_page', 15);
+        // Recherche libre dans les biens de l'utilisateur connecté
+        if ($request->filled('search')) {
+            $term = '%' . trim((string) $request->input('search')) . '%';
+            $like = DB::connection()->getDriverName() === 'pgsql' ? 'ILIKE' : 'LIKE';
+            $query->where(function ($q) use ($term, $like) {
+                $q->where('commune', $like, $term)
+                    ->orWhere('arrondissement', $like, $term)
+                    ->orWhere('quartier', $like, $term)
+                    ->orWhere('type', $like, $term)
+                    ->orWhere('description', $like, $term);
+            });
+        }
+
+        $perPage = min(50, max(1, (int) $request->input('per_page', 12)));
         $proprietes = $query->paginate($perPage);
 
         return response()->json([
@@ -264,64 +277,104 @@ class PosteController extends Controller
         }
 
         // Montant dynamique du déblocage de vue (centralisé en BDD)
-        $fraisDeblocage = $this->settings->getTarifs()['deblocage_coordonnees'];
-        $transactionId = $request->input('kkiapay_transaction_id', $request->input('transaction_id'));
+        $fraisDeblocage = (int) $this->settings->getTarifs()['deblocage_coordonnees'];
+        $paymentReference = trim((string) ($request->input('payment_reference') ?: $request->input('reference') ?: ''));
+        $transactionId = trim((string) ($request->input('kkiapay_transaction_id') ?: $request->input('transaction_id') ?: ''));
 
-        if (empty($transactionId)) {
+        if ($paymentReference === '' && $transactionId === '') {
             return response()->json([
                 'success' => false,
-                'message' => "La référence de transaction Kkiapay pour le paiement des frais de {$fraisDeblocage} FCFA est obligatoire.",
-            ], 422);
+                'message' => "Le paiement vérifié des frais de {$fraisDeblocage} FCFA via Kkiapay est obligatoire.",
+            ], 402);
         }
 
-        $verification = $this->kkiapayService->verifyTransaction($transactionId, $fraisDeblocage);
+        // Vérifier d'abord si le paiement est déjà confirmé côté serveur, sinon réconcilier S2S auprès de Kkiapay
+        $verifiedPayment = null;
+        if ($paymentReference !== '') {
+            $verifiedPayment = Paiement::where('transaction_reference', $paymentReference)
+                ->where('user_id', $user->id)
+                ->first();
+        }
+        if (! $verifiedPayment && $transactionId !== '') {
+            $verifiedPayment = Paiement::where('gateway_transaction_id', $transactionId)
+                ->orWhere('transaction_reference', $transactionId)
+                ->first();
+        }
 
-        if (! $verification['success']) {
-            return response()->json([
-                'success' => false,
-                'message' => "Échec de validation du paiement de {$fraisDeblocage} FCFA via Kkiapay : " . $verification['message'],
-            ], 422);
+        if (! $verifiedPayment || $verifiedPayment->status !== 'successful') {
+            if ($transactionId === '') {
+                return response()->json([
+                    'success' => false,
+                    'message' => "Le paiement de {$fraisDeblocage} FCFA n'est pas encore confirmé par Kkiapay.",
+                ], 402);
+            }
+
+            $reconcile = app(\App\Http\Controllers\Api\Finance\PaymentController::class)->reconcilePayment(
+                app(\App\Services\Gateways\PaymentGatewayManager::class)->gateway(),
+                $transactionId,
+                ['reference' => $paymentReference ?: null],
+                $request->ip(),
+                $user,
+                false
+            );
+
+            if (empty($reconcile['success']) || empty($reconcile['paiement'])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "Échec de validation du paiement de {$fraisDeblocage} FCFA via Kkiapay : " . ($reconcile['message'] ?? 'Paiement non confirmé.'),
+                ], $reconcile['status_code'] ?? 422);
+            }
+
+            $verifiedPayment = $reconcile['paiement'];
         }
 
         try {
-            DB::transaction(function () use ($user, $propriete, $fraisDeblocage, $transactionId, $verification) {
-                // 1. Enregistrement dans la table paiement_vues
-                Paiement_vue::create([
-                    'client_id' => $user->id,
+            $consumeError = DB::transaction(function () use ($user, $propriete, $fraisDeblocage, $verifiedPayment) {
+                $lockedPayment = Paiement::where('id', $verifiedPayment->id)->lockForUpdate()->first();
+
+                if (! $lockedPayment || $lockedPayment->status !== 'successful') {
+                    return ['status' => 402, 'message' => 'Paiement non confirmé côté serveur.'];
+                }
+                if ($lockedPayment->user_id !== $user->id) {
+                    return ['status' => 403, 'message' => 'Ce paiement appartient à un autre utilisateur.'];
+                }
+                if ((int) round((float) $lockedPayment->amount) < $fraisDeblocage) {
+                    return ['status' => 422, 'message' => 'Montant payé insuffisant pour débloquer ce bien.'];
+                }
+                if ($lockedPayment->related_entity_id !== null && (int) $lockedPayment->related_entity_id !== (int) $propriete->id) {
+                    return ['status' => 409, 'message' => 'Cette transaction Kkiapay a déjà été utilisée pour un autre bien.'];
+                }
+                if ($lockedPayment->payment_type !== 'view_details' && $lockedPayment->payment_type !== 'visit_fee') {
+                    return ['status' => 422, 'message' => 'Ce paiement ne correspond pas à un déblocage de coordonnées.'];
+                }
+
+                // 1. Enregistrement idempotent dans la table paiement_vues
+                Paiement_vue::firstOrCreate(
+                    [
+                        'client_id' => $user->id,
+                        'property_id' => $propriete->id,
+                    ],
+                    [
+                        'amount_paid' => $fraisDeblocage,
+                    ]
+                );
+
+                // 2. Liaison atomique du paiement confirmé à cette propriété
+                $lockedPayment->update([
                     'property_id' => $propriete->id,
-                    'amount_paid' => $fraisDeblocage,
+                    'related_entity_id' => $propriete->id,
+                    'payment_type' => 'view_details',
                 ]);
 
-                // 2. Enregistrement ou liaison de la trace dans la table paiements
-                $transactionRef = $verification['transaction_id'] ?? $transactionId;
-                $existingPaiement = Paiement::where('transaction_reference', $transactionRef)
-                    ->where('user_id', $user->id)
-                    ->where('payment_type', 'view_details')
-                    ->first();
-
-                if ($existingPaiement && ($existingPaiement->property_id === null || $existingPaiement->property_id === $propriete->id)) {
-                    $existingPaiement->update([
-                        'property_id' => $propriete->id,
-                        'related_entity_id' => $propriete->id,
-                        'amount' => $fraisDeblocage,
-                        'status' => 'successful',
-                    ]);
-                } else {
-                    if (Paiement::where('transaction_reference', $transactionRef)->exists()) {
-                        $transactionRef .= '-VIEW-' . uniqid();
-                    }
-
-                    Paiement::create([
-                        'user_id' => $user->id,
-                        'property_id' => $propriete->id,
-                        'transaction_reference' => $transactionRef,
-                        'payment_type' => 'view_details',
-                        'amount' => $fraisDeblocage,
-                        'payment_method' => 'kkiapay',
-                        'status' => 'successful',
-                    ]);
-                }
+                return null;
             });
+
+            if ($consumeError !== null) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $consumeError['message'],
+                ], $consumeError['status']);
+            }
 
             return response()->json([
                 'success' => true,
@@ -451,70 +504,146 @@ class PosteController extends Controller
             $paymentType = 'agent_post';
         }
 
-        // Vérification et validation de la transaction Kkiapay
-        $kkiapayTransactionId = null;
+        // Vérification stricte du paiement serveur-à-serveur Kkiapay (AUCUN contournement autorisé)
+        $verifiedPaymentId = null;
         if ($fraisSouscription > 0) {
-            $kkiapayTransactionId = $postrequest->input('kkiapay_transaction_id')
+            $paymentReference = trim((string) (
+                $postrequest->input('payment_reference')
+                ?: $postrequest->input('reference')
+                ?: ''
+            ));
+            $kkiapayTransactionId = trim((string) (
+                $postrequest->input('kkiapay_transaction_id')
                 ?: $postrequest->input('transaction_id')
-                ?: $postrequest->input('transaction_reference');
+                ?: $postrequest->input('transaction_reference')
+                ?: ''
+            ));
 
-            if (! $kkiapayTransactionId) {
-                if (app()->environment('testing')) {
-                    $kkiapayTransactionId = 'TEST_KKIAPAY_' . strtoupper(uniqid());
-                } else {
-                    return response()->json([
-                        'success' => false,
-                        'message' => "Le paiement des frais de souscription de {$fraisSouscription} FCFA via Kkiapay est requis avant de publier.",
-                        'kkiapay' => $this->kkiapayService->getWidgetConfig(
-                            $fraisSouscription,
-                            "Frais de publication ({$fraisSouscription} FCFA) - E-Mobilier"
-                        ),
-                    ], 402);
-                }
-            }
-
-            // Vérifier que la transaction Kkiapay n'a pas déjà été utilisée pour une autre publication
-            $existingPubPayment = Paiement::where('transaction_reference', $kkiapayTransactionId)->first();
-            if ($existingPubPayment && (
-                $existingPubPayment->property_id !== null
-                || $existingPubPayment->user_id !== $user->id
-                || ! in_array($existingPubPayment->payment_type, ['agent_post', 'owner_post_submission'], true)
-            )) {
+            if ($paymentReference === '' && $kkiapayTransactionId === '') {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Cette transaction Kkiapay a déjà été validée pour une autre publication.',
-                ], 422);
-            }
-
-            // Vérifier la validité de la transaction auprès de Kkiapay
-            $verification = $this->kkiapayService->verifyTransaction($kkiapayTransactionId, $fraisSouscription);
-            if (! $verification['success']) {
-                return response()->json([
-                    'success' => false,
-                    'message' => $verification['message'],
+                    'message' => "Le paiement confirmé des frais de souscription de {$fraisSouscription} FCFA via Kkiapay est obligatoire avant toute publication.",
                     'kkiapay' => $this->kkiapayService->getWidgetConfig(
                         $fraisSouscription,
                         "Frais de publication ({$fraisSouscription} FCFA) - E-Mobilier"
                     ),
-                ], 422);
+                ], 402);
             }
+
+            // Rechercher un paiement déjà vérifié/initié en base par référence interne ou gateway_transaction_id
+            $candidatePayment = null;
+            if ($paymentReference !== '') {
+                $candidatePayment = Paiement::where('transaction_reference', $paymentReference)->first();
+            }
+            if (! $candidatePayment && $kkiapayTransactionId !== '') {
+                $candidatePayment = Paiement::where('gateway_transaction_id', $kkiapayTransactionId)
+                    ->orWhere('transaction_reference', $kkiapayTransactionId)
+                    ->first();
+            }
+
+            // Si pas encore confirmé côté serveur, exécuter la réconciliation serveur-à-serveur Kkiapay
+            if (! $candidatePayment || $candidatePayment->status !== 'successful') {
+                if ($kkiapayTransactionId === '') {
+                    return response()->json([
+                        'success' => false,
+                        'message' => "Le paiement de {$fraisSouscription} FCFA n'est pas encore confirmé par Kkiapay.",
+                    ], 402);
+                }
+
+                $reconcile = app(\App\Http\Controllers\Api\Finance\PaymentController::class)->reconcilePayment(
+                    app(\App\Services\Gateways\PaymentGatewayManager::class)->gateway(),
+                    $kkiapayTransactionId,
+                    ['reference' => $paymentReference ?: null],
+                    $postrequest->ip(),
+                    $user,
+                    false
+                );
+
+                if (empty($reconcile['success']) || empty($reconcile['paiement'])) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => $reconcile['message'] ?? 'Échec de vérification du paiement auprès de Kkiapay.',
+                        'code' => $reconcile['code'] ?? 'PAYMENT_UNVERIFIED',
+                        'kkiapay' => $this->kkiapayService->getWidgetConfig(
+                            $fraisSouscription,
+                            "Frais de publication ({$fraisSouscription} FCFA) - E-Mobilier"
+                        ),
+                    ], $reconcile['status_code'] ?? 422);
+                }
+
+                $candidatePayment = $reconcile['paiement'];
+            }
+
+            $verifiedPaymentId = $candidatePayment->id;
         }
 
         DB::beginTransaction();
 
         try {
+            $lockedPaiement = null;
+            if ($fraisSouscription > 0) {
+                $lockedPaiement = Paiement::where('id', $verifiedPaymentId)->lockForUpdate()->first();
+
+                if (! $lockedPaiement || $lockedPaiement->status !== 'successful') {
+                    DB::rollBack();
+
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Paiement non confirmé par le serveur. Publication refusée.',
+                    ], 402);
+                }
+
+                if ($lockedPaiement->user_id !== $user->id) {
+                    DB::rollBack();
+
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Ce paiement appartient à un autre utilisateur.',
+                    ], 403);
+                }
+
+                if ($lockedPaiement->property_id !== null || $lockedPaiement->related_entity_id !== null) {
+                    DB::rollBack();
+
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Cette transaction Kkiapay a déjà été utilisée pour valider une autre publication.',
+                    ], 422);
+                }
+
+                if (! in_array($lockedPaiement->payment_type, ['agent_post', 'owner_post_submission'], true) && $lockedPaiement->payment_type !== 'visit_fee') {
+                    DB::rollBack();
+
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Ce paiement ne correspond pas à des frais de publication.',
+                    ], 422);
+                }
+
+                if ((int) round((float) $lockedPaiement->amount) !== (int) $fraisSouscription) {
+                    DB::rollBack();
+
+                    return response()->json([
+                        'success' => false,
+                        'message' => "Montant payé (" . (int) round((float) $lockedPaiement->amount) . " FCFA) différent des frais de publication requis ({$fraisSouscription} FCFA).",
+                    ], 422);
+                }
+            }
+
             // 1. Création de la propriété
             $propriete = Proprietes::create([
                 'user_id' => $user->id,
                 'type' => $type,
                 'transaction_type' => $transactionType,
-                'commune' => $postrequest->input('commune'),
+                'commune' => trim((string) $postrequest->input('commune')),
                 'arrondissement' => $postrequest->input('arrondissement'),
                 'quartier' => $postrequest->input('quartier'),
                 'location_details' => $postrequest->input('location_details'),
                 'accessibilite' => $postrequest->input('accessibilite'),
                 'eau_courant' => $postrequest->input('eau_courant'),
-                'surface' => $postrequest->input('surface'),
+                'surface' => ($type === 'chambre' && $transactionType === 'location')
+                    ? ($postrequest->filled('surface') ? $postrequest->input('surface') : null)
+                    : $postrequest->input('surface'),
                 'nombres_chambres' => $nombresChambres,
                 'avance_mois' => $avanceMois,
                 'prix' => $postrequest->input('prix'),
@@ -526,38 +655,18 @@ class PosteController extends Controller
             // 2. Traitement et stockage des médias (photos & vidéos)
             $this->storePropertyMedia($propriete, $postrequest);
 
-            // 3. Traitement et stockage des documents (convention_vente, permis_habiter, attestation_recasement, titre_foncier)
+            // 3. Traitement et stockage des documents (convention_vente, permis_habiter, attestation_recasement, titre_foncier, plan_cadastral)
             $this->storePropertyDocuments($propriete, $postrequest);
 
-            // 4. Enregistrement ou liaison de la souscription Kkiapay (500 FCFA pour Client ou 100 FCFA pour Agent)
+            // 4. Liaison atomique du paiement confirmé à la propriété créée
             $paiement = null;
-            if ($fraisSouscription > 0 && $kkiapayTransactionId) {
-                $existingPaiement = Paiement::where('transaction_reference', $kkiapayTransactionId)
-                    ->where('user_id', $user->id)
-                    ->whereNull('property_id')
-                    ->first();
-
-                if ($existingPaiement) {
-                    $existingPaiement->update([
-                        'property_id' => $propriete->id,
-                        'payment_type' => $paymentType,
-                        'related_entity_id' => $propriete->id,
-                        'amount' => $fraisSouscription,
-                        'status' => 'successful',
-                    ]);
-                    $paiement = $existingPaiement->fresh();
-                } else {
-                    $paiement = Paiement::create([
-                        'user_id' => $user->id,
-                        'property_id' => $propriete->id,
-                        'transaction_reference' => $kkiapayTransactionId,
-                        'payment_type' => $paymentType,
-                        'related_entity_id' => $propriete->id,
-                        'amount' => $fraisSouscription,
-                        'payment_method' => 'kkiapay',
-                        'status' => 'successful',
-                    ]);
-                }
+            if ($lockedPaiement) {
+                $lockedPaiement->update([
+                    'property_id' => $propriete->id,
+                    'related_entity_id' => $propriete->id,
+                    'payment_type' => $paymentType,
+                ]);
+                $paiement = $lockedPaiement->fresh();
             }
 
             DB::commit();
@@ -575,6 +684,7 @@ class PosteController extends Controller
                         'passerelle' => 'kkiapay',
                         'type' => $paymentType,
                         'reference' => $paiement->transaction_reference,
+                        'gateway_transaction_id' => $paiement->gateway_transaction_id,
                         'status' => $paiement->status,
                     ] : null,
                 ],

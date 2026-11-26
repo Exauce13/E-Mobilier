@@ -50,7 +50,7 @@ type ClientSectionTab = 'overview' | 'inquiries' | 'requests' | 'properties';
 export default function ClientSpaceScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const { isMobile, contentMaxWidth, horizontalPadding } = useResponsive();
+  const { isMobile, isTablet, contentMaxWidth, horizontalPadding, getGridItemWidth } = useResponsive();
   const { user, isAuthenticated, openAuthModal, unreadNotificationsCount } = useAuth();
 
   const [activeTab, setActiveTab] = useState<ClientSectionTab>('overview');
@@ -223,7 +223,7 @@ export default function ClientSpaceScreen() {
                   onPress={() => router.push(action.route as any)}
                   style={[
                     styles.quickTile,
-                    { width: isMobile ? '48%' : '23.5%' },
+                    { width: getGridItemWidth(isMobile ? 2 : 4, 10) },
                   ]}>
                   <View style={[styles.quickIconDot, { backgroundColor: action.accent }]}>
                     <action.Icon size={17} color="#FFFFFF" strokeWidth={2.2} />
@@ -245,14 +245,14 @@ export default function ClientSpaceScreen() {
             ].map((kpi) => (
               <View
                 key={kpi.label}
-                style={[
-                  styles.kpiCard,
-                  {
-                    backgroundColor: theme.cardBackground,
-                    borderColor: theme.cardBorder,
-                    width: isMobile ? '47.5%' : '18.5%',
-                  },
-                ]}>
+                  style={[
+                    styles.kpiCard,
+                    {
+                      backgroundColor: theme.cardBackground,
+                      borderColor: theme.cardBorder,
+                      width: getGridItemWidth(isMobile ? 2 : isTablet ? 3 : 5, 10),
+                    },
+                  ]}>
                 <kpi.Icon size={18} color={theme.primary} strokeWidth={2.2} />
                 <Text style={[styles.kpiValue, { color: theme.primary }]}>{kpi.value}</Text>
                 <Text style={[styles.kpiLabel, { color: theme.textSecondary }]}>{kpi.label}</Text>
@@ -744,6 +744,7 @@ const styles = StyleSheet.create({
   },
   panelHeader: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: 8,

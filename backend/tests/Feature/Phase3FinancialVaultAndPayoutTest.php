@@ -100,16 +100,34 @@ class Phase3FinancialVaultAndPayoutTest extends TestCase
 
     public function test_webhook_reconciliation_credits_grand_livre_idempotently(): void
     {
-        $txId = 'PAY-TEST-' . time();
+        $txId = 'KK-WH-TEST-' . time();
+        $webhookSecret = 'phase3_test_webhook_secret';
+        \Illuminate\Support\Facades\Config::set('services.kkiapay.public_key', 'pk_test_p3');
+        \Illuminate\Support\Facades\Config::set('services.kkiapay.private_key', 'tpk_test_p3');
+        \Illuminate\Support\Facades\Config::set('services.kkiapay.secret_key', 'tsk_test_p3');
+        \Illuminate\Support\Facades\Config::set('services.kkiapay.webhook_secret', $webhookSecret);
+        \Illuminate\Support\Facades\Config::set('services.kkiapay.base_url', 'https://api-sandbox.kkiapay.me');
+
+        \Illuminate\Support\Facades\Http::fake([
+            'https://api-sandbox.kkiapay.me/api/v1/transactions/status' => \Illuminate\Support\Facades\Http::response([
+                'status' => 'SUCCESS',
+                'transactionId' => $txId,
+                'amount' => 500,
+                'fees' => 10,
+                'currency' => 'XOF',
+                'source' => 'MOBILE_MONEY',
+            ], 200),
+        ]);
 
         $soldeInitial = $this->ledgerService->getSoldeDisponible();
 
-        // 1. Premier appel webhook
-        $response1 = $this->postJson('/api/kkiapay/webhook', [
-            'transactionId' => $txId,
-            'amount' => 500,
-            'event' => 'payment_success',
-        ]);
+        // 1. Premier appel webhook authentifié par x-kkiapay-secret
+        $response1 = $this->withHeader('x-kkiapay-secret', $webhookSecret)
+            ->postJson('/api/kkiapay/webhook', [
+                'transactionId' => $txId,
+                'amount' => 500,
+                'event' => 'payment_success',
+            ]);
 
         $response1->assertStatus(200)
             ->assertJson(['success' => true]);
@@ -118,11 +136,12 @@ class Phase3FinancialVaultAndPayoutTest extends TestCase
         $this->assertGreaterThan($soldeInitial, $soldeApresPremier);
 
         // 2. Deuxième appel webhook (Doublon / Rejeu)
-        $response2 = $this->postJson('/api/kkiapay/webhook', [
-            'transactionId' => $txId,
-            'amount' => 500,
-            'event' => 'payment_success',
-        ]);
+        $response2 = $this->withHeader('x-kkiapay-secret', $webhookSecret)
+            ->postJson('/api/kkiapay/webhook', [
+                'transactionId' => $txId,
+                'amount' => 500,
+                'event' => 'payment_success',
+            ]);
 
         $response2->assertStatus(200)
             ->assertJson(['message' => 'Paiement déjà validé et réconcilié (Doublon ignoré).']);

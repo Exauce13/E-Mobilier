@@ -52,7 +52,15 @@ export default function ExploreScreen() {
   }>();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const { isMobile, twoColLayout, gridColumns, contentMaxWidth, horizontalPadding } = useResponsive();
+  const {
+    isSmallMobile,
+    isMobile,
+    twoColLayout,
+    gridColumns,
+    contentMaxWidth,
+    horizontalPadding,
+    getGridItemWidth,
+  } = useResponsive();
   const { isAuthenticated, isAgentMobilier, openAuthModal } = useAuth();
   const storageBaseUrl = useMemo(() => getStorageBaseUrl(), []);
 
@@ -245,8 +253,7 @@ export default function ExploreScreen() {
     router.push(`/property/${property.id}` as any);
   };
 
-  const cardWidthPercent =
-    gridColumns === 3 ? '31.8%' : gridColumns === 2 ? '48.5%' : '100%';
+  const cardWidth = getGridItemWidth(gridColumns, 16);
 
   return (
     <SafeAreaView edges={['top']} style={[styles.container, { backgroundColor: theme.background }]}>
@@ -460,7 +467,7 @@ export default function ExploreScreen() {
               <View style={{ gap: 12 }}>
                 {/* Budget Min / Max & Surface & Chambres */}
                 <View style={[styles.numericGrid, !twoColLayout && { flexDirection: 'column' }]}>
-                  <View style={styles.numericRow}>
+                  <View style={[styles.numericRow, isSmallMobile && { flexDirection: 'column' }]}>
                     <TextInput
                       style={[
                         styles.numInput,
@@ -485,7 +492,7 @@ export default function ExploreScreen() {
                     />
                   </View>
 
-                  <View style={styles.numericRow}>
+                  <View style={[styles.numericRow, isSmallMobile && { flexDirection: 'column' }]}>
                     <TextInput
                       style={[
                         styles.numInput,
@@ -699,7 +706,7 @@ export default function ExploreScreen() {
             <>
               <View style={styles.cardsGrid}>
                 {properties.map((item) => (
-                  <View key={item.id} style={{ width: cardWidthPercent as any }}>
+                  <View key={item.id} style={{ width: cardWidth }}>
                     <PropertyCard
                       property={item}
                       onPressCard={handleOpenProperty}
@@ -731,10 +738,10 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   scrollContent: { paddingTop: Spacing.two },
   innerWrap: { width: '100%', alignSelf: 'center', gap: 16 },
-  topRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  pageTitle: { fontSize: 22, fontWeight: '900' },
+  topRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  pageTitle: { fontSize: 21, fontWeight: '900' },
   pageSub: { fontSize: 13, marginTop: 2 },
-  requestShortcut: { paddingHorizontal: 13, paddingVertical: 9, borderRadius: 12 },
+  requestShortcut: { paddingHorizontal: 14, paddingVertical: 10, minHeight: 40, borderRadius: 12, justifyContent: 'center' },
   requestShortcutText: { color: '#FFFFFF', fontSize: 12, fontWeight: '800' },
   searchCard: { borderRadius: 20, borderWidth: 1, padding: 16, gap: 12 },
   searchBar: {

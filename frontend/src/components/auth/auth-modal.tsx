@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import React from 'react';
 import { Modal, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,6 +19,11 @@ export function AuthModal() {
 
   if (!authModalVisible) return null;
 
+  const handleAuthSuccess = () => {
+    closeAuthModal();
+    router.replace('/' as any);
+  };
+
   return (
     <Modal
       visible={authModalVisible}
@@ -32,17 +38,13 @@ export function AuthModal() {
             <LoginView
               onNavigateToRegister={() => setAuthModalMode('register')}
               onBack={closeAuthModal}
-              onSuccessLogin={() => {
-                closeAuthModal();
-              }}
+              onSuccessLogin={handleAuthSuccess}
             />
           ) : (
             <RegisterView
               onNavigateToLogin={() => setAuthModalMode('login')}
               onBack={closeAuthModal}
-              onSuccessRegister={() => {
-                closeAuthModal();
-              }}
+              onSuccessRegister={handleAuthSuccess}
             />
           )}
         </View>

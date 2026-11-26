@@ -24,6 +24,7 @@ import {
 
 import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
+import { useResponsive } from '@/hooks/use-responsive';
 import { useTheme } from '@/hooks/use-theme';
 import { isValidEmail, isValidPersonName, isValidPhone } from '@/utils/validation';
 
@@ -46,6 +47,7 @@ export function RegisterView({
   onBack,
 }: RegisterViewProps): React.JSX.Element {
   const theme = useTheme();
+  const { isSmallMobile, isMobile } = useResponsive();
   const { register, closeAuthModal } = useAuth();
 
   const [fullName, setFullName] = useState('');
@@ -128,9 +130,20 @@ export function RegisterView({
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       style={styles.keyboardContainer}>
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          isSmallMobile && { paddingHorizontal: 14, paddingTop: Spacing.two },
+          !isMobile && styles.scrollContentDesktop,
+        ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}>
+        <View
+          style={[
+            !isMobile && [
+              styles.desktopCard,
+              { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder },
+            ],
+          ]}>
         
         {/* Top Header with Back Arrow */}
         <View style={styles.topBar}>
@@ -286,7 +299,7 @@ export function RegisterView({
           {/* Role Selection Segmented Choices */}
           <View style={styles.roleSection}>
             <Text style={[styles.roleSectionTitle, { color: theme.text }]}>Je suis :</Text>
-            <View style={styles.segmentedContainer}>
+            <View style={[styles.segmentedContainer, isSmallMobile && { flexDirection: 'column' }]}>
               {/* Option 1: Client / Propriétaire */}
               <Pressable
                 onPress={() => setSelectedRole('client_proprietaire')}
@@ -418,7 +431,7 @@ export function RegisterView({
             <Text style={[styles.footerLink, { color: theme.primary }]}>Se connecter</Text>
           </Pressable>
         </View>
-
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -429,12 +442,25 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
     paddingHorizontal: Spacing.four,
     paddingTop: Spacing.three,
     paddingBottom: Spacing.six,
-    maxWidth: 480,
+    maxWidth: 500,
     width: '100%',
     alignSelf: 'center',
+  },
+  scrollContentDesktop: {
+    paddingVertical: Spacing.five,
+  },
+  desktopCard: {
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: 28,
+    ...Platform.select({
+      web: { boxShadow: '0 12px 32px rgba(15, 23, 42, 0.08)' } as any,
+    }),
   },
   topBar: {
     flexDirection: 'row',

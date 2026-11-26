@@ -1,6 +1,6 @@
-import { SymbolView } from 'expo-symbols';
+import { Unlock } from 'lucide-react-native';
 import React, { useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { KkiapayCheckoutModal } from '@/components/kkiapay-checkout-modal';
 import { Spacing } from '@/constants/theme';
@@ -56,11 +56,7 @@ export function UnlockModal({
             style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder }]}
             onPress={(e) => e.stopPropagation()}>
             <View style={[styles.iconCircle, { backgroundColor: theme.primaryLight }]}>
-              <SymbolView
-                name={{ ios: 'lock.open.fill', android: 'lock_open', web: 'lock_open' }}
-                size={28}
-                tintColor={theme.primary}
-              />
+              <Unlock size={26} color={theme.primary} strokeWidth={2.2} />
             </View>
 
             <Text style={[styles.title, { color: theme.text }]}>
@@ -139,9 +135,9 @@ export function UnlockModal({
         title={`Déblocage Bien #${property.id}`}
         description={`Déblocage unique des coordonnées et documents du bien (${feeFullLabel}).`}
         onClose={() => setCheckoutOpen(false)}
-        onSuccess={async ({ transactionId }) => {
+        onSuccess={async ({ transactionId, internalReference }) => {
           const idToUnlock = property.backendId ?? property.id;
-          const res = await proprietesApi.unlockDetails(idToUnlock, transactionId);
+          const res = await proprietesApi.unlockDetails(idToUnlock, transactionId, internalReference);
           if (!res.success) {
             throw new Error(res.message || 'Échec du déblocage côté serveur.');
           }
@@ -158,12 +154,16 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(15, 23, 42, 0.6)',
     justifyContent: 'center',
-    padding: Spacing.four,
+    alignItems: 'center',
+    padding: Spacing.three,
   },
   card: {
+    width: '100%',
+    maxWidth: 480,
+    maxHeight: '90%',
     borderRadius: 24,
     borderWidth: 1,
-    padding: Spacing.five,
+    padding: Spacing.four,
     alignItems: 'center',
   },
   iconCircle: {
