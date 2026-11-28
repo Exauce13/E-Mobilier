@@ -570,7 +570,9 @@ export function PublishPropertyForm({ mode, bottomPadding = 40 }: PublishPropert
               </Text>
             </View>
             <Pressable
-              onPress={() => router.push('/my-properties' as any)}
+              onPress={() =>
+                router.push((isAgentMobilier && !isAdminStaff ? '/agent-space' : '/client?tab=annonces') as any)
+              }
               style={styles.bannerLinkBtn}>
               <Text style={styles.bannerLinkText}>Mes annonces</Text>
             </Pressable>
@@ -585,7 +587,9 @@ export function PublishPropertyForm({ mode, bottomPadding = 40 }: PublishPropert
               <Text style={styles.successText}>{successInfo.message}</Text>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
                 <Pressable
-                  onPress={() => router.push('/my-properties' as any)}
+                  onPress={() =>
+                    router.push((isAgentMobilier && !isAdminStaff ? '/agent-space' : '/client?tab=annonces') as any)
+                  }
                   style={[styles.primaryBtn, { backgroundColor: theme.primary, paddingHorizontal: 18 }]}>
                   <Text style={styles.primaryBtnText}>Voir mes annonces</Text>
                 </Pressable>

@@ -78,6 +78,21 @@ class UpdatePostRechercheRequest extends FormRequest
         if (! empty($mergeData)) {
             $this->merge($mergeData);
         }
+
+        // Nettoyage des espaces (saisie libre pour commune, arrondissement, quartier, critères)
+        $trimmed = [];
+        if ($this->has('target_commune') && is_string($this->input('target_commune'))) {
+            $trimmed['target_commune'] = trim($this->input('target_commune'));
+        }
+        foreach (['target_arrondissement', 'target_quartier', 'criteria_details'] as $optionalField) {
+            if ($this->has($optionalField) && is_string($this->input($optionalField))) {
+                $val = trim($this->input($optionalField));
+                $trimmed[$optionalField] = $val === '' ? null : $val;
+            }
+        }
+        if (! empty($trimmed)) {
+            $this->merge($trimmed);
+        }
     }
 
     /**
@@ -90,7 +105,7 @@ class UpdatePostRechercheRequest extends FormRequest
         return [
             'property_type' => ['sometimes', 'required', 'string', 'in:parcelle,maison,chambre'],
             'transaction_type' => ['sometimes', 'required', 'string', 'in:location,vente'],
-            'target_commune' => ['sometimes', 'required', 'string', 'max:255'],
+            'target_commune' => ['sometimes', 'required', 'string', 'min:2', 'max:255'],
             'target_arrondissement' => ['nullable', 'string', 'max:255'],
             'target_quartier' => ['nullable', 'string', 'max:255'],
             'budget_max' => ['sometimes', 'required', 'numeric', 'min:1'],
@@ -143,6 +158,7 @@ class UpdatePostRechercheRequest extends FormRequest
 
             'target_commune.required' => 'La commune ciblée est obligatoire.',
             'target_commune.string' => 'La commune ciblée doit être une chaîne de caractères valide.',
+            'target_commune.min' => 'Veuillez saisir un nom de commune d\'au moins 2 caractères.',
             'target_commune.max' => 'La commune ciblée ne doit pas dépasser 255 caractères.',
 
             'target_arrondissement.string' => 'L\'arrondissement ciblé doit être une chaîne de caractères valide.',

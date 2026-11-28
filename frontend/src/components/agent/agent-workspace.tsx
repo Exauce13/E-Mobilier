@@ -431,12 +431,12 @@ export function AgentWorkspace({
             Espace strictement réservé aux agents immobiliers agréés
           </Text>
           <Text style={{ fontSize: 13, color: theme.textSecondary, textAlign: 'center', maxWidth: 420 }}>
-            En tant que client, gérez vos annonces depuis « Mes annonces » et vos visites depuis « Mes visites ».
+            En tant que client, gérez vos annonces, vos recherches et votre profil depuis votre Espace Client.
           </Text>
           <Pressable
-            onPress={() => router.replace('/my-properties' as any)}
+            onPress={() => router.replace('/client-space' as any)}
             style={[styles.primaryBtn, { backgroundColor: theme.primary }]}>
-            <Text style={styles.primaryBtnText}>Aller vers Mes annonces</Text>
+            <Text style={styles.primaryBtnText}>Aller vers mon Espace Client</Text>
           </Pressable>
         </View>
       </SafeAreaView>

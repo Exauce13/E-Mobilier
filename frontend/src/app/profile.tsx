@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
-import { Bell, Camera, CreditCard, LogOut, ShieldCheck, Trash2, User } from 'lucide-react-native';
+import { Bell, Camera, LogOut, ShieldCheck, Trash2, User } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -15,6 +15,8 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AgentWorkspace } from '@/components/agent/agent-workspace';
+import { ClientWorkspace } from '@/components/client/client-workspace';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
@@ -22,15 +24,32 @@ import { useResponsive } from '@/hooks/use-responsive';
 import { useTheme } from '@/hooks/use-theme';
 import { authApi } from '@/services/api';
 import { confirmDialog, showMessage } from '@/utils/dialog';
+import { isValidEmail, isValidPhone } from '@/utils/validation';
 
 export default function UserProfileScreen() {
+  const { isAuthenticated, isAgentMobilier, isAdminStaff, isClient } = useAuth();
+
+  if (isAuthenticated && isAgentMobilier && !isAdminStaff) {
+    return <AgentWorkspace embeddedInTabs={false} initialSection="profil" />;
+  }
+
+  if (isAuthenticated && isClient) {
+    return <ClientWorkspace embeddedInTabs={false} initialSection="profil" />;
+  }
+
+  return <StandaloneProfileScreen />;
+}
+
+function StandaloneProfileScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { horizontalPadding } = useResponsive();
-  const { user, isAuthenticated, isAgentMobilier, openAuthModal, refreshProfile, logout } = useAuth();
+  const { user, isAuthenticated, openAuthModal, refreshProfile, logout } = useAuth();
 
   const [name, setName] = useState(user?.nom || '');
   const [prenom, setPrenom] = useState(user?.prenom || '');
+  const [phone, setPhone] = useState(user?.phone || '');
+  const [email, setEmail] = useState(user?.email || '');
   const [saving, setSaving] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
@@ -38,6 +57,8 @@ export default function UserProfileScreen() {
     if (user) {
       setName(user.nom || '');
       setPrenom(user.prenom || '');
+      setPhone(user.phone || '');
+      setEmail(user.email || '');
     }
   }, [user]);
 
@@ -46,8 +67,21 @@ export default function UserProfileScreen() {
       showMessage('Validation', 'Le nom et le prénom doivent contenir au moins 2 caractères.');
       return;
     }
+    if (!isValidPhone(phone, true)) {
+      showMessage('Validation', 'Numéro béninois requis (10 chiffres commençant par 01, ex: 0197001122).');
+      return;
+    }
+    if (email.trim() && !isValidEmail(email)) {
+      showMessage('Validation', 'Veuillez saisir une adresse e-mail valide.');
+      return;
+    }
     setSaving(true);
-    const res = await authApi.updateProfil({ name: name.trim(), prenom: prenom.trim() });
+    const res = await authApi.updateProfil({
+      name: name.trim(),
+      prenom: prenom.trim(),
+      telephone: phone.trim(),
+      email: email.trim() ? email.trim().toLowerCase() : null,
+    });
     setSaving(false);
     if (res.success) {
       await refreshProfile();
@@ -149,7 +183,6 @@ export default function UserProfileScreen() {
           { paddingHorizontal: horizontalPadding, paddingBottom: insets.bottom + 36 },
         ]}>
         <View style={styles.innerWrap}>
-          {/* Avatar Card */}
           <View style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder }]}>
             <View style={styles.avatarRow}>
               {user.photo_url ? (
@@ -197,7 +230,6 @@ export default function UserProfileScreen() {
             </View>
           </View>
 
-          {/* Identity Edit Form */}
           <View style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder }]}>
             <Text style={[styles.sectionTitle, { color: theme.text }]}>Informations personnelles</Text>
 
@@ -223,6 +255,31 @@ export default function UserProfileScreen() {
               />
             </View>
 
+            <View style={{ gap: 6 }}>
+              <Text style={[styles.label, { color: theme.textSecondary }]}>Téléphone (Bénin +229)</Text>
+              <TextInput
+                style={[styles.input, { color: theme.text, borderColor: theme.cardBorder, backgroundColor: theme.backgroundElement }]}
+                value={phone}
+                onChangeText={setPhone}
+                placeholder="Ex: 0197001122"
+                placeholderTextColor={theme.textSecondary}
+                keyboardType="phone-pad"
+              />
+            </View>
+
+            <View style={{ gap: 6 }}>
+              <Text style={[styles.label, { color: theme.textSecondary }]}>Adresse e-mail</Text>
+              <TextInput
+                style={[styles.input, { color: theme.text, borderColor: theme.cardBorder, backgroundColor: theme.backgroundElement }]}
+                value={email}
+                onChangeText={setEmail}
+                placeholder="Ex: prenom.nom@email.com"
+                placeholderTextColor={theme.textSecondary}
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+            </View>
+
             <Pressable
               onPress={() => void handleSaveProfile()}
               disabled={saving}
@@ -233,24 +290,14 @@ export default function UserProfileScreen() {
             </Pressable>
           </View>
 
-          {/* Account Shortcuts */}
           <View style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.cardBorder }]}>
             <Text style={[styles.sectionTitle, { color: theme.text }]}>Raccourcis compte</Text>
-
-            {!isAgentMobilier && (
-              <Pressable
-                onPress={() => router.push('/transactions' as any)}
-                style={[styles.linkRow, { borderBottomColor: theme.cardBorder }]}>
-                <CreditCard size={17} color={theme.primary} strokeWidth={2.2} />
-                <Text style={[styles.linkLabel, { color: theme.text }]}>Paiements &amp; Quittances officielles</Text>
-              </Pressable>
-            )}
 
             <Pressable
               onPress={() => router.push('/notifications' as any)}
               style={[styles.linkRow, { borderBottomColor: theme.cardBorder }]}>
               <Bell size={17} color={theme.primary} strokeWidth={2.2} />
-              <Text style={[styles.linkLabel, { color: theme.text }]}>Notifications & Alertes</Text>
+              <Text style={[styles.linkLabel, { color: theme.text }]}>Notifications &amp; Alertes</Text>
             </Pressable>
 
             <Pressable

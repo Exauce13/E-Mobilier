@@ -36,7 +36,6 @@ function RootNavigationShell() {
         <Stack.Screen name="notifications" />
         <Stack.Screen name="my-properties" />
         <Stack.Screen name="search-requests" />
-        <Stack.Screen name="transactions" />
         <Stack.Screen name="profile" />
         <Stack.Screen name="cgu" />
         <Stack.Screen name="admin/index" />

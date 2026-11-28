@@ -30,6 +30,8 @@ import type {
   PropertyInquiryPayload,
   PublicPlatformConfig,
   RetraitItem,
+  SuperAdminDashboardOverview,
+  SuperAdminDashboardPeriod,
   SystemHealthReport,
   TechNotificationLogItem,
   VisiteBackendItem,
@@ -309,7 +311,12 @@ export const authApi = {
     return apiRequest('/profil', { method: 'GET' });
   },
 
-  updateProfil: async (payload: { name?: string; prenom?: string }): Promise<ApiResponse<{ user: AuthResponseData['user'] }>> => {
+  updateProfil: async (payload: {
+    name?: string;
+    prenom?: string;
+    email?: string | null;
+    telephone?: string;
+  }): Promise<ApiResponse<{ user: AuthResponseData['user'] }>> => {
     return apiRequest('/profil', {
       method: 'PUT',
       body: JSON.stringify(payload),
@@ -537,7 +544,9 @@ export const demandesRechercheApi = {
     status?: string;
     property_type?: string;
     transaction_type?: string;
+    search?: string;
     page?: number;
+    per_page?: number;
   }): Promise<ApiResponse<PaginatedPayload<DemandeRechercheItem>>> => {
     const query = buildQuery(filters || {});
     return apiRequest(`/mes-demandes-recherche${query}`, { method: 'GET' });
@@ -547,10 +556,10 @@ export const demandesRechercheApi = {
     property_type: 'parcelle' | 'maison' | 'chambre';
     transaction_type: 'location' | 'vente';
     target_commune: string;
-    target_arrondissement?: string;
-    target_quartier?: string;
+    target_arrondissement?: string | null;
+    target_quartier?: string | null;
     budget_max: number;
-    criteria_details?: string;
+    criteria_details?: string | null;
   }): Promise<ApiResponse<DemandeRechercheItem>> => {
     return apiRequest('/demandes-recherche', {
       method: 'POST',
@@ -568,10 +577,10 @@ export const demandesRechercheApi = {
       property_type: 'parcelle' | 'maison' | 'chambre';
       transaction_type: 'location' | 'vente';
       target_commune: string;
-      target_arrondissement: string;
-      target_quartier: string;
+      target_arrondissement: string | null;
+      target_quartier: string | null;
       budget_max: number;
-      criteria_details: string;
+      criteria_details: string | null;
     }>
   ): Promise<ApiResponse<DemandeRechercheItem>> => {
     return apiRequest(`/demandes-recherche/${id}`, {
@@ -654,6 +663,17 @@ export const notificationsApi = {
  * Administration, Gouvernance, Opérations (Briques A-E) & Technique.
  */
 export const adminApi = {
+  // Centre de supervision unifié Super Admin Principal
+  getSuperAdminDashboard: async (filters?: {
+    period?: SuperAdminDashboardPeriod;
+    date_debut?: string;
+    date_fin?: string;
+    activity_page?: number;
+    activity_per_page?: number;
+  }): Promise<ApiResponse<SuperAdminDashboardOverview> & Partial<SuperAdminDashboardOverview>> => {
+    return apiRequest(`/admin/dashboard/super-admin${buildQuery(filters || {})}`, { method: 'GET' });
+  },
+
   // Zones
   getZones: async (filters?: { is_active?: boolean; commune?: string }): Promise<ApiResponse<ZoneSummary[]>> => {
     return apiRequest(`/admin/zones${buildQuery(filters || {})}`, { method: 'GET' });
@@ -787,11 +807,24 @@ export const adminApi = {
   },
 
   // Brique B : Visites Admin & Opérations
-  getAdminVisites: async (filters?: { status?: string; zone_id?: number; page?: number }): Promise<ApiResponse<PaginatedPayload<AdminVisiteItem>>> => {
+  getAdminVisites: async (filters?: {
+    status?: string;
+    zone_id?: number | string;
+    agent_id?: number | string;
+    search?: string;
+    period?: string;
+    date_debut?: string;
+    date_fin?: string;
+    page?: number;
+    per_page?: number;
+  }): Promise<ApiResponse<PaginatedPayload<AdminVisiteItem>> & { stats?: import('@/types/api').VisitesStats }> => {
     return apiRequest(`/admin/visites${buildQuery(filters || {})}`, { method: 'GET' });
   },
   getAdminVisite: async (id: number): Promise<ApiResponse<AdminVisiteItem>> => {
     return apiRequest(`/admin/visites/${id}`, { method: 'GET' });
+  },
+  getVisiteHistorique: async (id: number): Promise<ApiResponse<import('@/types/api').DossierAuditLogEntry[]>> => {
+    return apiRequest(`/admin/visites/${id}/historique`, { method: 'GET' });
   },
   updateAdminVisiteStatut: async (id: number, status: string, motif?: string): Promise<ApiResponse<AdminVisiteItem>> => {
     return apiRequest(`/admin/visites/${id}/statut`, {
@@ -811,7 +844,7 @@ export const adminApi = {
   },
   planifierVisite: async (
     id: number,
-    payload: { scheduled_date: string; instructions_itineraire?: string; target_agent_id?: number }
+    payload: { scheduled_date: string; instructions_itineraire?: string; target_agent_id?: number | null }
   ): Promise<ApiResponse<any>> => {
     return apiRequest(`/admin/visites/${id}/planifier`, {
       method: 'POST',
@@ -846,38 +879,78 @@ export const adminApi = {
   },
 
   // Brique C : Demandes Clients & Matching
-  getAdminDemandes: async (filters?: { status?: string; property_type?: string; page?: number }): Promise<ApiResponse<PaginatedPayload<AdminDemandeClientItem>>> => {
+  getOperationalAgents: async (): Promise<ApiResponse<import('@/types/api').OperationalAgentItem[]>> => {
+    return apiRequest('/admin/visites-demandes/agents', { method: 'GET' });
+  },
+  getAdminDemandes: async (filters?: {
+    status?: string;
+    workflow_status?: string;
+    property_type?: string;
+    transaction_type?: string;
+    gestionnaire_id?: number | string;
+    zone_id?: number | string;
+    search?: string;
+    period?: string;
+    date_debut?: string;
+    date_fin?: string;
+    page?: number;
+    per_page?: number;
+  }): Promise<ApiResponse<PaginatedPayload<AdminDemandeClientItem>> & { stats?: import('@/types/api').DemandesStats }> => {
     return apiRequest(`/admin/demandes-clients${buildQuery(filters || {})}`, { method: 'GET' });
   },
   getAdminDemande: async (id: number): Promise<ApiResponse<AdminDemandeClientItem>> => {
     return apiRequest(`/admin/demandes-clients/${id}`, { method: 'GET' });
   },
-  prendreEnChargeDemande: async (id: number): Promise<ApiResponse<any>> => {
-    return apiRequest(`/admin/demandes-clients/${id}/prendre-en-charge`, { method: 'POST' });
+  getDemandeHistorique: async (id: number): Promise<ApiResponse<import('@/types/api').DossierAuditLogEntry[]>> => {
+    return apiRequest(`/admin/demandes-clients/${id}/historique`, { method: 'GET' });
+  },
+  prendreEnChargeDemande: async (
+    id: number,
+    options?: { gestionnaire_id?: number; force_reassign?: boolean }
+  ): Promise<ApiResponse<any>> => {
+    return apiRequest(`/admin/demandes-clients/${id}/prendre-en-charge`, {
+      method: 'POST',
+      body: options ? JSON.stringify(options) : undefined,
+    });
   },
   getMatchingBiens: async (
     id: number
   ): Promise<
     ApiResponse<{
       biens_suggeres: MatchingPropertySuggestion[];
+      biens_associes?: import('@/types/api').AssociatedPropertySummary[];
       total_biens_compatibles: number;
+      criteres_recherche?: Record<string, any>;
     }>
   > => {
     return apiRequest(`/admin/demandes-clients/${id}/matching-biens`, { method: 'GET' });
   },
-  associerBienDemande: async (id: number, proprieteId: number): Promise<ApiResponse<any>> => {
+  associerBienDemande: async (
+    id: number,
+    proprieteIdOrIds: number | number[],
+    options?: { note_agent?: string; notifier_client?: boolean }
+  ): Promise<ApiResponse<any>> => {
+    const payload: Record<string, any> = Array.isArray(proprieteIdOrIds)
+      ? { propriete_ids: proprieteIdOrIds }
+      : { propriete_id: proprieteIdOrIds };
+    if (options?.note_agent) payload.note_agent = options.note_agent;
+    if (typeof options?.notifier_client === 'boolean') payload.notifier_client = options.notifier_client;
     return apiRequest(`/admin/demandes-clients/${id}/associer-bien`, {
       method: 'POST',
-      body: JSON.stringify({ propriete_id: proprieteId }),
+      body: JSON.stringify(payload),
     });
   },
   cloturerDemande: async (
     id: number,
-    motifCloture: 'satisfaite' | 'abandonnee_client' | 'delai_depasse'
+    motifCloture: 'satisfaite' | 'abandonnee_client' | 'delai_depasse',
+    motifDetails?: string
   ): Promise<ApiResponse<any>> => {
     return apiRequest(`/admin/demandes-clients/${id}/cloturer`, {
       method: 'POST',
-      body: JSON.stringify({ motif_cloture: motifCloture }),
+      body: JSON.stringify({
+        motif_cloture: motifCloture,
+        ...(motifDetails ? { motif_details: motifDetails } : {}),
+      }),
     });
   },
 
@@ -1022,6 +1095,7 @@ export const inquiriesApi = {
     type?: string;
     status?: string;
     page?: number;
+    per_page?: number;
   }): Promise<ApiResponse<PaginatedPayload<PropertyInquiryItem>>> => {
     const query = buildQuery(filters || {});
     return apiRequest(`/mes-inquiries${query}`, { method: 'GET' });

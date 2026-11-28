@@ -1,10 +1,8 @@
 import { router } from 'expo-router';
 import {
-  ArrowRight,
   Bell,
   Briefcase,
   Building2,
-  Calendar,
   ChevronLeft,
   ChevronRight,
   FileText,
@@ -14,7 +12,6 @@ import {
   PlusCircle,
   Search,
   Settings,
-  Sparkles,
   Sun,
   User,
   X,
@@ -113,7 +110,6 @@ function AuthenticatedPropertyFeed() {
     refreshUnreadCount,
     isAdminStaff,
     isAgentMobilier,
-    isClient,
   } = useAuth();
   const storageBaseUrl = useMemo(() => getStorageBaseUrl(), []);
   const scrollRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
@@ -249,44 +245,12 @@ function AuthenticatedPropertyFeed() {
       });
     } else {
       list.push({
-        key: 'my-properties',
-        label: 'Mes annonces',
-        subtitle: 'Gérer mes biens publiés',
-        icon: <Building2 size={18} color={theme.primary} strokeWidth={2.2} />,
-        onPress: () => router.push('/my-properties' as any),
+        key: 'client-space',
+        label: 'Espace Client',
+        subtitle: 'Mes annonces, mes recherches, mes visites, mon profil',
+        icon: <User size={18} color={theme.primary} strokeWidth={2.2} />,
+        onPress: () => router.push('/client-space' as any),
       });
-      if (isClient) {
-        list.push({
-          key: 'search-requests',
-          label: 'Mes recherches',
-          subtitle: 'Alertes & demandes sur mesure',
-          icon: <ArrowRight size={18} color={theme.primary} strokeWidth={2.2} />,
-          onPress: () => router.push('/search-requests' as any),
-        });
-      }
-      list.push(
-        {
-          key: 'visits',
-          label: 'Mes visites',
-          subtitle: 'Suivi de mes visites physiques',
-          icon: <Calendar size={18} color={theme.primary} strokeWidth={2.2} />,
-          onPress: () => router.push('/visits' as any),
-        },
-        {
-          key: 'transactions',
-          label: 'Paiements & Reçus',
-          subtitle: 'Quittances officielles Kkiapay',
-          icon: <Sparkles size={18} color={theme.primary} strokeWidth={2.2} />,
-          onPress: () => router.push('/transactions' as any),
-        },
-        {
-          key: 'profile',
-          label: 'Mon Profil',
-          subtitle: 'Informations personnelles & photo',
-          icon: <User size={18} color={theme.primary} strokeWidth={2.2} />,
-          onPress: () => router.push('/profile' as any),
-        }
-      );
     }
 
     list.push({
@@ -317,7 +281,7 @@ function AuthenticatedPropertyFeed() {
     });
 
     return list;
-  }, [isAgentMobilier, isClient, isAdminStaff, unreadNotificationsCount, theme.primary, theme.textSecondary]);
+  }, [isAgentMobilier, isAdminStaff, unreadNotificationsCount, theme.primary, theme.textSecondary]);
 
   return (
     <SafeAreaView edges={['top']} style={[styles.container, { backgroundColor: theme.background }]}>
@@ -475,40 +439,12 @@ function AuthenticatedPropertyFeed() {
                     <Text style={[styles.quickActionText, { color: '#FDE68A' }]}>Espace Agent</Text>
                   </Pressable>
                 ) : (
-                  <>
-                    <Pressable
-                      onPress={() => router.push('/my-properties' as any)}
-                      style={[styles.quickActionBtn, styles.quickActionOutline]}>
-                      <Building2 size={15} color="#FFFFFF" strokeWidth={2} />
-                      <Text style={styles.quickActionText}>Mes annonces</Text>
-                    </Pressable>
-                    {isClient && (
-                      <Pressable
-                        onPress={() => router.push('/search-requests' as any)}
-                        style={[styles.quickActionBtn, styles.quickActionOutline]}>
-                        <ArrowRight size={15} color="#FFFFFF" strokeWidth={2} />
-                        <Text style={styles.quickActionText}>Mes recherches</Text>
-                      </Pressable>
-                    )}
-                    <Pressable
-                      onPress={() => router.push('/visits' as any)}
-                      style={[styles.quickActionBtn, styles.quickActionOutline]}>
-                      <Calendar size={15} color="#FFFFFF" strokeWidth={2} />
-                      <Text style={styles.quickActionText}>Mes visites</Text>
-                    </Pressable>
-                    <Pressable
-                      onPress={() => router.push('/transactions' as any)}
-                      style={[styles.quickActionBtn, styles.quickActionOutline]}>
-                      <Sparkles size={15} color="#FFFFFF" strokeWidth={2} />
-                      <Text style={styles.quickActionText}>Paiements &amp; Reçus</Text>
-                    </Pressable>
-                    <Pressable
-                      onPress={() => router.push('/profile' as any)}
-                      style={[styles.quickActionBtn, styles.quickActionOutline]}>
-                      <User size={15} color="#FFFFFF" strokeWidth={2} />
-                      <Text style={styles.quickActionText}>Mon Profil</Text>
-                    </Pressable>
-                  </>
+                  <Pressable
+                    onPress={() => router.push('/client-space' as any)}
+                    style={[styles.quickActionBtn, styles.quickActionOutline]}>
+                    <User size={15} color="#FDE68A" strokeWidth={2} />
+                    <Text style={[styles.quickActionText, { color: '#FDE68A' }]}>Espace Client</Text>
+                  </Pressable>
                 )}
 
                 {isAdminStaff && (
@@ -540,11 +476,11 @@ function AuthenticatedPropertyFeed() {
               </Pressable>
             ) : (
               <Pressable
-                onPress={() => router.push('/profile' as any)}
+                onPress={() => router.push('/client-space' as any)}
                 style={[styles.quickActionBtn, styles.quickActionOutline, isMobile && { flex: 1, justifyContent: 'center' }]}>
-                <User size={15} color="#FFFFFF" strokeWidth={2} />
-                <Text numberOfLines={1} style={styles.quickActionText}>
-                  Mon Profil
+                <User size={15} color="#FDE68A" strokeWidth={2} />
+                <Text numberOfLines={1} style={[styles.quickActionText, { color: '#FDE68A' }]}>
+                  Espace Client
                 </Text>
               </Pressable>
             )}
@@ -693,12 +629,12 @@ function AuthenticatedPropertyFeed() {
                 Aucun bien immobilier disponible
               </Text>
               <Text style={[styles.emptySubtitle, { color: theme.textSecondary }]}>
-                {selectedCategory !== 'tous' || selectedTransaction !== 'tous' || debouncedSearch
+                {selectedCategory !== 'tous' || selectedTransaction !== 'tous' || debouncedSearch.length > 0
                   ? 'Aucun bien publié ne correspond à vos filtres actuels.'
                   : "Aucun bien n'est publié dans le catalogue pour le moment."}
               </Text>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center', marginTop: 6 }}>
-                {(selectedCategory !== 'tous' || selectedTransaction !== 'tous' || debouncedSearch) && (
+                {(selectedCategory !== 'tous' || selectedTransaction !== 'tous' || debouncedSearch.length > 0) && (
                   <Pressable
                     onPress={handleResetFilters}
                     style={[styles.retryBtn, { backgroundColor: theme.primary }]}>

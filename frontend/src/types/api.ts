@@ -106,6 +106,16 @@ export interface DemandeRechercheItem {
   is_paid?: boolean;
   status: 'active' | 'fulfilled' | 'closed' | string;
   motif_cloture?: string | null;
+  matched_propriete?: {
+    id: number;
+    type: PropertyTypeBackend;
+    transaction_type: TransactionTypeBackend;
+    commune: string;
+    arrondissement?: string | null;
+    quartier?: string | null;
+    prix: number | string;
+    status: string;
+  } | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -239,6 +249,65 @@ export interface AdminUserItem {
   created_at?: string;
 }
 
+export interface VisitesStats {
+  total_visites: number;
+  en_attente: number;
+  programmees: number;
+  effectuees: number;
+  annulees: number;
+}
+
+export interface DemandesStats {
+  total_demandes: number;
+  en_attente: number;
+  en_cours: number;
+  satisfaites: number;
+  abandonnees: number;
+  expirees: number;
+}
+
+export interface OperationalAgentItem {
+  id: number;
+  nom_complet: string;
+  email: string;
+  role: string;
+  zone_id?: number | null;
+  zone_nom?: string | null;
+}
+
+export interface DossierAuditLogEntry {
+  id: number;
+  action: string;
+  details?: Record<string, any> | null;
+  actor?: {
+    id: number;
+    nom_complet: string;
+    email: string;
+  } | null;
+  created_at?: string | null;
+}
+
+export interface AssociatedPropertySummary {
+  id?: number;
+  propriete_id?: number;
+  type: string;
+  transaction_type: string;
+  commune: string;
+  arrondissement?: string | null;
+  quartier?: string | null;
+  prix: number;
+  surface?: number | null;
+  nombres_chambres?: number | null;
+  status: string;
+  photo_url?: string | null;
+  score_matching?: number | null;
+  score_matching_pourcentage?: number | null;
+  note_agent?: string | null;
+  client_notifie?: boolean;
+  notifie_at?: string | null;
+  associe_at?: string | null;
+}
+
 export interface AdminVisiteItem {
   id: number;
   reference_visite: string;
@@ -263,10 +332,13 @@ export interface AdminVisiteItem {
     type: string;
     transaction_type: string;
     commune: string;
-    arrondissement?: string;
-    quartier?: string;
+    arrondissement?: string | null;
+    quartier?: string | null;
     prix: number | string;
+    surface?: number | null;
+    nombres_chambres?: number | null;
     status: string;
+    photo_url?: string | null;
   } | null;
   target_agent_id?: number | null;
   agent_assigne?: {
@@ -275,12 +347,32 @@ export interface AdminVisiteItem {
     email: string;
   } | null;
   scheduled_date?: string | null;
-  status: string;
+  status: 'pending' | 'confirmed' | 'completed' | 'cancelled' | string;
   is_fee_paid: boolean;
   statut_paiement: string;
+  instructions_itineraire?: string | null;
+  compte_rendu?: string | null;
+  issue_cloture?: string | null;
+  is_escalade_haute?: boolean;
+  offre_montant?: number | null;
+  allowed_transitions?: string[];
+  permissions?: {
+    can_plan: boolean;
+    can_confirm: boolean;
+    can_complete: boolean;
+    can_cancel: boolean;
+    can_report: boolean;
+    can_close: boolean;
+    can_escalate: boolean;
+    can_assign_zone: boolean;
+    can_change_status: boolean;
+  };
   donnees_masquees: boolean;
   created_at?: string;
+  updated_at?: string;
 }
+
+export type DemandeWorkflowStatus = 'en_attente' | 'en_cours' | 'satisfaite' | 'abandonnee' | 'expiree';
 
 export interface AdminDemandeClientItem {
   id: number;
@@ -310,21 +402,79 @@ export interface AdminDemandeClientItem {
   is_paid: boolean;
   statut_paiement: string;
   status: string;
+  workflow_status?: DemandeWorkflowStatus;
+  gestionnaire_id?: number | null;
+  gestionnaire?: {
+    id: number;
+    nom_complet: string;
+    email: string;
+  } | null;
+  prise_en_charge_at?: string | null;
+  expires_at?: string | null;
+  is_expired?: boolean;
+  matched_propriete_id?: number | null;
+  matched_propriete?: {
+    id: number;
+    type: string;
+    transaction_type: string;
+    commune: string;
+    arrondissement?: string | null;
+    quartier?: string | null;
+    prix: number;
+    status: string;
+    photo_url?: string | null;
+  } | null;
+  biens_associes?: AssociatedPropertySummary[];
+  biens_associes_count?: number;
+  biens_correspondants_count?: number;
+  motif_cloture?: string | null;
+  motif_cloture_details?: string | null;
+  cloture_at?: string | null;
+  cloture_par_id?: number | null;
+  cloture_par?: {
+    id: number;
+    nom_complet: string;
+    email: string;
+  } | null;
+  permissions?: {
+    can_take_charge: boolean;
+    can_reassign: boolean;
+    can_match: boolean;
+    can_view_matches: boolean;
+    can_close_satisfied: boolean;
+    can_close_abandoned: boolean;
+    can_mark_expired: boolean;
+    can_view_history: boolean;
+  };
   donnees_masquees: boolean;
   created_at?: string;
+  updated_at?: string;
 }
 
 export interface MatchingPropertySuggestion {
   propriete_id: number;
+  titre?: string;
   type: string;
   transaction_type: string;
   commune: string;
-  arrondissement?: string;
-  quartier?: string;
+  arrondissement?: string | null;
+  quartier?: string | null;
   prix: number;
-  surface: number;
+  surface?: number | null;
+  nombres_chambres?: number | null;
+  avance_mois?: number | null;
+  accessibilite?: string | null;
+  eau_courant?: string | null;
+  is_negotiable?: boolean;
+  description?: string | null;
+  status?: string;
+  disponibilite?: string;
+  photo_url?: string | null;
   zone?: string | null;
   score_matching_pourcentage: number;
+  criteres_correspondants?: string[];
+  criteres_manquants?: string[];
+  deja_associe?: boolean;
 }
 
 export interface DemandeDemasquageItem {
@@ -645,4 +795,173 @@ export interface AdminSettingsResponse {
   can_edit_financial: boolean;
   items: PlatformSettingItem[];
   grouped: Record<string, PlatformSettingItem[]>;
+}
+
+export type SuperAdminDashboardPeriod = 'today' | 'week' | 'month' | 'year' | 'custom';
+
+export interface SuperAdminActivityPoint {
+  label: string;
+  inscriptions: number;
+  publications: number;
+  demandes: number;
+}
+
+export interface SuperAdminDistributionSlice {
+  key: string;
+  label: string;
+  count: number;
+  color: string;
+}
+
+export interface SuperAdminZonePerfRow {
+  id: number;
+  code: string;
+  nom: string;
+  commune: string;
+  departement?: string | null;
+  visites_total: number;
+  visites_effectuees: number;
+  biens_actifs: number;
+  biens_conclus: number;
+  biens_en_attente: number;
+  demandes_total: number;
+  demandes_traitees: number;
+  dossiers_traites: number;
+  taux_realisation_pct: number;
+}
+
+export interface SuperAdminPendingAction {
+  key: string;
+  label: string;
+  description: string;
+  count: number;
+  severity: 'high' | 'medium' | 'low';
+  target_page: string;
+  sub_tab?: string;
+}
+
+export interface SuperAdminRecentActivity {
+  id: string;
+  category: 'audit' | 'client' | 'agent' | 'publication' | 'demande' | 'visite' | 'finance' | string;
+  title: string;
+  description: string;
+  actor: string;
+  status: string;
+  target_page: string;
+  sub_tab?: string;
+  created_at?: string | null;
+}
+
+export interface SuperAdminSidebarBadges {
+  moderation: number;
+  visites: number;
+  demasquages: number;
+  equipe: number;
+  finance: number;
+}
+
+export interface SuperAdminSystemHealthSummary {
+  status: 'operational' | 'degraded' | 'error';
+  label: string;
+  db_latency_ms: number | null;
+  failed_jobs: number;
+}
+
+export interface SuperAdminDashboardOverview {
+  generated_at: string;
+  financial_access: boolean;
+  periode: {
+    key: SuperAdminDashboardPeriod;
+    label: string;
+    debut: string;
+    fin: string;
+    precedent_debut: string;
+    precedent_fin: string;
+  };
+  system_health: SuperAdminSystemHealthSummary;
+  kpis: {
+    utilisateurs: {
+      total: number;
+      clients: number;
+      agents: number;
+      agents_kyc_en_attente: number;
+      periode_count: number;
+      clients_periode: number;
+      agents_periode: number;
+      periode_precedente: number;
+      evolution_pct: number | null;
+    };
+    publications: {
+      total: number;
+      publiees: number;
+      en_attente: number;
+      rejetees: number;
+      conclues: number;
+      periode_count: number;
+      periode_precedente: number;
+      evolution_pct: number | null;
+    };
+    demandes_recherche: {
+      total: number;
+      actives: number;
+      satisfaites: number;
+      cloturees: number;
+      non_assignees: number;
+      periode_count: number;
+      periode_precedente: number;
+      evolution_pct: number | null;
+    };
+    visites_terrain: {
+      total: number;
+      en_attente: number;
+      programmees: number;
+      effectuees: number;
+      annulees: number;
+      taux_completion_pct: number;
+      periode_count: number;
+      periode_precedente: number;
+      evolution_pct: number | null;
+    };
+    demasquages_ttl: {
+      total: number;
+      en_attente: number;
+      approuves: number;
+      actifs_maintenant: number;
+      refuses_ou_revoques: number;
+      periode_count: number;
+      periode_precedente: number;
+      evolution_pct: number | null;
+    };
+    tresorerie: {
+      solde_disponible: number;
+      solde_en_cours_retrait: number;
+      total_retraits_executes: number;
+      retraits_en_attente_count: number;
+      encaissements_periode: number;
+      encaissements_periode_precedente: number;
+      evolution_pct: number | null;
+      retraits_geles: boolean;
+      devise: string;
+    } | null;
+  };
+  charts: {
+    evolution_activites: SuperAdminActivityPoint[];
+    repartition_demandes: SuperAdminDistributionSlice[];
+    repartition_publications: SuperAdminDistributionSlice[];
+    repartition_visites: SuperAdminDistributionSlice[];
+    performance_zones: SuperAdminZonePerfRow[];
+  };
+  actions_en_attente: SuperAdminPendingAction[];
+  sidebar_badges: SuperAdminSidebarBadges;
+  activites_recentes: {
+    data: SuperAdminRecentActivity[];
+    current_page: number;
+    last_page: number;
+    per_page: number;
+    total: number;
+  };
+  meta: {
+    audit_logs_total: number;
+    zones_actives_total: number;
+  };
 }

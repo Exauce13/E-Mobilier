@@ -278,14 +278,16 @@ export default function ExploreScreen() {
                 Filtres complets par localisation, budget, surface, chambres et commodités
               </Text>
             </View>
-            <Pressable
-              onPress={() => {
-                if (!isAuthenticated) openAuthModal('login');
-                else router.push('/search-requests' as any);
-              }}
-              style={[styles.requestShortcut, { backgroundColor: theme.navy }]}>
-              <Text style={styles.requestShortcutText}>Mes Demandes</Text>
-            </Pressable>
+            {!isAgentMobilier && (
+              <Pressable
+                onPress={() => {
+                  if (!isAuthenticated) openAuthModal('login');
+                  else router.push('/client?tab=recherches' as any);
+                }}
+                style={[styles.requestShortcut, { backgroundColor: theme.navy }]}>
+                <Text style={styles.requestShortcutText}>Mes Recherches</Text>
+              </Pressable>
+            )}
           </View>
 
           {/* Complete Search Form Card */}
@@ -640,7 +642,7 @@ export default function ExploreScreen() {
                   <Pressable
                     onPress={() => {
                       if (!isAuthenticated) openAuthModal('login');
-                      else router.push('/search-requests' as any);
+                      else router.push('/client?tab=recherches' as any);
                     }}
                     style={[styles.saveSearchBtn, { backgroundColor: theme.primaryLight }]}>
                     <Text style={{ color: theme.primaryDark, fontSize: 12, fontWeight: '800' }}>
@@ -694,7 +696,7 @@ export default function ExploreScreen() {
                   <Pressable
                     onPress={() => {
                       if (!isAuthenticated) openAuthModal('login');
-                      else router.push('/search-requests' as any);
+                      else router.push('/client?tab=recherches' as any);
                     }}
                     style={[styles.ctaBtn, { backgroundColor: theme.primary }]}>
                     <Text style={styles.ctaBtnText}>Créer une demande de recherche</Text>

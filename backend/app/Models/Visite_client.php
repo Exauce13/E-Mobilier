@@ -11,6 +11,18 @@ class Visite_client extends Model
     use HasFactory;
 
     /**
+     * Transitions de cycle de vie autorisées pour une visite physique.
+     *
+     * @var array<string, list<string>>
+     */
+    public const ALLOWED_TRANSITIONS = [
+        'pending' => ['confirmed', 'cancelled'],
+        'confirmed' => ['pending', 'completed', 'cancelled'],
+        'completed' => [],
+        'cancelled' => [],
+    ];
+
+    /**
      * The table associated with the model.
      *
      * @var string
@@ -38,6 +50,30 @@ class Visite_client extends Model
     ];
 
     /**
+     * Vérifie si une transition de statut est valide selon le cycle de vie métier.
+     */
+    public function canTransitionTo(string $targetStatus): bool
+    {
+        if ($this->status === $targetStatus) {
+            return true;
+        }
+
+        $allowed = self::ALLOWED_TRANSITIONS[$this->status] ?? [];
+
+        return in_array($targetStatus, $allowed, true);
+    }
+
+    /**
+     * Retourne la liste des statuts cibles autorisés depuis le statut courant.
+     *
+     * @return list<string>
+     */
+    public function allowedNextStatuses(): array
+    {
+        return self::ALLOWED_TRANSITIONS[$this->status] ?? [];
+    }
+
+    /**
      * Zone géographique rattachée à la visite.
      */
     public function zone(): BelongsTo
@@ -55,6 +91,8 @@ class Visite_client extends Model
         return [
             'scheduled_date' => 'datetime',
             'is_fee_paid' => 'boolean',
+            'is_escalade_haute' => 'boolean',
+            'offre_montant' => 'decimal:2',
         ];
     }
 

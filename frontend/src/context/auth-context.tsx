@@ -27,6 +27,7 @@ export interface AuthUser {
   statut?: string;
   zone_id?: number | null;
   balanceFifa: number;
+  created_at?: string;
 }
 
 export interface AuthResult {
@@ -101,6 +102,7 @@ function mapBackendUserToAuthUser(u: any): AuthUser {
     statut: u.statut,
     zone_id: u.zone_id ?? null,
     balanceFifa: Number(u.balanceFifa ?? 0),
+    created_at: u.created_at,
   };
 }
 

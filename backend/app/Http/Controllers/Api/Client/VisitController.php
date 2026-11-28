@@ -138,10 +138,11 @@ class VisitController extends Controller
                     $targetAgentId = $propriete->user_id;
                 }
 
-                // 1. Enregistrement de la visite
+                // 1. Enregistrement de la visite (avec héritage automatique de la zone du bien)
                 $visite = Visite_client::create([
                     'client_id' => $user->id,
                     'property_id' => $propriete->id,
+                    'zone_id' => $propriete->zone_id,
                     'target_agent_id' => $targetAgentId,
                     'scheduled_date' => $request->input('scheduled_date'),
                     'status' => 'pending',

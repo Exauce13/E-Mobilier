@@ -52,10 +52,10 @@ export default function AppTabs() {
           />
         </NativeTabs.Trigger>
       ) : isAuthenticated ? (
-        <NativeTabs.Trigger name="visits">
-          <NativeTabs.Trigger.Label>Visites</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger name="client-space">
+          <NativeTabs.Trigger.Label>Espace Client</NativeTabs.Trigger.Label>
           <NativeTabs.Trigger.Icon
-            src={require('@/assets/images/tabIcons/explore.png')}
+            src={require('@/assets/images/tabIcons/home.png')}
             renderingMode="template"
           />
         </NativeTabs.Trigger>

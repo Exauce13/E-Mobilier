@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\Admin\OperationalMetricsController;
 use App\Http\Controllers\Api\Admin\PlatformSettingController;
 use App\Http\Controllers\Api\Admin\SearchRequestMatchingController;
 use App\Http\Controllers\Api\Admin\SecurityAlertController;
+use App\Http\Controllers\Api\Admin\SuperAdminDashboardController;
 use App\Http\Controllers\Api\Admin\SystemHealthController;
 use App\Http\Controllers\Api\Admin\VisitOperationalController;
 use App\Http\Controllers\Api\Admin\VisiteAdminController;
@@ -142,9 +143,12 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::get('/admin/demandes-clients', [DemandeClientAdminController::class, 'index']);
         Route::get('/admin/toutes-les-demandes', [DemandeClientAdminController::class, 'index']);
         Route::get('/admin/demandes-clients/{id}', [DemandeClientAdminController::class, 'show']);
+        Route::get('/admin/demandes-clients/{id}/historique', [DemandeClientAdminController::class, 'historique']);
+        Route::get('/admin/visites-demandes/agents', [DemandeClientAdminController::class, 'operationalAgents']);
 
         Route::get('/admin/visites', [VisiteAdminController::class, 'index']);
         Route::get('/admin/visites/{id}', [VisiteAdminController::class, 'show']);
+        Route::get('/admin/visites/{id}/historique', [VisiteAdminController::class, 'historique']);
         Route::patch('/admin/visites/{id}/statut', [VisiteAdminController::class, 'updateStatut']);
 
         // Consultation unitaire tracée des coordonnées (Vérification TTL stricte now < expires_at)
@@ -162,8 +166,9 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::get('/admin/demasquages/mes-demandes', [DemasquageController::class, 'mesDemandes']);
     });
 
-    // Arbitrage des démasquages de coordonnées clients (Super Admin Principal uniquement)
+    // Arbitrage des démasquages de coordonnées clients & Centre de Supervision (Super Admin Principal uniquement)
     Route::middleware('super_admin_principal')->group(function () {
+        Route::get('/admin/dashboard/super-admin', [SuperAdminDashboardController::class, 'overview']);
         Route::get('/admin/demasquages/en-attente', [DemasquageController::class, 'enAttente']);
         Route::post('/admin/demasquages/{id}/approuver', [DemasquageController::class, 'approuver']);
         Route::post('/admin/demasquages/{id}/refuser', [DemasquageController::class, 'refuser']);

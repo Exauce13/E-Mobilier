@@ -15,7 +15,6 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ScreenHeader } from '@/components/ui/screen-header';
-import { BENIN_COMMUNES, QUARTIERS_BY_COMMUNE } from '@/constants/locations';
 import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth-context';
 import { useResponsive } from '@/hooks/use-responsive';
@@ -61,7 +60,7 @@ export default function ClientFormScreen() {
   const [telephone, setTelephone] = useState('');
   const [email, setEmail] = useState('');
   const [need, setNeed] = useState<ClientNeed>('Acheter une maison / villa');
-  const [commune, setCommune] = useState('Cotonou');
+  const [commune, setCommune] = useState('');
   const [quartier, setQuartier] = useState('');
   const [budget, setBudget] = useState('');
   const [message, setMessage] = useState('');
@@ -81,8 +80,6 @@ export default function ClientFormScreen() {
     setEmail((prev) => prev || user.email || '');
   }, [user]);
 
-  const quartiers = (QUARTIERS_BY_COMMUNE[commune] || []).filter((q) => q !== 'Tous');
-
   const validateForm = (): FormErrors => {
     const next: FormErrors = {};
     if (!isValidPersonName(nom)) {
@@ -97,8 +94,8 @@ export default function ClientFormScreen() {
     if (!isValidEmail(email)) {
       next.email = 'Veuillez saisir une adresse e-mail valide.';
     }
-    if (!commune.trim()) {
-      next.commune = 'Veuillez choisir une commune.';
+    if (!commune.trim() || commune.trim().length < 2) {
+      next.commune = 'Veuillez saisir le nom de votre commune (au moins 2 caractères).';
     }
     if (budget.trim()) {
       const numeric = Number(budget.replace(/\s+/g, ''));
@@ -166,6 +163,7 @@ export default function ClientFormScreen() {
     setSubmittedRecord(null);
     setErrors({});
     setGlobalError(null);
+    setCommune('');
     setQuartier('');
     setBudget('');
     setMessage('');
@@ -410,73 +408,29 @@ export default function ClientFormScreen() {
                     })}
                   </View>
 
-                  <Text style={[styles.label, { color: theme.text }]}>Commune souhaitée *</Text>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.chipsScroll}>
-                    {BENIN_COMMUNES.filter((c) => c !== 'Toutes les communes').map((c) => {
-                      const active = commune === c;
-                      return (
-                        <Pressable
-                          key={c}
-                          onPress={() => {
-                            setCommune(c);
-                            setQuartier('');
-                          }}
-                          style={[
-                            styles.chip,
-                            {
-                              backgroundColor: active ? theme.navy : theme.backgroundElement,
-                              borderColor: active ? theme.navy : theme.cardBorder,
-                            },
-                          ]}>
-                          <Text
-                            style={{
-                              color: active ? '#FFFFFF' : theme.text,
-                              fontSize: 12,
-                              fontWeight: '700',
-                            }}>
-                            {c}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
-                  </ScrollView>
-
-                  {quartiers.length > 0 && (
-                    <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      contentContainerStyle={styles.chipsScroll}>
-                      {quartiers.map((q) => {
-                        const active = quartier === q;
-                        return (
-                          <Pressable
-                            key={q}
-                            onPress={() => setQuartier(active ? '' : q)}
-                            style={[
-                              styles.chip,
-                              {
-                                backgroundColor: active ? theme.primaryLight : theme.backgroundElement,
-                                borderColor: active ? theme.primary : theme.cardBorder,
-                              },
-                            ]}>
-                            <Text
-                              style={{
-                                color: active ? theme.primaryDark : theme.textSecondary,
-                                fontSize: 12,
-                                fontWeight: '600',
-                              }}>
-                              {q}
-                            </Text>
-                          </Pressable>
-                        );
-                      })}
-                    </ScrollView>
-                  )}
-
                   <View style={twoColLayout ? styles.twoCol : styles.oneCol}>
+                    <View style={styles.fieldGroup}>
+                      <Text style={[styles.label, { color: theme.text }]}>Commune *</Text>
+                      <TextInput
+                        style={[
+                          styles.input,
+                          {
+                            color: theme.text,
+                            backgroundColor: theme.backgroundElement,
+                            borderColor: errors.commune ? '#DC2626' : theme.cardBorder,
+                          },
+                        ]}
+                        placeholder="Saisissez votre commune"
+                        placeholderTextColor={theme.textSecondary}
+                        value={commune}
+                        onChangeText={(v) => {
+                          setCommune(v);
+                          if (errors.commune) setErrors((p) => ({ ...p, commune: undefined }));
+                        }}
+                      />
+                      {errors.commune ? <Text style={styles.fieldError}>{errors.commune}</Text> : null}
+                    </View>
+
                     <View style={styles.fieldGroup}>
                       <Text style={[styles.label, { color: theme.text }]}>
                         Quartier précis (optionnel)
@@ -496,31 +450,31 @@ export default function ClientFormScreen() {
                         onChangeText={setQuartier}
                       />
                     </View>
+                  </View>
 
-                    <View style={styles.fieldGroup}>
-                      <Text style={[styles.label, { color: theme.text }]}>
-                        Budget estimatif (F CFA)
-                      </Text>
-                      <TextInput
-                        style={[
-                          styles.input,
-                          {
-                            color: theme.text,
-                            backgroundColor: theme.backgroundElement,
-                            borderColor: errors.budget ? '#DC2626' : theme.cardBorder,
-                          },
-                        ]}
-                        placeholder="Ex: 250000 ou 25000000"
-                        placeholderTextColor={theme.textSecondary}
-                        keyboardType="numeric"
-                        value={budget}
-                        onChangeText={(v) => {
-                          setBudget(v);
-                          if (errors.budget) setErrors((p) => ({ ...p, budget: undefined }));
-                        }}
-                      />
-                      {errors.budget ? <Text style={styles.fieldError}>{errors.budget}</Text> : null}
-                    </View>
+                  <View style={styles.fieldGroup}>
+                    <Text style={[styles.label, { color: theme.text }]}>
+                      Budget estimatif (F CFA)
+                    </Text>
+                    <TextInput
+                      style={[
+                        styles.input,
+                        {
+                          color: theme.text,
+                          backgroundColor: theme.backgroundElement,
+                          borderColor: errors.budget ? '#DC2626' : theme.cardBorder,
+                        },
+                      ]}
+                      placeholder="Ex: 250000 ou 25000000"
+                      placeholderTextColor={theme.textSecondary}
+                      keyboardType="numeric"
+                      value={budget}
+                      onChangeText={(v) => {
+                        setBudget(v);
+                        if (errors.budget) setErrors((p) => ({ ...p, budget: undefined }));
+                      }}
+                    />
+                    {errors.budget ? <Text style={styles.fieldError}>{errors.budget}</Text> : null}
                   </View>
 
                   <View style={styles.fieldGroup}>

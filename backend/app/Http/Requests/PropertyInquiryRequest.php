@@ -45,6 +45,13 @@ class PropertyInquiryRequest extends FormRequest
             $merge['telephone'] = $cleaned;
         }
 
+        foreach (['commune', 'quartier', 'sujet'] as $field) {
+            if ($this->has($field) && is_string($this->input($field))) {
+                $val = trim($this->input($field));
+                $merge[$field] = $val === '' ? null : $val;
+            }
+        }
+
         if (! empty($merge)) {
             $this->merge($merge);
         }
@@ -68,7 +75,12 @@ class PropertyInquiryRequest extends FormRequest
             ],
             'meeting_mode' => ['nullable', 'string', 'in:sur_place,appel,agence'],
             'sujet' => ['nullable', 'string', 'max:180'],
-            'commune' => ['nullable', 'string', 'max:120'],
+            'commune' => [
+                $type === 'formulaire_client' ? 'required' : 'nullable',
+                'string',
+                'min:2',
+                'max:120',
+            ],
             'quartier' => ['nullable', 'string', 'max:120'],
             'budget' => ['nullable', 'numeric', 'min:0'],
             'message' => ['nullable', 'string', 'max:3000'],
@@ -92,6 +104,8 @@ class PropertyInquiryRequest extends FormRequest
             'scheduled_date.date' => 'Veuillez saisir une date valide.',
             'scheduled_date.after' => 'La date choisie doit être ultérieure à maintenant.',
             'property_id.exists' => 'Le bien immobilier sélectionné est introuvable.',
+            'commune.required' => 'La commune est obligatoire.',
+            'commune.min' => 'Veuillez saisir un nom de commune d\'au moins 2 caractères.',
             'budget.numeric' => 'Le budget doit être un montant numérique valide.',
         ];
     }

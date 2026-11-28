@@ -398,7 +398,7 @@ class InscriptionController extends Controller
     }
 
     /**
-     * Mise à jour des informations de profil (nom, prénom).
+     * Mise à jour des informations de profil (nom, prénom, téléphone, e-mail).
      */
     public function updateProfil(Request $request): JsonResponse
     {
@@ -407,11 +407,78 @@ class InscriptionController extends Controller
             return response()->json(['success' => false, 'message' => 'Non authentifié.'], 401);
         }
 
-        $validated = $request->validate([
-            'name' => ['sometimes', 'required', 'string', 'min:2', 'max:100'],
-            'prenom' => ['sometimes', 'required', 'string', 'min:2', 'max:100'],
+        // Normalisation du téléphone si fourni (supporte 'telephone' ou 'phone')
+        $input = $request->all();
+        if (array_key_exists('phone', $input) && ! array_key_exists('telephone', $input)) {
+            $input['telephone'] = $input['phone'];
+        }
+        if (isset($input['telephone']) && $input['telephone'] !== null) {
+            $trimmedPhone = trim((string) $input['telephone']);
+            $withoutSpaces = preg_replace('/\s+/', '', $trimmedPhone);
+            if (preg_match('/^(\+229|00229|229)?01[0-9]{8}$/', $withoutSpaces)) {
+                if (str_starts_with($withoutSpaces, '00229')) {
+                    $withoutSpaces = '+229' . substr($withoutSpaces, 5);
+                } elseif (str_starts_with($withoutSpaces, '229')) {
+                    $withoutSpaces = '+' . $withoutSpaces;
+                } elseif (! str_starts_with($withoutSpaces, '+')) {
+                    $withoutSpaces = '+229' . $withoutSpaces;
+                }
+                $input['telephone'] = $withoutSpaces;
+            } else {
+                $input['telephone'] = $trimmedPhone;
+            }
+        }
+        if (array_key_exists('email', $input)) {
+            $trimmedEmail = trim((string) ($input['email'] ?? ''));
+            $input['email'] = $trimmedEmail === '' ? null : strtolower($trimmedEmail);
+        }
+        if (isset($input['name'])) {
+            $input['name'] = trim((string) $input['name']);
+        }
+        if (isset($input['prenom'])) {
+            $input['prenom'] = trim((string) $input['prenom']);
+        }
+
+        $validator = Validator::make($input, [
+            'name' => ['sometimes', 'required', 'string', 'min:2', 'max:100', 'regex:/^[\p{L}\s\'\x{2019}-]+$/u'],
+            'prenom' => ['sometimes', 'required', 'string', 'min:2', 'max:100', 'regex:/^[\p{L}\s\'\x{2019}-]+$/u'],
+            'telephone' => [
+                'sometimes',
+                'required',
+                'string',
+                'max:30',
+                'regex:/^(\+229|00229|229)?01[0-9]{8}$/',
+                \Illuminate\Validation\Rule::unique('users', 'telephone')->ignore($user->id),
+            ],
+            'email' => [
+                'sometimes',
+                'nullable',
+                'string',
+                'email',
+                'max:255',
+                \Illuminate\Validation\Rule::unique('users', 'email')->ignore($user->id),
+            ],
+        ], [
+            'name.min' => 'Le nom doit contenir au moins 2 caractères.',
+            'name.regex' => 'Le nom ne doit contenir que des lettres, espaces, tirets ou apostrophes.',
+            'prenom.min' => 'Le prénom doit contenir au moins 2 caractères.',
+            'prenom.regex' => 'Le prénom ne doit contenir que des lettres, espaces, tirets ou apostrophes.',
+            'telephone.required' => 'Le numéro de téléphone est obligatoire.',
+            'telephone.regex' => 'Le numéro de téléphone béninois doit commencer par 01 et comporter 10 chiffres (ex: 0197001122).',
+            'telephone.unique' => 'Ce numéro de téléphone est déjà utilisé par un autre compte.',
+            'email.email' => 'Veuillez saisir une adresse e-mail valide.',
+            'email.unique' => 'Cette adresse e-mail est déjà utilisée par un autre compte.',
         ]);
 
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => $validator->errors()->first(),
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $validated = $validator->validated();
         $user->update($validated);
         $user->refresh();
 

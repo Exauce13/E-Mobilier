@@ -303,13 +303,36 @@ class DemasquageController extends Controller
             ], 422);
         }
 
-        // 2. Récupération du dossier cible et du client
+        // 2. Récupération du dossier cible et du client (+ contrôle territorial Anti-IDOR)
         if ($type === 'visite') {
             $dossier = Visite_client::with(['client', 'propriete'])->findOrFail($id);
+            if ($user->isResponsableZone() && ! $user->isSuperAdminPrincipal() && ! $user->isSuperAdminTechnique()) {
+                $visiteZoneId = $dossier->zone_id ?? $dossier->propriete?->zone_id;
+                $commune = $user->zone?->commune;
+                $isSameCommune = $commune && $dossier->propriete?->commune
+                    && str_contains(mb_strtolower($dossier->propriete->commune), mb_strtolower($commune));
+                if ($visiteZoneId !== $user->zone_id && $dossier->target_agent_id !== $user->id && ! $isSameCommune) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Accès refusé (Anti-IDOR) : Cette visite relève d\'une zone en dehors de votre affectation.',
+                    ], 403);
+                }
+            }
             $client = $dossier->client;
             $ref = 'VIS-' . str_pad((string) $id, 5, '0', STR_PAD_LEFT);
         } else {
             $dossier = Demande_client::with('client')->findOrFail($id);
+            if ($user->isResponsableZone() && ! $user->isSuperAdminPrincipal() && ! $user->isSuperAdminTechnique()) {
+                $commune = $user->zone?->commune;
+                $isSameZone = ($dossier->zone_id && (int) $dossier->zone_id === (int) $user->zone_id);
+                $isSameCommune = ($commune && $dossier->target_commune && str_contains(mb_strtolower($dossier->target_commune), mb_strtolower($commune)));
+                if (! $isSameZone && ! $isSameCommune) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Accès refusé (Anti-IDOR) : Cette demande relève d\'une zone en dehors de votre affectation.',
+                    ], 403);
+                }
+            }
             $client = $dossier->client;
             $ref = 'DEM-' . str_pad((string) $id, 5, '0', STR_PAD_LEFT);
         }

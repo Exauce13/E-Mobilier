@@ -108,16 +108,17 @@ class PosteRechercheController extends Controller
         }
 
         try {
-            $dataToUpdate = array_filter([
-                'property_type' => $request->input('property_type'),
-                'transaction_type' => $request->input('transaction_type'),
-                'target_commune' => $request->input('target_commune'),
-                'target_arrondissement' => $request->has('target_arrondissement') ? $request->input('target_arrondissement') : null,
-                'target_quartier' => $request->has('target_quartier') ? $request->input('target_quartier') : null,
-                'budget_max' => $request->input('budget_max'),
-                'criteria_details' => $request->has('criteria_details') ? $request->input('criteria_details') : null,
-                'status' => $request->input('status'),
-            ], fn ($value) => $value !== null);
+            $dataToUpdate = [];
+            foreach (['property_type', 'transaction_type', 'target_commune', 'budget_max', 'status'] as $requiredField) {
+                if ($request->has($requiredField) && $request->input($requiredField) !== null) {
+                    $dataToUpdate[$requiredField] = $request->input($requiredField);
+                }
+            }
+            foreach (['target_arrondissement', 'target_quartier', 'criteria_details'] as $nullableField) {
+                if ($request->exists($nullableField)) {
+                    $dataToUpdate[$nullableField] = $request->input($nullableField);
+                }
+            }
 
             // Seul un administrateur peut modifier le flag is_paid directement
             if ($request->has('is_paid') && $user->isAnyAdmin()) {
@@ -129,7 +130,7 @@ class PosteRechercheController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Demande de recherche mise à jour avec succès.',
-                'data' => $demande->fresh(),
+                'data' => $demande->fresh(['matchedPropriete:id,type,transaction_type,commune,arrondissement,quartier,prix,status']),
             ], 200);
         } catch (Exception $e) {
             Log::error('Erreur lors de la mise à jour de la demande de recherche : ' . $e->getMessage(), [
@@ -167,7 +168,8 @@ class PosteRechercheController extends Controller
             ], 401);
         }
 
-        $query = Demande_client::where('client_id', $user->id)
+        $query = Demande_client::with(['matchedPropriete:id,type,transaction_type,commune,arrondissement,quartier,prix,status'])
+            ->where('client_id', $user->id)
             ->latest();
 
         // Filtre optionnel par statut (active, fulfilled, closed)
@@ -190,6 +192,18 @@ class PosteRechercheController extends Controller
             $commune = $request->input('target_commune', $request->input('commune'));
             $like = \Illuminate\Support\Facades\DB::connection()->getDriverName() === 'pgsql' ? 'ILIKE' : 'LIKE';
             $query->where('target_commune', $like, '%' . $commune . '%');
+        }
+
+        // Recherche libre dans les demandes du client
+        if ($request->filled('search')) {
+            $term = '%' . trim((string) $request->input('search')) . '%';
+            $like = \Illuminate\Support\Facades\DB::connection()->getDriverName() === 'pgsql' ? 'ILIKE' : 'LIKE';
+            $query->where(function ($q) use ($term, $like) {
+                $q->where('target_commune', $like, $term)
+                    ->orWhere('target_arrondissement', $like, $term)
+                    ->orWhere('target_quartier', $like, $term)
+                    ->orWhere('criteria_details', $like, $term);
+            });
         }
 
         $perPage = (int) $request->input('per_page', 15);
@@ -224,7 +238,7 @@ class PosteRechercheController extends Controller
             ], 401);
         }
 
-        $demande = Demande_client::find($id);
+        $demande = Demande_client::with(['matchedPropriete:id,type,transaction_type,commune,arrondissement,quartier,prix,status'])->find($id);
 
         if (! $demande) {
             return response()->json([
@@ -233,7 +247,7 @@ class PosteRechercheController extends Controller
             ], 404);
         }
 
-        if ($demande->client_id !== $user->id && ! $user->hasRole('Admin')) {
+        if ($demande->client_id !== $user->id && ! $user->isAnyAdmin()) {
             return response()->json([
                 'success' => false,
                 'message' => 'Vous n\'êtes pas autorisé à consulter cette demande de recherche.',
@@ -271,7 +285,7 @@ class PosteRechercheController extends Controller
         }
 
         // Vérification des droits : seul l'auteur ou l'administrateur peut supprimer
-        if ($demande->client_id !== $user->id && ! $user->hasRole('Admin')) {
+        if ($demande->client_id !== $user->id && ! $user->isAnyAdmin()) {
             return response()->json([
                 'success' => false,
                 'message' => 'Vous n\'êtes pas autorisé à supprimer cette demande de recherche.',

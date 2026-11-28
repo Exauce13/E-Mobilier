@@ -7,7 +7,7 @@ import {
   TabTriggerSlotProps,
   TabListProps,
 } from 'expo-router/ui';
-import { Briefcase, Building2, Calendar, Home, PlusCircle, Search } from 'lucide-react-native';
+import { Briefcase, Building2, Home, PlusCircle, Search, User } from 'lucide-react-native';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -52,9 +52,9 @@ export default function AppTabs() {
                 </TabButton>
               </TabTrigger>
             ) : isAuthenticated ? (
-              <TabTrigger name="visits" href="/visits" asChild>
-                <TabButton compact={isMobile} ultraCompact={isSmallMobile} icon="visits">
-                  Visites
+              <TabTrigger name="client-space" href="/client-space" asChild>
+                <TabButton compact={isMobile} ultraCompact={isSmallMobile} icon="client">
+                  {isMobile ? 'Client' : 'Espace Client'}
                 </TabButton>
               </TabTrigger>
             ) : null}
@@ -65,7 +65,7 @@ export default function AppTabs() {
   );
 }
 
-type TabIconKey = 'home' | 'search' | 'publish' | 'visits' | 'agent';
+type TabIconKey = 'home' | 'search' | 'publish' | 'agent' | 'client';
 
 export function TabButton({
   children,
@@ -87,10 +87,10 @@ export function TabButton({
         return <Search size={iconSize} color={iconColor} strokeWidth={2.1} />;
       case 'publish':
         return <PlusCircle size={iconSize} color={iconColor} strokeWidth={2.1} />;
-      case 'visits':
-        return <Calendar size={iconSize} color={iconColor} strokeWidth={2.1} />;
       case 'agent':
         return <Briefcase size={iconSize} color={iconColor} strokeWidth={2.1} />;
+      case 'client':
+        return <User size={iconSize} color={iconColor} strokeWidth={2.1} />;
       default:
         return null;
     }

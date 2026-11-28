@@ -60,33 +60,46 @@ class VisiteClientResource extends JsonResource
             }
         }
 
+        $prop = $this->propriete;
+        $firstImage = $prop && $prop->relationLoaded('media')
+            ? ($prop->media->first(fn ($m) => ($m->media_type ?? 'image') === 'image') ?? $prop->media->first())
+            : null;
+
+        $allowedNext = $this->allowedNextStatuses();
+        $canAssignZone = $user
+            ? ($user->isSuperAdminPrincipal() || $user->isSuperAdminTechnique() || $user->isSecretaire() || $user->hasRole('Admin'))
+            : false;
+
         return [
             'id' => $this->id,
             'reference_visite' => 'VIS-' . str_pad((string) $this->id, 5, '0', STR_PAD_LEFT),
             'client_id' => $this->client_id,
             'client' => $clientData,
             'property_id' => $this->property_id,
-            'zone_id' => $this->zone_id ?? $this->propriete?->zone_id,
+            'zone_id' => $this->zone_id ?? $prop?->zone_id,
             'zone' => $this->zone ? [
                 'id' => $this->zone->id,
                 'nom' => $this->zone->nom,
                 'code' => $this->zone->code,
                 'commune' => $this->zone->commune,
-            ] : ($this->propriete?->zone ? [
-                'id' => $this->propriete->zone->id,
-                'nom' => $this->propriete->zone->nom,
-                'code' => $this->propriete->zone->code,
-                'commune' => $this->propriete->zone->commune,
+            ] : ($prop?->zone ? [
+                'id' => $prop->zone->id,
+                'nom' => $prop->zone->nom,
+                'code' => $prop->zone->code,
+                'commune' => $prop->zone->commune,
             ] : null),
-            'propriete' => $this->propriete ? [
-                'id' => $this->propriete->id,
-                'type' => $this->propriete->type,
-                'transaction_type' => $this->propriete->transaction_type,
-                'commune' => $this->propriete->commune,
-                'arrondissement' => $this->propriete->arrondissement,
-                'quartier' => $this->propriete->quartier,
-                'prix' => $this->propriete->prix,
-                'status' => $this->propriete->status,
+            'propriete' => $prop ? [
+                'id' => $prop->id,
+                'type' => $prop->type,
+                'transaction_type' => $prop->transaction_type,
+                'commune' => $prop->commune,
+                'arrondissement' => $prop->arrondissement,
+                'quartier' => $prop->quartier,
+                'prix' => $prop->prix,
+                'surface' => $prop->surface !== null ? (float) $prop->surface : null,
+                'nombres_chambres' => $prop->nombres_chambres,
+                'status' => $prop->status,
+                'photo_url' => $firstImage?->media_url,
             ] : null,
             'target_agent_id' => $this->target_agent_id,
             'agent_assigne' => $this->agentAssigne ? [
@@ -98,10 +111,26 @@ class VisiteClientResource extends JsonResource
             'status' => $this->status,
             'is_fee_paid' => $this->is_fee_paid,
             'statut_paiement' => $this->is_fee_paid ? 'Payé / Validé' : 'En attente de paiement',
+            'instructions_itineraire' => $this->instructions_itineraire,
+            'compte_rendu' => $this->compte_rendu,
+            'issue_cloture' => $this->issue_cloture,
+            'is_escalade_haute' => (bool) $this->is_escalade_haute,
+            'offre_montant' => $this->offre_montant !== null ? (float) $this->offre_montant : null,
+            'allowed_transitions' => $allowedNext,
+            'permissions' => [
+                'can_plan' => in_array($this->status, ['pending', 'confirmed'], true),
+                'can_confirm' => in_array('confirmed', $allowedNext, true),
+                'can_complete' => in_array('completed', $allowedNext, true),
+                'can_cancel' => in_array('cancelled', $allowedNext, true),
+                'can_report' => $this->status === 'confirmed',
+                'can_close' => in_array($this->status, ['confirmed', 'completed'], true) && empty($this->issue_cloture),
+                'can_escalate' => in_array($this->status, ['confirmed', 'completed'], true) && ! $this->is_escalade_haute,
+                'can_assign_zone' => $canAssignZone && in_array($this->status, ['pending', 'confirmed'], true),
+                'can_change_status' => count($allowedNext) > 0,
+            ],
             'donnees_masquees' => ! $canViewClear,
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
         ];
     }
 }
-

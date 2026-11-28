@@ -111,7 +111,10 @@ class PropertyInquiryController extends Controller
             ->where(function ($q) use ($user) {
                 $q->where('user_id', $user->id);
                 if ($user->email) {
-                    $q->orWhere('email', $user->email);
+                    $q->orWhere(function ($sub) use ($user) {
+                        $sub->whereNull('user_id')
+                            ->where('email', $user->email);
+                    });
                 }
             })
             ->latest();

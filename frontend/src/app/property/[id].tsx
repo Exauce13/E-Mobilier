@@ -47,7 +47,7 @@ export default function PropertyDetailScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { isDesktop, contentMaxWidth, horizontalPadding } = useResponsive();
-  const { user, isAuthenticated, openAuthModal } = useAuth();
+  const { user, isAuthenticated, isAgentMobilier, isAdminStaff, openAuthModal } = useAuth();
   const { tarifs } = usePlatformConfig();
   const storageBaseUrl = useMemo(() => getStorageBaseUrl(), []);
 
@@ -604,7 +604,7 @@ export default function PropertyDetailScreen() {
               'Visite enregistrée',
               res.message || 'Votre demande de visite physique encadrée est confirmée.'
             );
-            router.push('/visits' as any);
+            router.push((isAgentMobilier && !isAdminStaff ? '/agent-space' : '/client?tab=visites') as any);
           }}
         />
       )}
